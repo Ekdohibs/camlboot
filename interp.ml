@@ -321,6 +321,12 @@ let rec unwrap_list unwrapf = function
   | Constructor ("::", _, Some (Tuple [x; l])) -> unwrapf x :: unwrap_list unwrapf l
   | _ -> assert false
 
+let unwrap_marshal_flag = function
+  | Constructor ("No_sharing", _, None) -> Marshal.No_sharing
+  | Constructor ("Closures", _, None) -> Marshal.Closures
+  | Constructor ("Compat_32", _, None) -> Marshal.Compat_32
+  | _ -> assert false
+
 external open_descriptor_out : int -> out_channel = "caml_ml_open_descriptor_out"
 external open_descriptor_in : int -> in_channel = "caml_ml_open_descriptor_in"
 external open_desc : string -> open_flag list -> int -> int = "caml_sys_open"
@@ -336,6 +342,7 @@ external random_seed : unit -> int array = "caml_sys_random_seed"
 external digest_unsafe_string : string -> int -> int -> string = "caml_md5_string"
 external marshal_to_channel : out_channel -> 'a -> unit list -> unit = "caml_output_value"
 external append_prim : 'a array -> 'a array -> 'a array = "caml_array_append"
+external input_scan_line : in_channel -> int = "caml_ml_input_scan_line"
 
 let unwrap_position = function
   | Record r -> Lexing.{
@@ -597,15 +604,16 @@ let declare_builtin_constructor name d =
 let declare_exn name =
   let d = !exn_id in
   incr exn_id;
-  declare_builtin_constructor name d
+  declare_builtin_constructor name d;
+  d
 
 let not_found_exn_id = declare_exn "Not_found"
-let not_found_exn = Constructor ("Not_found", 0, None)
+let not_found_exn = Constructor ("Not_found", not_found_exn_id, None)
 let _ = declare_exn "Exit"
 let _ = declare_exn "Invalid_argument"
 let _ = declare_exn "Failure"
 let _ = declare_exn "Match_failure"
-let _ = declare_exn "Assert_failure"
+let assert_failure_id = declare_exn "Assert_failure"
 let _ = declare_exn "Sys_blocked_io"
 let _ = declare_exn "Sys_error"
 let _ = declare_exn "End_of_file"
@@ -674,6 +682,7 @@ let prims = [
   ("caml_ml_flush", prim1 flush unwrap_out_channel wrap_unit);
   ("caml_ml_input_char", prim1 input_char unwrap_in_channel wrap_char);
   ("caml_ml_input_int", prim1 input_binary_int unwrap_in_channel wrap_int);
+  ("caml_ml_input_scan_line", prim1 input_scan_line unwrap_in_channel wrap_int);
   ("caml_ml_input", prim4 unsafe_input unwrap_in_channel unwrap_bytes unwrap_int unwrap_int wrap_int);
   ("caml_ml_seek_in", prim2 seek_in unwrap_in_channel unwrap_int wrap_unit);
   ("caml_ml_pos_out", prim1 pos_out unwrap_out_channel wrap_int);
@@ -690,6 +699,7 @@ let prims = [
   ("caml_format_float", prim2 format_float unwrap_string unwrap_float wrap_string);
   ("caml_int_of_string", prim1 int_of_string unwrap_string wrap_int);
   ("caml_output_value", prim3 marshal_to_channel unwrap_out_channel id (unwrap_list unwrap_unit) wrap_unit);
+  ("caml_output_value_to_buffer", prim5 Marshal.to_buffer unwrap_bytes unwrap_int unwrap_int id (unwrap_list unwrap_marshal_flag) wrap_int);
   ("caml_input_value", prim1 input_value unwrap_in_channel id);
   ("caml_sys_exit", prim1 exit unwrap_int wrap_unit);
   ("caml_parse_engine", parse_engine_prim);
@@ -698,7 +708,7 @@ let prims = [
 
   (* Sys *)
   ("caml_sys_get_argv", Prim (fun _ -> Tuple [wrap_string ""; Array (Array.map wrap_string Sys.argv)]));
-  ("caml_sys_get_config", Prim (fun _ -> Tuple [wrap_string ""; Int 0; wrap_bool true]));
+  ("caml_sys_get_config", Prim (fun _ -> Tuple [wrap_string "Unix"; Int 0; wrap_bool true]));
   ("%big_endian", Prim (fun _ -> wrap_bool Sys.big_endian));
   ("%word_size", Prim (fun _ -> Int 64));
   ("%int_size", Prim (fun _ -> Int 64));
@@ -1023,7 +1033,7 @@ and eval_expr env expr =
     let m = eval_module_expr env me in
     eval_expr (env_set_module name m env) e
   | Pexp_assert e ->
-    if is_true (eval_expr env e) then unit else failwith "assert failure"
+    if is_true (eval_expr env e) then unit else (*failwith "assert failure"*) raise (InternalException (Constructor ("Assert_failure", assert_failure_id, Some (Tuple [wrap_string ""; Int 0; Int 0]))))
   | Pexp_lazy e -> Lz (ref (fun () -> eval_expr env e))
   | Pexp_poly _ -> assert false
   | Pexp_newtype (_, e) -> eval_expr env e
