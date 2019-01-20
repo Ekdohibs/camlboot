@@ -11,10 +11,14 @@ let report_error filename start_pos end_pos =
 
 let defs =
   try Parser.definitions Lexer.token lexbuf
-  with Parser.Error ->
-    begin
+  with
+  | Parser.Error -> begin
       report_error input_file (Lexing.lexeme_start_p lexbuf) (Lexing.lexeme_end_p lexbuf);
       Format.eprintf "Syntax error@."; exit 1
+    end
+  | Lexer.Lexing_error s -> begin
+      report_error input_file (Lexing.lexeme_start_p lexbuf) (Lexing.lexeme_end_p lexbuf);
+      Format.eprintf "Lexing error: %s@." s; exit 1
     end
 
 let () = Compile.compile_and_print Format.std_formatter defs

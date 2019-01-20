@@ -17,7 +17,7 @@ let rec expr_tempvars = function
   | ERecordwith (e, l) ->
      max (expr_tempvars e) (1 + list_max (List.map (fun (_, e) -> expr_tempvars e) l))
   | EApply (_, l) ->
-     max (List.length l) (list_max (List.mapi (fun i e -> i + expr_tempvars e) l))
+     max (List.length l) (list_max (List.mapi (fun i (e, _) -> i + expr_tempvars e) l))
   | EIf (e1, e2, e3) -> max (expr_tempvars e1) (max (expr_tempvars e2) (expr_tempvars e3))
   | EChain (e1, e2) -> max (expr_tempvars e1) (expr_tempvars e2)
   | EMatch (e, l) ->
@@ -28,6 +28,11 @@ let rec expr_tempvars = function
 let pp_sep_string x ff () = Format.fprintf ff "%s" x
 let pp_sep_comma = pp_sep_string ", "
 
+let pp_print_label ff = function
+  | Nolabel -> ()
+  | Labelled s -> Format.fprintf ff "~%s:" s
+  | Optional s -> Format.fprintf ff "?%s:" s
+
 let print_decl ff = function
   | MLet (name, args, _) ->
      if args = [] then
@@ -36,7 +41,7 @@ let print_decl ff = function
        Format.fprintf ff "value %s(%a);@." name
         (Format.pp_print_list
            ~pp_sep:pp_sep_comma
-           (fun ff x -> Format.fprintf ff "value %s" x)) args
+           (fun ff (x, _) -> Format.fprintf ff "value %s" x)) args
   | MTypedef (name, ISum l) ->
      let c1 = ref 0 in
      let c2 = ref 0 in
@@ -76,7 +81,9 @@ let get_fun f = try SMap.find f fun_env with Not_found -> f
 
 let rec print_expr ff env tvindex rf1 rf2 = function
   | EVar v -> Format.fprintf ff "%t%s%t" rf1 (env_get env v) rf2
-  | EConstant _ -> assert false
+  | EConstant (CInt i) -> Format.fprintf ff "%t(Val_long(%s))%t" rf1 i rf2
+  | EConstant CUnit -> Format.fprintf ff "%t(Val_unit)%t" rf1 rf2
+  | EConstant (CString s) -> Format.fprintf ff "%t(caml_alloc_initialized_string(%d, %S))%t" rf1 (String.length s) s rf2
   | EConstr (name, []) -> Format.fprintf ff "%t(Val_long(tag__%s))%t" rf1 name rf2
   | EConstr (name, args) ->
     Format.fprintf ff "tmp__%d = caml_alloc(%d, tag__%s);@," tvindex (List.length args) name;
@@ -109,7 +116,8 @@ let rec print_expr ff env tvindex rf1 rf2 = function
       e) args;
     Format.fprintf ff "%ttmp__%d%t" rf1 tvindex rf2
   | EApply (f, args) ->
-    List.iteri (fun i e ->
+    List.iteri (fun i (e, lab) ->
+      assert (lab = Nolabel);
       print_expr ff env (tvindex + i)
         (fun ff -> Format.fprintf ff "tmp__%d = " (tvindex + i))
         (fun ff -> Format.fprintf ff ";@,")
@@ -150,7 +158,7 @@ let rec print_expr ff env tvindex rf1 rf2 = function
       List.iter (fun (c, e) ->
         Format.fprintf ff "@[<v 2>case tag__%s:@," c;
         print_expr ff env tvindex rf1 rf2 e;
-        Format.fprintf ff "@]@,"
+        Format.fprintf ff "break;@]@,"
       ) no_arg;
       Format.fprintf ff "default: %t@]@,@[<v 2>}} else { switch (Tag_val(tmp)) {@," do_def;
       List.iter (fun (c, l, e) ->
@@ -164,7 +172,7 @@ let rec print_expr ff env tvindex rf1 rf2 = function
         in
         let ntv, nenv = set_variables tvindex env 0 l in
         print_expr ff nenv ntv rf1 rf2 e;
-        Format.fprintf ff "@]@,"
+        Format.fprintf ff "break;@]@,"
       ) with_arg;
       Format.fprintf ff "default: %t@]@,}}@," do_def;
       if has_def then begin
@@ -180,22 +188,22 @@ let print_def ff = function
     Format.fprintf ff "@[<v 2>value %s(%a) {@," name
         (Format.pp_print_list
            ~pp_sep:pp_sep_comma
-           (fun ff x -> Format.fprintf ff "value %s" x)) args;
+           (fun ff (x, _) -> Format.fprintf ff "value %s" x)) args;
     Format.fprintf ff "value tmp;@,";
-    Format.fprintf ff "CAMLparam%d(%a);@," (List.length args) (Format.pp_print_list ~pp_sep:pp_sep_comma Format.pp_print_string) args;
+    Format.fprintf ff "CAMLparam%d(%a);@," (List.length args) (Format.pp_print_list ~pp_sep:pp_sep_comma (fun ff (x, _) -> Format.fprintf ff "%s" x)) args;
     let tv = expr_tempvars body in
     Format.fprintf ff "%a@," print_tempvars tv;
     print_expr ff SMap.empty 0
       (fun ff -> Format.fprintf ff "CAMLdrop; return ")
       (fun ff -> Format.fprintf ff ";@,")
       body;
-    Format.fprintf ff "@]@,}@.@."    
+    Format.fprintf ff "@]@,}@.@."
   | _ -> ()
 
 let print_init ff = function
   | MLet (name, [], body) ->
-    Format.fprintf ff "%s =@," name;
-    assert false
+    print_expr ff SMap.empty 0  (fun ff -> Format.fprintf ff "%s =" name) (fun ff -> Format.fprintf ff ";@,") body;
+    Format.fprintf ff "caml_register_global_root(&%s);@," name
   | _ -> ()
 
 
