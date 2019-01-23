@@ -19,27 +19,6 @@ let tag_Lz_computed = 236
 let tag_Fun_with_extra_args = 237
 let tag_Prim = 238
 
-(*
-type value =
-  | Int of int
-  | Int64 of int64
-  | Fun of arg_label * expression option * pattern * expression * env ref
-  | Function of case list * env ref
-  | String of bytes
-  | Float of float
-  | Tuple of value list
-  | Constructor of string * int * value option
-  | Prim of (value -> value)
-  | ModVal of mdl
-  | InChannel of in_channel
-  | OutChannel of out_channel
-  | Record of value ref SMap.t
-  | SeqOr | SeqAnd
-  | Lz of (unit -> value) ref
-  | Array of value array
-  | Fun_with_extra_args of value * value list * (arg_label * value) SMap.t
-*)
-
 type value = Obj.t
 
 and env = {
@@ -64,24 +43,12 @@ and mdl =
   | Module of value SMap.t * mdl SMap.t * (int * constr_desc * bool) SMap.t * (bool * int * int SMap.t) SMap.t
   | Functor of string * module_expr * env (* TODO: include arg restriction *)
 
-exception InternalException of value
+(* The name of the records that are defined as static and must have the same layout as in standard OCaml. *)
+let static_records = [
+  "parse_tables"; "parser_env"; "lex_tables"; "lexbuf"; "position"; "ref"; "compilation_unit"; "library"
+]
 
-(*
-let rec pp_print_value ff = function
-  | Int n -> Format.fprintf ff "%d" n
-  | Int64 n -> Format.fprintf ff "%Ld" n
-  | Fun _ | Function _ | Prim _ | SeqOr | SeqAnd | Lz _ | Fun_with_extra_args _ -> Format.fprintf ff "<function>"
-  | String s -> Format.fprintf ff "%S" (Bytes.to_string s)
-  | Float f -> Format.fprintf ff "%f" f
-  | Tuple l -> Format.fprintf ff "(%a)" (Format.pp_print_list ~pp_sep:(fun ff () -> Format.fprintf ff ", ") pp_print_value) l
-  | Constructor (c, d, None) -> Format.fprintf ff "%s#%d" c d
-  | Constructor (c, d, Some v) -> Format.fprintf ff "%s#%d %a" c d pp_print_value v
-  | ModVal _ -> Format.fprintf ff "<module>"
-  | InChannel _ -> Format.fprintf ff "<in_channel>"
-  | OutChannel _ -> Format.fprintf ff "<out_channel>"
-  | Record r -> Format.fprintf ff "{"; SMap.iter (fun k v -> Format.fprintf ff "%s = %a; " k pp_print_value !v) r; Format.fprintf ff "}"
-  | Array a -> Format.fprintf ff "[|%a|]" (Format.pp_print_list ~pp_sep:(fun ff () -> Format.fprintf ff "; ") pp_print_value) (Array.to_list a)
-*)
+exception InternalException of value
 
 let read_caml_int s =
   let c = ref 0L in
@@ -112,58 +79,6 @@ let value_of_constant = function
   | Pconst_float (f, _) -> Obj.repr (float_of_string f)
   | Pconst_string (s, _) -> Obj.repr (Bytes.of_string s)
 
-(*
-let rec value_equal v1 v2 =
-  match v1, v2 with
-  | Fun _, _ | Function _, _ | _, Fun _ | _, Function _ | SeqOr, _  | SeqAnd, _ | _, SeqOr | _, SeqAnd | Lz _, _ | _, Lz _ | Fun_with_extra_args _, _ | _, Fun_with_extra_args _ ->
-    failwith "tried to compare function"
-  | ModVal _, _ | _, ModVal _ ->
-    failwith "tried to compare module"
-  | InChannel _, _ | OutChannel _, _ | _, InChannel _ | _, OutChannel _ ->
-    failwith "tried to compare channel"
-  | Int n1, Int n2 -> n1 = n2
-  | Int64 n1, Int64 n2 -> n1 = n2
-  | Float f1, Float f2 -> f1 = f2
-  | String s1, String s2 -> s1 = s2
-  | Constructor (c1, d1, None), Constructor (c2, d2, None) -> d1 = d2 && c1 = c2
-  | Constructor (c1, d1, Some v1), Constructor (c2, d2, Some v2) -> d1 = d2 && c1 = c2 && value_equal v1 v2
-  | Constructor _, Constructor _ -> false
-  | Tuple l1, Tuple l2 -> assert (List.length l1 = List.length l2); List.for_all2 value_equal l1 l2
-  | Record r1, Record r2 ->
-    SMap.for_all (fun _ b -> b) (SMap.merge (fun _ u v -> match u, v with None, None -> None | None, Some _ | Some _, None -> Some false | Some u, Some v -> Some (value_equal !u !v)) r1 r2)
-  | Array a1, Array a2 -> if (Array.length a1 <> Array.length a2) then false else (let ok = ref true in for i = 0 to Array.length a1 - 1 do ok := !ok && value_equal a1.(i) a2.(i) done; !ok)
-  | _ -> false
-
-let rec value_compare v1 v2 =
-  match v1, v2 with
-  | Fun _, _ | Function _, _ | _, Fun _ | _, Function _ | SeqOr, _ | SeqAnd, _ | _, SeqOr | _, SeqAnd | Lz _, _ | _, Lz _ | Fun_with_extra_args _, _ | _, Fun_with_extra_args _ ->
-    failwith "tried to compare function"
-  | ModVal _, _ | _, ModVal _ ->
-    failwith "tried to compare module"
-  | InChannel _, _ | OutChannel _, _ | _, InChannel _ | _, OutChannel _ ->
-    failwith "tried to compare channel"
-  | Int n1, Int n2 -> compare n1 n2
-  | Int64 n1, Int64 n2 -> compare n1 n2
-  | Float f1, Float f2 -> compare f1 f2
-  | String s1, String s2 -> compare s1 s2
-  | Constructor (_, _, None), Constructor (_, _, Some _) -> -1
-  | Constructor (_, _, Some _), Constructor (_, _, None) -> 1
-  | Constructor (c1, d1, vv1), Constructor (c2, d2, vv2) ->
-    let c = compare (d1, c1) (d2, c2) in
-    if c <> 0 then c else begin
-      match vv1, vv2 with
-      | None, None -> 0
-      | Some v1, Some v2 -> value_compare v1 v2
-      | _ -> assert false
-    end
-  | Tuple l1, Tuple l2 -> assert (List.length l1 = List.length l2);
-    List.fold_left2 (fun cur x y -> if cur = 0 then value_compare x y else cur) 0 l1 l2
-  | Record r1, Record r2 ->
-    let map1 = SMap.merge (fun _ u v -> match u, v with None, None -> None | None, Some _ | Some _, None -> assert false | Some u, Some v -> Some (!u, !v)) r1 r2 in
-    SMap.fold (fun _ (u, v) cur -> if cur = 0 then value_compare u v else cur) map1 0
-  | _ -> assert false
-*)
-
 let value_equal (v1 : value) (v2 : value) = v1 = v2
 let value_compare (v1 : value) (v2 : value) = compare v1 v2
 
@@ -176,26 +91,12 @@ exception Match_fail
 
 let is_true (v : value) : bool = Obj.magic v
 
-(*
-let is_true = function
-  | Constructor ("true", _, None) -> true
-  | Constructor ("false", _, None) -> false
-  | _ -> assert false
-*)
-
 let rec lident_name = function
   | Longident.Lident s -> s
   | Longident.Ldot (_, s) -> s
   | Longident.Lapply (l1, l2) -> lident_name l2
 
-(* let unit = Constructor ("()", 0, None) *)
 let unit = Obj.repr ()
-
-(*
-let set_env env = function
-  | Fun (_, _, _, _, ev) | Function (_, ev) -> ev := env
-  | _ -> assert false
-*)
 
 let set_env (env : env) f =
   let ev = Obj.magic (
@@ -208,16 +109,6 @@ let set_env (env : env) f =
     )
   in
   ev := env
-
-(*
-let rec eval_fun_or_function envref expr =
-  match expr.pexp_desc with
-  | Pexp_function cl -> Function (cl, envref)
-  | Pexp_fun (label, default, p, e) -> Fun (label, default, p, e, envref)
-  | Pexp_constraint (e, _) | Pexp_coerce (e, _, _) | Pexp_newtype (_, e) ->
-    eval_fun_or_function envref e
-  | _ -> failwith "unsupported rhs of rec"
-*)
 
 let rec eval_fun_or_function (envref : env ref) expr =
   match expr.pexp_desc with
@@ -288,7 +179,9 @@ let env_get_field env lident =
   | Longident.Lident str ->
     (try snd (SMap.find str env.env_fields)
      with Not_found ->
-       (* if debug then Format.eprintf "Field not found in env: %s@." str; raise Not_found *) (false, 0, SMap.empty))
+       (* This field might be specified by type disambiguation: say it is not static *)
+       (false, 0, SMap.empty)
+    )
   | Longident.Ldot (ld, str) ->
     let md = env_get_module env ld in
     (match md with
@@ -340,104 +233,13 @@ let empty_env = {
   env_fields = SMap.empty ;
 }
 
+let apply_ref = ref (fun _ _ -> assert false)
+
 let mkprim f (arity : int) =
   let r = Obj.new_block tag_Prim 2 in
   Obj.set_field r 0 (Obj.repr f);
   Obj.set_field r 1 (Obj.repr arity);
   r
-
-(*
-let rec seeded_hash_param meaningful total seed = function
-  | Int n -> Hashtbl.seeded_hash seed n
-  | Int64 n -> Hashtbl.seeded_hash seed n
-  | Float f -> Hashtbl.seeded_hash seed f
-  | Tuple l -> 0
-  | String s -> Hashtbl.seeded_hash seed (Bytes.to_string s)
-  | Constructor (c, _, v) -> Hashtbl.seeded_hash seed c
-  | Array a -> 0
-  | Record r -> 0
-  | Fun _ | Function _ | SeqOr | SeqAnd | InChannel _ | OutChannel _ | Prim _ | Lz _ | ModVal _ | Fun_with_extra_args _ -> assert false
-
-let prim1 f unwrap1 wrap = Prim (fun x -> wrap (f (unwrap1 x)))
-let prim2 f unwrap1 unwrap2 wrap = Prim (fun x -> prim1 (f (unwrap1 x)) unwrap2 wrap)
-let prim3 f unwrap1 unwrap2 unwrap3 wrap = Prim (fun x -> prim2 (f (unwrap1 x)) unwrap2 unwrap3 wrap)
-let prim4 f unwrap1 unwrap2 unwrap3 unwrap4 wrap = Prim (fun x -> prim3 (f (unwrap1 x)) unwrap2 unwrap3 unwrap4 wrap)
-let prim5 f unwrap1 unwrap2 unwrap3 unwrap4 unwrap5 wrap = Prim (fun x -> prim4 (f (unwrap1 x)) unwrap2 unwrap3 unwrap4 unwrap5 wrap)
-
-let wrap_int n = Int n
-let unwrap_int v = match v with Int n -> n | _ -> assert false
-
-let wrap_int64 n = Int64 n
-let unwrap_int64 v = match v with Int64 n -> n | _ -> assert false
-
-let wrap_float f = Float f
-let unwrap_float v = match v with Float f -> f | _ -> assert false
-
-let unwrap_bool = is_true
-let wrap_bool b = if b then Constructor ("true", 1, None) else Constructor ("false", 0, None)
-
-let wrap_unit () = unit
-let unwrap_unit = function Constructor ("()", _, None) -> () | _ -> assert false
-
-let wrap_bytes s = String s
-let unwrap_bytes = function String s -> s | _ -> assert false
-let wrap_string s = String (Bytes.of_string s)
-let unwrap_string = function String s -> Bytes.to_string s | _ -> assert false
-let wrap_string_unsafe s = String (Bytes.unsafe_of_string s)
-let unwrap_string_unsafe = function String s -> Bytes.unsafe_to_string s | _ -> assert false
-
-let wrap_char c = Int (int_of_char c)
-let unwrap_char = function Int n -> char_of_int (n land 255) | _ -> assert false
-
-let wrap_array wrapf a = Array (Array.map wrapf a)
-let unwrap_array unwrapf = function Array a -> Array.map unwrapf a | _ -> assert false
-
-let wrap_array_id a = Array a
-let unwrap_array_id = function Array a -> a | _ -> assert false
-
-let wrap_in_channel ic = InChannel ic
-let unwrap_in_channel = function InChannel ic -> ic | _ -> assert false
-
-let wrap_out_channel oc = OutChannel oc
-let unwrap_out_channel = function OutChannel oc -> oc | _ -> assert false
-
-let cc x d = Constructor (x, d, None)
-let wrap_open_flag = function
-  | Open_rdonly -> cc "Open_rdonly" 0
-  | Open_wronly -> cc "Open_wronly" 1
-  | Open_append -> cc "Open_append" 2
-  | Open_creat -> cc "Open_creat" 3
-  | Open_trunc -> cc "Open_trunc" 4
-  | Open_excl -> cc "Open_excl" 5
-  | Open_binary -> cc "Open_binary" 6
-  | Open_text -> cc "Open_text" 7
-  | Open_nonblock -> cc "Open_nonblock" 8
-let unwrap_open_flag = function
-  | Constructor ("Open_rdonly", _, None) -> Open_rdonly
-  | Constructor ("Open_wronly", _, None) -> Open_wronly
-  | Constructor ("Open_append", _, None) -> Open_append
-  | Constructor ("Open_creat", _, None) -> Open_creat
-  | Constructor ("Open_trunc", _, None) -> Open_trunc
-  | Constructor ("Open_excl", _, None) -> Open_excl
-  | Constructor ("Open_binary", _, None) -> Open_binary
-  | Constructor ("Open_text", _, None) -> Open_text
-  | Constructor ("Open_nonblock", _, None) -> Open_nonblock
-  | _ -> assert false
-
-let rec wrap_list wrapf = function
-  | [] -> cc "[]" 0
-  | x :: l -> Constructor ("::", 0, Some (Tuple [wrapf x; wrap_list wrapf l]))
-let rec unwrap_list unwrapf = function
-  | Constructor ("[]", _, None) -> []
-  | Constructor ("::", _, Some (Tuple [x; l])) -> unwrapf x :: unwrap_list unwrapf l
-  | _ -> assert false
-
-let unwrap_marshal_flag = function
-  | Constructor ("No_sharing", _, None) -> Marshal.No_sharing
-  | Constructor ("Closures", _, None) -> Marshal.Closures
-  | Constructor ("Compat_32", _, None) -> Marshal.Compat_32
-  | _ -> assert false
-*)
 
 external seeded_hash_param : int -> int -> int -> 'a -> int = "caml_hash"
 external open_descriptor_out : int -> out_channel = "caml_ml_open_descriptor_out"
@@ -457,175 +259,13 @@ external digest_unsafe_string : string -> int -> int -> string = "caml_md5_strin
 external marshal_to_channel : out_channel -> 'a -> unit list -> unit = "caml_output_value"
 external append_prim : 'a array -> 'a array -> 'a array = "caml_array_append"
 external input_scan_line : in_channel -> int = "caml_ml_input_scan_line"
-
-(*
-let unwrap_position = function
-  | Record r -> Lexing.{
-      pos_fname = unwrap_string !(SMap.find "pos_fname" r);
-      pos_lnum = unwrap_int !(SMap.find "pos_lnum" r);
-      pos_bol = unwrap_int !(SMap.find "pos_bol" r);
-      pos_cnum = unwrap_int !(SMap.find "pos_cnum" r);
-    }
-  | _ -> assert false
-
-let wrap_position pos =
-  Lexing.(Record (
-      SMap.add "pos_fname" (ref (wrap_string pos.pos_fname)) (
-        SMap.add "pos_lnum" (ref (wrap_int pos.pos_lnum)) (
-          SMap.add "pos_bol" (ref (wrap_int pos.pos_bol)) (
-            SMap.singleton "pos_cnum" (ref (wrap_int pos.pos_cnum))
-    )))))
-
-*)
-type parser_env =
-  { mutable s_stack : int array;        (* States *)
-    mutable v_stack : Obj.t array;      (* Semantic attributes *)
-    mutable symb_start_stack : Lexing.position array; (* Start positions *)
-    mutable symb_end_stack : Lexing.position array;   (* End positions *)
-    mutable stacksize : int;            (* Size of the stacks *)
-    mutable stackbase : int;            (* Base sp for current parse *)
-    mutable curr_char : int;            (* Last token read *)
-    mutable lval : Obj.t;               (* Its semantic attribute *)
-    mutable symb_start : Lexing.position;      (* Start pos. of the current symbol*)
-    mutable symb_end : Lexing.position;        (* End pos. of the current symbol *)
-    mutable asp : int;                  (* The stack pointer for attributes *)
-    mutable rule_len : int;             (* Number of rhs items in the rule *)
-    mutable rule_number : int;          (* Rule number to reduce by *)
-    mutable sp : int;                   (* Saved sp for parse_engine *)
-    mutable state : int;                (* Saved state for parse_engine *)
-    mutable errflag : int }             (* Saved error flag for parse_engine *)
-
-type parse_tables =
-  { actions : (parser_env -> Obj.t) array;
-    transl_const : int array;
-    transl_block : int array;
-    lhs : string;
-    len : string;
-    defred : string;
-    dgoto : string;
-    sindex : string;
-    rindex : string;
-    gindex : string;
-    tablesize : int;
-    table : string;
-    check : string;
-    error_function : string -> unit;
-    names_const : string;
-    names_block : string }
-
-type parser_input =
-    Start
-  | Token_read
-  | Stacks_grown_1
-  | Stacks_grown_2
-  | Semantic_action_computed
-  | Error_detected
-
-(*
-let unwrap_parser_input = function
-  | Constructor ("Start", _, None) -> Start
-  | Constructor ("Token_read", _, None) -> Token_read
-  | Constructor ("Stacks_grown_1", _, None) -> Stacks_grown_1
-  | Constructor ("Stacks_grown_2", _, None) -> Stacks_grown_2
-  | Constructor ("Semantic_action_computed", _, None) -> Semantic_action_computed
-  | Constructor ("Error_detected", _, None) -> Error_detected
-  | _ -> assert false
-*)
-
-type parser_output =
-    Read_token
-  | Raise_parse_error
-  | Grow_stacks_1
-  | Grow_stacks_2
-  | Compute_semantic_action
-  | Call_error_function
-
-(*
-let wrap_parser_output = function
-  | Read_token -> cc "Read_token" 0
-  | Raise_parse_error -> cc "Raise_parse_error" 1
-  | Grow_stacks_1 -> cc "Grow_stacks_1" 2
-  | Grow_stacks_2 -> cc "Grow_stacks_2" 3
-  | Compute_semantic_action -> cc "Compute_semantic_action" 4
-  | Call_error_function -> cc "Call_error_function" 5
-*)
-
-let apply_ref = ref (fun _ _ -> assert false)
-
-(*
-let unwrap_parser_env = function
-  | Record r ->
-    {
-      s_stack = unwrap_array unwrap_int !(SMap.find "s_stack" r);
-      v_stack = Obj.magic (unwrap_array_id !(SMap.find "v_stack" r));
-      symb_start_stack = unwrap_array unwrap_position !(SMap.find "symb_start_stack" r);
-      symb_end_stack = unwrap_array unwrap_position !(SMap.find "symb_end_stack" r);
-      stacksize = unwrap_int !(SMap.find "stacksize" r);
-      stackbase = unwrap_int !(SMap.find "stackbase" r);
-      curr_char = unwrap_int !(SMap.find "curr_char" r);
-      lval = Obj.repr !(SMap.find "lval" r);
-      symb_start = unwrap_position !(SMap.find "symb_start" r);
-      symb_end = unwrap_position !(SMap.find "symb_end" r);
-      asp = unwrap_int !(SMap.find "asp" r);
-      rule_len = unwrap_int !(SMap.find "rule_len" r);
-      rule_number = unwrap_int !(SMap.find "rule_number" r);
-      sp = unwrap_int !(SMap.find "sp" r);
-      state = unwrap_int !(SMap.find "state" r);
-      errflag = unwrap_int !(SMap.find "errflag" r);
-    }
-  | _ -> assert false
-
-let sync_parser_env pe = function
-  | Record r ->
-    let open Parsing in
-    SMap.find "s_stack" r := wrap_array wrap_int pe.s_stack;
-    SMap.find "v_stack" r := wrap_array_id (Obj.magic pe.v_stack);
-    SMap.find "symb_start_stack" r := wrap_array wrap_position pe.symb_start_stack;
-    SMap.find "symb_end_stack" r := wrap_array wrap_position pe.symb_end_stack;
-    SMap.find "stacksize" r := wrap_int pe.stacksize;
-    SMap.find "stackbase" r := wrap_int pe.stackbase;
-    SMap.find "curr_char" r := wrap_int pe.curr_char;
-    SMap.find "lval" r := Obj.obj pe.lval;
-    SMap.find "symb_start" r := wrap_position pe.symb_start;
-    SMap.find "symb_end" r := wrap_position pe.symb_end;
-    SMap.find "asp" r := wrap_int pe.asp;
-    SMap.find "rule_len" r := wrap_int pe.rule_len;
-    SMap.find "rule_number" r := wrap_int pe.rule_number;
-    SMap.find "sp" r := wrap_int pe.sp;
-    SMap.find "state" r := wrap_int pe.state;
-    SMap.find "errflag" r := wrap_int pe.errflag;
-  | _ -> assert false
-
-let unwrap_parse_tables syncenv = function
-  | Record r ->
-    let actions = unwrap_array (fun fv ->
-        fun pe -> sync_parser_env pe syncenv; Obj.repr (!apply_ref fv [(Nolabel, syncenv)])
-      ) !(SMap.find "actions" r) in
-    {
-      actions = actions ;
-      transl_const = unwrap_array unwrap_int !(SMap.find "transl_const" r);
-      transl_block = unwrap_array unwrap_int !(SMap.find "transl_block" r);
-      lhs = unwrap_string_unsafe !(SMap.find "lhs" r);
-      len = unwrap_string_unsafe !(SMap.find "len" r);
-      defred = unwrap_string_unsafe !(SMap.find "defred" r);
-      dgoto = unwrap_string_unsafe !(SMap.find "dgoto" r);
-      sindex = unwrap_string_unsafe !(SMap.find "sindex" r);
-      rindex = unwrap_string_unsafe !(SMap.find "rindex" r);
-      gindex = unwrap_string_unsafe !(SMap.find "gindex" r);
-      tablesize = unwrap_int !(SMap.find "tablesize" r);
-      table = unwrap_string_unsafe !(SMap.find "table" r);
-      check = unwrap_string_unsafe !(SMap.find "check" r);
-      error_function = (fun s -> unwrap_unit (!apply_ref !(SMap.find "error_function" r) [(Nolabel, wrap_string s)]));
-      names_const = unwrap_string_unsafe !(SMap.find "names_const" r);
-      names_block = unwrap_string_unsafe !(SMap.find "names_block" r);
-    }
-  | _ -> assert false
-*)
-
-external parse_engine : parse_tables -> parser_env -> parser_input -> Obj.t -> parser_output = "caml_parse_engine"
+external caml_register_named_value : string -> Obj.t -> unit = "caml_register_named_value"
+external caml_ml_set_channel_name : Obj.t -> string -> unit = "caml_ml_set_channel_name"
+external caml_ml_close_channel : Obj.t -> unit = "caml_ml_close_channel"
 external lex_engine : Lexing.lex_tables -> int -> Lexing.lexbuf -> int = "caml_lex_engine"
 external new_lex_engine : Lexing.lex_tables -> int -> Lexing.lexbuf -> int = "caml_new_lex_engine"
 
+external parse_engine : Parsing.parse_tables -> Obj.t -> Obj.t -> Obj.t -> Obj.t = "caml_parse_engine"
 let last_parse_tables = ref (Obj.repr 0)
 let last_parse_tables_converted = ref (Obj.repr 0)
 let parse_engine_wrapper tables env input token =
@@ -634,10 +274,10 @@ let parse_engine_wrapper tables env input token =
       Obj.magic !last_parse_tables_converted
     else begin
       last_parse_tables := tables;
-      let tables : parse_tables = Obj.magic tables in
+      let tables : Parsing.parse_tables = Obj.magic tables in
       let cvrt = {
         tables with
-        actions = Array.map (fun f -> fun pe -> !apply_ref f [(Nolabel, Obj.repr pe)]) (Obj.magic tables.actions)
+        Parsing.actions = Array.map (fun f -> fun pe -> !apply_ref f [(Nolabel, Obj.repr pe)]) (Obj.magic tables.Parsing.actions)
       } in
       last_parse_tables_converted := Obj.repr cvrt;
       cvrt
@@ -645,101 +285,7 @@ let parse_engine_wrapper tables env input token =
   in
   parse_engine parse_tables_converted env input token
 
-(*
-let parse_engine_wrapper tables env input token =
-  let nenv = unwrap_parser_env env in
-  let tbls = unwrap_parse_tables env tables in
-  let obj =
-    if input = Semantic_action_computed then Obj.repr token else
-    match token with
-      | Constructor (c, d, None) ->
-        Obj.repr d
-      | Constructor (c, d, Some arg) ->
-        let w = Obj.repr (Some arg) in
-        Obj.set_tag w d;
-        w
-      | _ -> assert false
-  in
-  let res = parse_engine tbls nenv input obj in
-  sync_parser_env nenv env;
-  res
-
-let unwrap_lexbuf v =
-  match v with
-  | Record r ->
-    let open Lexing in
-    { refill_buff = (fun _ -> assert false);
-      lex_buffer = unwrap_bytes !(SMap.find "lex_buffer" r);
-      lex_buffer_len = unwrap_int !(SMap.find "lex_buffer_len" r);
-      lex_abs_pos = unwrap_int !(SMap.find "lex_abs_pos" r);
-      lex_start_pos = unwrap_int !(SMap.find "lex_start_pos" r);
-      lex_curr_pos = unwrap_int !(SMap.find "lex_curr_pos" r);
-      lex_last_pos = unwrap_int !(SMap.find "lex_last_pos" r);
-      lex_last_action = unwrap_int !(SMap.find "lex_last_action" r);
-      lex_eof_reached = unwrap_bool !(SMap.find "lex_eof_reached" r);
-      lex_mem = unwrap_array unwrap_int !(SMap.find "lex_mem" r);
-      lex_start_p = unwrap_position !(SMap.find "lex_start_p" r);
-      lex_curr_p = unwrap_position !(SMap.find "lex_curr_p" r);
-    }
-  | _ -> assert false
-
-let sync_lexbuf v lb =
-  match v with
-  | Record r ->
-    let open Lexing in
-    SMap.find "lex_buffer" r := wrap_bytes lb.lex_buffer;
-    SMap.find "lex_buffer_len" r := wrap_int lb.lex_buffer_len;
-    SMap.find "lex_abs_pos" r := wrap_int lb.lex_abs_pos;
-    SMap.find "lex_start_pos" r := wrap_int lb.lex_start_pos;
-    SMap.find "lex_curr_pos" r := wrap_int lb.lex_curr_pos;
-    SMap.find "lex_last_pos" r := wrap_int lb.lex_last_pos;
-    SMap.find "lex_last_action" r := wrap_int lb.lex_last_action;
-    SMap.find "lex_eof_reached" r := wrap_bool lb.lex_eof_reached;
-    SMap.find "lex_mem" r := wrap_array wrap_int lb.lex_mem;
-    SMap.find "lex_start_p" r := wrap_position lb.lex_start_p;
-    SMap.find "lex_curr_p" r := wrap_position lb.lex_curr_p;
-  | _ -> assert false
-
-let unwrap_lex_tables = function
-  | Record r ->
-    let gs f = unwrap_string_unsafe !(SMap.find f r) in
-    let open Lexing in
-    { lex_base = gs "lex_base";
-      lex_backtrk = gs "lex_backtrk";
-      lex_default = gs "lex_default";
-      lex_trans = gs "lex_trans";
-      lex_check = gs "lex_check";
-      lex_base_code = gs "lex_base_code";
-      lex_backtrk_code = gs "lex_backtrk_code";
-      lex_default_code = gs "lex_default_code";
-      lex_trans_code = gs "lex_trans_code";
-      lex_check_code = gs "lex_check_code";
-      lex_code = gs "lex_code";
-    }
-  | _ -> assert false
-
-let lex_engine_wrapper tables n lexbuf =
-  let nbuf = unwrap_lexbuf lexbuf in
-  let tbls = unwrap_lex_tables tables in
-  let res = lex_engine tbls n nbuf in
-  sync_lexbuf lexbuf nbuf;
-  res
-
-let new_lex_engine_wrapper tables n lexbuf =
-  let nbuf = unwrap_lexbuf lexbuf in
-  let tbls = unwrap_lex_tables tables in
-  let res = new_lex_engine tbls n nbuf in
-  sync_lexbuf lexbuf nbuf;
-  res
-*)
-
 let id x = x
-
-(*
-let parse_engine_prim = prim4 parse_engine_wrapper id id unwrap_parser_input id wrap_parser_output
-let lex_engine_prim = prim3 lex_engine_wrapper id unwrap_int id wrap_int
-let new_lex_engine_prim = prim3 new_lex_engine_wrapper id unwrap_int id wrap_int
-*)
 
 let initial_env = ref (empty_env : env)
 let exn_id = ref 0
@@ -774,10 +320,6 @@ let _ = declare_builtin_constructor "Some" 0 1
 let _ = declare_builtin_constructor "[]" 0 0
 let _ = declare_builtin_constructor "::" 0 2
 let _ = declare_builtin_constructor "()" 0 0
-
-external caml_register_named_value : string -> Obj.t -> unit = "caml_register_named_value"
-external caml_ml_set_channel_name : Obj.t -> string -> unit = "caml_ml_set_channel_name"
-external caml_ml_close_channel : Obj.t -> unit = "caml_ml_close_channel"
 
 let eval_expr_fun = ref (fun x y -> assert false)
 
@@ -987,39 +529,6 @@ let prims = [
 let prims = List.fold_left (fun env (name, v) -> SMap.add name v env) SMap.empty prims
 let hash_variant_name (name : string) = (Hashtbl.hash name) land (1 lsl 30 - 1)
 
-let static_records = [
-  "parse_tables"; "parser_env"; "lex_tables"; "lexbuf"; "position"; "ref"; "compilation_unit"; "library"
-]
-
-(*
-let rec expr_label_shape = function
-  | Pexp_fun (label, default, _, e) -> (label, default) :: expr_label_shape e.pexp_desc
-  | Pexp_function _ -> [(Nolabel, None)]
-  | _ -> []
-
-let fun_label_shape = function
-  | Fun (lab, default, _, e, _) -> (lab, default) :: expr_label_shape e.pexp_desc
-  | Function _ -> [(Nolabel, None)]
-  | Prim _ -> [(Nolabel, None)]
-  | SeqOr | SeqAnd -> [(Nolabel, None); (Nolabel, None)]
-  | _ -> []
-*)
-
-(*
-let rec expr_num_args = function
-  | Pexp_fun (_, _, _, e) -> 1 + expr_num_args e.pexp_desc
-  | Pexp_function _ -> 1
-  | _ -> 0
-
-let rec fun_num_args = function
-  | Fun (_, _, _, e, _) -> 1 + expr_num_args e.pexp_desc
-  | Function _ -> 1
-  | Prim _ -> 1
-  | SeqOr | SeqAnd -> 2
-  | Fun_with_extra_args (f, l, m) -> fun_num_args f - List.length l - SMap.cardinal m
-  | _ -> 0
-*)
-
 let fmt_ebb_of_string_fct = ref (Obj.repr 0)
 
 let mkblock tag l =
@@ -1051,20 +560,6 @@ let rec apply vf args =
     let (p : pattern) = Obj.magic (Obj.field vf 2) in
     let (e : expression) = Obj.magic (Obj.field vf 3) in
     let (fenv : env ref) = Obj.magic (Obj.field vf 4) in
-(*    match label, lab, default with
-    | Optional s, Labelled s', None ->
-      assert (s = s');
-      eval_expr (pattern_bind !fenv p (Constructor ("Some", 0, Some arg))) e
-    | Optional s, Labelled s', Some _ | Optional s, Optional s', None | Labelled s, Labelled s', None ->
-      assert (s = s');
-      eval_expr (pattern_bind !fenv p arg) e
-    | Optional s, Optional s', Some def ->
-      assert (s = s');
-      let arg = match arg with
-        | Constructor ("None", 0, None) -> eval_expr !fenv def
-        | Constructor ("Some", 0, Some arg) -> arg
-        | _ -> assert false
-      in eval_expr (pattern_bind !fenv p arg) e *)
     match label with
     | Nolabel -> assert false
     | Labelled s ->
@@ -1155,29 +650,6 @@ let rec apply vf args =
       if is_true arg then mkprim id 1 else mkprim (fun _ -> false) 1
     else
       assert false
-        (*
-    match vf with
-    | Fun (Nolabel, default, p, e, fenv) -> eval_expr (pattern_bind !fenv p arg) e
-    | Fun ((Labelled s | Optional s) as lab, default, p, e, fenv) ->
-      if has_labelled then
-        if SMap.mem s !with_label then begin
-          let v = SMap.find s !with_label in
-          with_label := SMap.remove s !with_label;
-          apply_one (apply_labelled vf v) arg
-        end else begin
-          assert (lab = Optional s);
-          apply_one (apply_optional_noarg vf) arg
-        end
-      else if lab = Optional s then
-        apply_one (apply_optional_noarg vf) arg
-      else
-        eval_expr (pattern_bind !fenv p arg) e
-    | Function (cl, fenv) -> eval_match !fenv cl (Ok arg)
-    | Prim prim -> prim arg
-    | SeqOr -> if is_true arg then mkprim (fun _ -> true) 1 else mkprim id 1
-    | SeqAnd -> if is_true arg then mkprim id 1 else mkprim (fun _ -> false) 1
-    | v -> (*Format.eprintf "%a@." pp_print_value v; *)assert false
-           *)
   in
   if SMap.is_empty !with_label then (* Special case to get tail recursion *)
     List.fold_left apply_one vf unlabelled
@@ -1342,7 +814,6 @@ and eval_expr env expr =
         find_field fnames 0 (lident_name lident)
     in
     List.fold_left (fun rc ({ txt = lident }, ee) ->
-        (*        if lident_name lident = "cd_args" then Format.printf "%d@." (get_field lident); *)
       Obj.set_field rc (get_field lident) (eval_expr env ee); rc
     ) base r
   | Pexp_field (e, { txt = lident }) ->
@@ -1383,7 +854,7 @@ and eval_expr env expr =
     let m = eval_module_expr env me in
     eval_expr (env_set_module name m env) e
   | Pexp_assert e ->
-    if is_true (eval_expr env e) then unit else (*failwith "assert failure"*)
+    if is_true (eval_expr env e) then unit else
       raise (InternalException (mkblock 0 [Obj.repr assert_failure_id; mkblock 0 [Obj.repr ""; Obj.repr 0; Obj.repr 0]]))
   | Pexp_lazy e ->
     let b = Obj.new_block tag_Lz 2 in
@@ -1489,37 +960,10 @@ and pattern_bind env pat v =
       | CRecord (fields, fieldids) ->
         match p with
         | None -> assert false
-        | Some p -> (*match p.ppat_desc with
-          | Ppat_record (rp, _) ->
-            List.fold_left (fun env ({ txt = lident }, p) ->
-                pattern_bind env p (Obj.field v (SMap.find (lident_name lident) fieldids))
-              ) env rp
-          | _ ->
-            (* Hack: locally expose the field definitions *)
-            let (_, env) = List.fold_left (fun (i, env) f ->
-              (i + 1, env_set_field f (i, fieldids) env)
-            ) (0, env) fields
-            in
-                      pattern_bind env p v *)
+        | Some p ->
+          (* Anonymous records never use static layout *)
           pattern_bind env p v
     end
-    (*
-      match v with
-      | Constructor (ccn, ddn, e) ->
-        if cn <> ccn then raise Match_fail;
-        if dn <> ddn then raise Match_fail;
-        (match (p, e) with
-         | None, None -> env
-         | Some p, Some e -> pattern_bind env p e
-         | _ -> assert false)
-      | String s ->
-        assert (lident_name c = "Format");
-        let p = match p with None -> assert false | Some p -> p in
-        let fmt = apply !fmt_ebb_of_string_fct [(Nolabel, String s)] in
-        let fmt = match fmt with | Constructor ("Fmt_EBB", _, Some fmt) -> fmt | _ -> assert false in
-        pattern_bind env p (Tuple [fmt; v])
-      | _ -> Format.eprintf "cn = %s@.v = %a@." cn pp_print_value v; assert false
-    *)
   | Ppat_variant (name, p) ->
     let id = hash_variant_name name in
     assert (Obj.tag v = 0);
@@ -1708,60 +1152,6 @@ and eval_structure_ init_ignored env str =
 
 and eval_structure init_ignored env str =
   eval_structure_ init_ignored (prevent_export env) str
-
-(*
-and eval_sigitem_noimpl env = function
-  | Psig_attribute _ -> env
-  | Psig_class _ -> assert false
-  | Psig_class_type _ -> assert false
-  | Psig_exception { pext_name = { txt = name } ; pext_kind = k } ->
-    begin
-      match k with
-      | Pext_decl _ -> let d = !exn_id in incr exn_id; env_set_constr name d env
-      | Pext_rebind { txt = path } -> env_set_constr name (env_get_constr env path) env
-    end
-  | Psig_extension _ -> assert false
-  | Psig_include { pincl_mod = mt } ->
-    let m = eval_module_type env mt in
-    (match m with
-     | Module (venv, menv, cenv) -> env_extend true env (venv, menv, cenv)
-     | Functor _ -> assert false)
-  | Psig_open { popen_lid = { txt = lident } } ->
-    (match env_get_module env lident with
-     | Module (venv, menv, cenv) -> env_extend false env (venv, menv, cenv)
-     | Functor _ -> assert false)
-  | Psig_value z -> assert false (* load mlis without implementation only *)
-  | Psig_module _ -> assert false (* TODO *)
-  | Psig_modtype _ -> assert false
-  | Psig_type (_, tl) ->
-    List.fold_left (fun env t ->
-        match t.ptype_kind with
-        | Ptype_variant l ->
-          let (_, _, env) = List.fold_left (fun (u, v, env) cd ->
-              match cd.pcd_args with
-              | Pcstr_tuple [] -> (u + 1, v, env_set_constr cd.pcd_name.txt u env)
-              | _ -> (u, v + 1, env_set_constr cd.pcd_name.txt v env)
-            ) (0, 0, env) l in
-          env
-        | _ -> env
-      ) env tl
-  | Psig_typext _ -> assert false
-  | Psig_recmodule _ -> assert false
-
-and eval_module_type env mt =
-  match mt.pmty_desc with
-  | Pmty_ident { txt = lident } -> env_get_module env lident
-  | Pmty_signature sg -> make_module (eval_signature_noimpl env sg)
-  | Pmty_functor ({ txt = argname }, input_type, result) -> (* hope it doesn't happen *) assert false
-  | Pmty_with _ -> assert false
-  | Pmty_typeof _ -> assert false
-  | Pmty_alias _ -> assert false
-  | Pmty_extension _ -> assert false
-
-and eval_signature_noimpl env = function
-  | [] -> env
-  | it :: sg -> eval_signature_noimpl (eval_sigitem_noimpl env it.psig_desc) sg
-*)
 
 let () = apply_ref := apply
 let () = eval_expr_fun := eval_expr
