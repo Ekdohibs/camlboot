@@ -1,10 +1,16 @@
+type longident =
+  | Lident of string
+  | Ldot of longident * string
+
 type pattern =
   | PVar of string
-  | PConstructor of string * string list
+  | PInt of string
+  | PConstructor of longident * string list
 
 type typerepr =
   | ISum of (string * bool) list
   | IRecord of string list
+  | IRebind
 
 type constant =
   | CString of string
@@ -17,18 +23,24 @@ type label =
   | Optional of string
 
 type expr =
-  | EVar of string
+  | EVar of longident
   | EConstant of constant
-  | EConstr of string * expr list
-  | EGetfield of expr * string
-  | ERecord of (string * expr) list
-  | ERecordwith of expr * (string * expr) list
-  | EApply of string * (expr * label) list
+  | EConstr of longident * expr list
+  | EGetfield of expr * longident
+  | ESetfield of expr * longident * expr
+  | ERecord of (longident * expr) list
+  | ERecordwith of expr * (longident * expr) list
+  | EApply of longident * (expr * label) list
   | EIf of expr * expr * expr
   | EChain of expr * expr
   | EMatch of expr * (pattern * expr) list
-  | ELet of pattern * expr * expr
+  | ETry of expr * (pattern * expr) list
+  | ELet of (pattern * expr) list * expr
+  | ELambda of string list * expr
 
 type definition =
-  | MLet of string * (string * label) list * expr
-  | MTypedef of string * typerepr
+  | MLet of bool * (string * (string * label) list * expr) list
+  | MTypedef of (string * typerepr) list
+  | MException of string * bool
+  | MOpen of longident
+  | MStruct of string * definition list

@@ -4,13 +4,23 @@
   exception Lexing_error of string
 
   let kw = [
+    "and", AND;
+    "begin", BEGIN;
     "else", ELSE;
+    "end", END;
+    "exception", EXCEPTION;
+    "fun", FUN;
     "if", IF;
     "in", IN;
     "let", LET;
     "match", MATCH;
+    "module", MODULE;
     "of", OF;
+    "open", OPEN;
+    "rec", REC;
+    "struct", STRUCT;
     "then", THEN;
+    "try", TRY;
     "type", TYPE;
     "with", WITH
   ]
@@ -56,12 +66,29 @@ rule token = parse
   | ":"                         { COLON }
   | "'"                         { QUOTE }
   | "*"                         { STAR }
+  | "+"                         { PLUS }
+  | "-"                         { MINUS }
   | "^"                         { CARET }
   | "@"                         { AT }
   | "~"                         { TILDE }
   | "?"                         { QUESTION }
+  | "[|"                        { LBRACKBAR }
+  | "|]"                        { BARRBRACK }
+  | "["                         { LBRACK }
+  | "]"                         { RBRACK }
+  | "!"                         { BANG }
+  | ":="                        { COLONEQ }
+  | "<-"                        { LTMINUS }
+  | "<"                         { LT }
+  | ">"                         { GT }
+  | "<="                        { LTEQ }
+  | ">="                        { GTEQ }
+  | "<>"                        { LTGT }
+  | "||"                        { BARBAR }
+  | "&&"                        { AMPERAMPER }
   | eof                         { EOF }
   | '\"'                        { STRING (String.concat "" (string_chars lexbuf)) }
+  | "'" ([^ '\''] as c) "'"     { INT (String.make 1 c) }
   | lident as s                 { try Hashtbl.find keywords s
                                   with Not_found -> LIDENT s }
   | uident as s                 { UIDENT s }
