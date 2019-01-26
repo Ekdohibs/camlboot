@@ -21,6 +21,13 @@ let tag_Prim = 238
 
 type value = Obj.t
 
+(* Everything in the environment has a boolean saying whether it should be exposed
+   in the module that is produced.
+   Thus, the difference between [open] and [include] is that [open] adds the bindings
+   of the module being opened with a [false] boolean (not exposed outside of the current unit),
+   while [include] will add the bindings with a [true] boolean, indicating that they should
+   be exposed when we pack the unit into a module.
+ *)
 and env = {
   env_vars : (bool * value) SMap.t ;
   env_modules : (bool * mdl) SMap.t ;
@@ -45,7 +52,10 @@ and mdl =
 
 (* The name of the records that are defined as static and must have the same layout as in standard OCaml. *)
 let static_records = [
-  "parse_tables"; "parser_env"; "lex_tables"; "lexbuf"; "position"; "ref"; "compilation_unit"; "library"
+  "parse_tables"; "parser_env"; (* for the parse_engine primitive *)
+  "lex_tables"; "lexbuf"; "position"; (* for the lexing primitives *)
+  "ref"; (* for %makemutable *)
+  "compilation_unit"; "library"; (* for cmo, cma format *)
 ]
 
 exception InternalException of value
@@ -125,8 +135,9 @@ let rec eval_fun_or_function (envref : env ref) expr =
     Obj.set_field r 3 (Obj.repr e);
     Obj.set_field r 4 (Obj.repr envref);
     r
-  | Pexp_constraint (e, _) | Pexp_coerce (e, _, _) | Pexp_newtype (_, e) ->
-    eval_fun_or_function envref e
+  | Pexp_constraint (e, _) -> eval_fun_or_function envref e
+  | Pexp_coerce (e, _, _) -> eval_fun_or_function envref e
+  | Pexp_newtype (_, e) -> eval_fun_or_function envref e
   | _ -> failwith "unsupported rhs of rec"
 
 let rec env_get_module env lident =
@@ -234,6 +245,7 @@ let empty_env = {
 }
 
 let apply_ref = ref (fun _ _ -> assert false)
+let eval_expr_ref = ref (fun _ _ -> assert false)
 
 let mkprim f (arity : int) =
   let r = Obj.new_block tag_Prim 2 in
@@ -320,8 +332,6 @@ let _ = declare_builtin_constructor "Some" 0 1
 let _ = declare_builtin_constructor "[]" 0 0
 let _ = declare_builtin_constructor "::" 0 2
 let _ = declare_builtin_constructor "()" 0 0
-
-let eval_expr_fun = ref (fun x y -> assert false)
 
 let prims = [
   ("%apply", mkprim (fun vf v -> !apply_ref vf [(Nolabel, v)]) 2);
@@ -443,7 +453,7 @@ let prims = [
          Obj.field v 0
        else begin
          assert (Obj.tag v = tag_Lz);
-         let r = !eval_expr_fun (Obj.magic (Obj.field v 0)) (Obj.magic (Obj.field v 1)) in
+         let r = !eval_expr_ref (Obj.magic (Obj.field v 0)) (Obj.magic (Obj.field v 1)) in
          Obj.set_tag v tag_Lz_computed;
          Obj.set_field v 0 r;
          r
@@ -1154,7 +1164,7 @@ and eval_structure init_ignored env str =
   eval_structure_ init_ignored (prevent_export env) str
 
 let () = apply_ref := apply
-let () = eval_expr_fun := eval_expr
+let () = eval_expr_ref := eval_expr
 
 let parse filename =
   let inc = open_in filename in
@@ -1162,8 +1172,6 @@ let parse filename =
   let parsed = Parse.implementation lexbuf in
   close_in inc;
   parsed
-
-let z x = x
 
 let stdlib_modules = [
   ("Sys", "sys.ml");
