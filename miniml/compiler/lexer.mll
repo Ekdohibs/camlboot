@@ -88,7 +88,7 @@ rule token = parse
   | "&&"                        { AMPERAMPER }
   | eof                         { EOF }
   | '\"'                        { STRING (String.concat "" (string_chars lexbuf)) }
-  | "'" ([^ '\''] as c) "'"     { INT (String.make 1 c) }
+  | "'" ([^ '\''] as c) "'"     { INT ("'" ^ String.make 1 c ^ "'") }
   | lident as s                 { try Hashtbl.find keywords s
                                   with Not_found -> LIDENT s }
   | uident as s                 { UIDENT s }

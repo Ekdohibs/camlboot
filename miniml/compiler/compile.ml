@@ -150,7 +150,8 @@ let rec print_elems ff indent elems =
     print_elems ff indent elems
   | IndentChange c :: elems -> print_elems ff (indent + c) elems
 
-let rec print_expr env tvindex rf1 rf2 expr =
+let rec print_expr env tvindex ret err is_tail expr =
+  let (rf1, rf2) = ret in
   let result x = Line (rf1 ^ "(" ^ x ^ ")" ^ rf2) in
   match expr with
   | EVar v ->
@@ -169,20 +170,20 @@ let rec print_expr env tvindex rf1 rf2 expr =
     Cat [
       Atom [Line (tempvar ^ " = caml_alloc(" ^ string_of_int (List.length args) ^ ", " ^ env_get_constr env name ^ ");")];
       Cat (List.mapi (fun i e ->
-          print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ string_of_int i ^ ", ") ");" e
+          print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ string_of_int i ^ ", ", ");") err false e
       ) args);
       Atom [result tempvar]
     ]
   | EGetfield (e, f) ->
     Cat [
-      print_expr env tvindex "tmp = " ";" e;
+      print_expr env tvindex ("tmp = ", ";") err false e;
       Atom [result ("Field(tmp, " ^ env_get_field env f ^ ")")]
     ]
   | ESetfield (e1, f, e2) ->
     let tempvar = mktempvar tvindex in
     Cat [
-      print_expr env tvindex (tempvar ^ " = ") ";" e1;
-      print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ env_get_field env f) ");" e2;
+      print_expr env tvindex (tempvar ^ " = ", ";") err false e1;
+      print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ env_get_field env f, ");") err false e2;
       Atom [result "Val_unit"]
     ]
   | ERecord args ->
@@ -191,20 +192,20 @@ let rec print_expr env tvindex rf1 rf2 expr =
     Cat [
       Atom [Line (tempvar ^ " = caml_alloc(" ^ string_of_int (List.length args) ^ ", 0);")];
       Cat (List.map (fun (f, e) ->
-          print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ env_get_field env f) ");" e
+          print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ env_get_field env f, ");") err false e
       ) args);
       Atom [result tempvar]
     ]
   | ERecordwith (e, args) ->
     let tempvar = mktempvar tvindex in
     Cat [
-      print_expr env tvindex (tempvar ^ " = ") ";" e;
+      print_expr env tvindex (tempvar ^ " = ", ";") err false e;
       Atom [
         Line ("tmp = caml_alloc(Wosize_val(" ^ tempvar ^ "), 0);");
         Line ("for (size_t i = 0; i < Wosize_val(" ^ tempvar ^ "); i++) { Store_field(tmp, i, Field(" ^ tempvar ^ ", i)); }; " ^ tempvar ^ " = tmp;");
       ];
       Cat (List.map (fun (f, e) ->
-          print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ env_get_field env f) ");" e
+          print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ env_get_field env f, ");") err false e
       ) args);
       Atom [result tempvar]
     ]
@@ -248,73 +249,90 @@ let rec print_expr env tvindex rf1 rf2 expr =
       else
         f
     in
+    let callexpr =
+      callf ^ "(" ^
+      String.concat ", " (List.map mktempvar (range tvindex (tvindex + List.length args))) ^ ")"
+    in
     Cat [
       Cat (List.mapi (fun i e ->
-          print_expr env (tvindex + i) (mktempvar (tvindex + i) ^ " = ") ";" e
+          print_expr env (tvindex + i) (mktempvar (tvindex + i) ^ " = ", ";") err false e
       ) args);
-      Atom [result (callf ^ "(" ^
-                    String.concat ", " (List.map mktempvar (range tvindex (tvindex + List.length args))) ^
-                    ")"
-                   )]
+      if is_tail then
+        Atom [result callexpr]
+      else
+        Atom [
+          Line ("tmp = (" ^ callexpr ^ ");");
+          Line ("if (Is_block(tmp) && Tag_val(tmp) == exn_tag) { " ^ err ^ " }");
+          result "tmp";
+        ]
     ]
   | EIf (e1, e2, e3) ->
     Cat [
-      print_expr env tvindex "tmp = " ";" e1;
+      print_expr env tvindex ("tmp = ", ";") err false e1;
       Atom [Line "if (tmp != Val_false) {"; IndentChange 2];
-      print_expr env tvindex rf1 rf2 e2;
+      print_expr env tvindex ret err is_tail e2;
       Atom [IndentChange (-2); Line "} else {"; IndentChange 2];
-      print_expr env tvindex rf1 rf2 e3;
+      print_expr env tvindex ret err is_tail e3;
       Atom [IndentChange (-2); Line "}"]
     ]
   | EChain (e1, e2) ->
     Cat [
-      print_expr env tvindex "tmp = " ";" e1;
-      print_expr env tvindex rf1 rf2 e2
+      print_expr env tvindex ("tmp = ", ";") err false e1;
+      print_expr env tvindex ret err is_tail e2
     ]
   | EMatch (e, l) ->
     Cat [
-      print_expr env tvindex "tmp = " ";" e;
-      print_match env tvindex rf1 rf2 l
+      print_expr env tvindex ("tmp = ", ";") err false e;
+      print_match env tvindex ret err is_tail false l
     ]
   | ELet (bindings, body) ->
     (* HACK: sequential let! *)
     (match bindings with
-     | [] -> print_expr env tvindex rf1 rf2 body
+     | [] -> print_expr env tvindex ret err is_tail body
      | (p, e) :: rest ->
-       print_expr env tvindex rf1 rf2 (EMatch (e, [(p, ELet (rest, body))])))
+       print_expr env tvindex ret err is_tail (EMatch (e, [(p, ELet (rest, body))])))
   | ELambda (args, body) ->
     let fullname = gen_lambda () in
     process_fundef env fullname (List.map (fun x -> (x, Nolabel)) args) body;
     Atom [result ("(value)(&" ^ fullname ^ ")")]
-  | ETry _ -> Atom [Line "TODOOO"]
+  | ETry (e, m) ->
+    let lab = gen_label () in
+    Cat [
+      print_expr env tvindex ret ("goto " ^ lab ^ ";") false e;
+      Atom [Line ("if (0) { " ^ lab ^ ":"); IndentChange 2; Line "tmp = Field(tmp, 0);"];
+      print_match env tvindex ret err is_tail true m;
+      Atom [IndentChange (-2); Line "}"];
+    ]
 
-and print_match env tvindex rf1 rf2 l =
+and print_match env tvindex ret err is_tail is_exn_matching l =
   let no_arg, with_arg, default = split_pattern_matching env l in
+  let rf1, rf2 = ret in
+  let result x = Line (rf1 ^ "(" ^ x ^ ")" ^ rf2) in
   assert (l <> []);
   let print_default =
     match default with
-    | None -> Atom []
+    | None -> if is_exn_matching then Atom [result "raise(tmp)"] else Atom []
     | Some (vn, e) ->
       if vn = "_" then
-        print_expr env tvindex rf1 rf2 e
+        print_expr env tvindex ret err is_tail e
       else
         Cat [
           Atom [Line (mktempvar tvindex ^ " = tmp;")];
-          print_expr (env_add_tempvar env vn tvindex) (tvindex + 1) rf1 rf2 e
+          print_expr (env_add_tempvar env vn tvindex) (tvindex + 1) ret err is_tail e
         ]
   in
   if (no_arg = [] && with_arg = []) then begin
     print_default
   end else begin
     let has_def = default <> None in
-    let lab_def = if has_def then gen_label () else "BUG" in
+    let lab_def = if has_def || is_exn_matching then gen_label () else "BUG" in
     let do_def = if has_def then "goto " ^ lab_def ^ ";" else "assert(0);" in
     Cat [
       Atom [Line ("if (Is_long(tmp)) { switch (Int_val(tmp)) {"); IndentChange 2];
       Cat (List.map (fun (c, e) ->
           Cat [
             Atom [Line ("case " ^ c ^ ":"); IndentChange 2];
-            print_expr env tvindex rf1 rf2 e;
+            print_expr env tvindex ret err is_tail e;
             Atom [Line "break;"; IndentChange (-2)]
           ]) no_arg);
       Atom [
@@ -340,7 +358,7 @@ and print_match env tvindex rf1 rf2 l =
           Cat [
             Atom [Line ("case " ^ c ^ ":"); IndentChange 2];
             setvar;
-            print_expr nenv ntv rf1 rf2 e;
+            print_expr nenv ntv ret err is_tail e;
             Atom [Line "break;"; IndentChange (-2)]
           ]) with_arg);
       Atom [
@@ -348,7 +366,7 @@ and print_match env tvindex rf1 rf2 l =
         IndentChange (-2);
         Line "}}"
       ];
-      if has_def then
+      if has_def || is_exn_matching then
         Cat [
           Atom [Line ("if (0) { " ^ lab_def ^ ":"); IndentChange 2];
           print_default;
@@ -374,7 +392,7 @@ and process_fundef tenv fullname args body =
   let tv = expr_tempvars body in
   if args = [] then begin
     let initcode = Cat [
-        print_expr tenv 0 (fullname ^ " = ") ";" body;
+        print_expr tenv 0 (fullname ^ " = ", ";") "assert(0);" false body;
         Atom [Line ("caml_register_global_root(&" ^ fullname ^ ");")]
       ] in
     inits := initcode :: !inits;
@@ -384,12 +402,12 @@ and process_fundef tenv fullname args body =
         Atom [
           Line (declaration ^ " {");
           IndentChange 2;
-          Line "CAMLlocal1(tmp);";
           Line ("CAMLparam" ^ string_of_int (List.length args) ^ "(" ^
-                String.concat ", " (List.map fst args) ^ ");")
+                String.concat ", " (List.map fst args) ^ ");");
+          Line "CAMLlocal1(tmp);"
         ];
         print_tempvars tv;
-        print_expr tenv 0 "CAMLdrop; return " ";" body;
+        print_expr tenv 0 ("CAMLdrop; return ", ";") "CAMLdrop; return tmp;" true body;
         Atom [IndentChange (-2); Line "}"; Line ""]
       ]
     in
@@ -476,12 +494,34 @@ and process_defs env = function
   | [] -> env
   | d :: defs -> process_defs (process_def env d) defs
 
+let header = [
+  "#define CAML_NAME_SPACE";
+  "#define CAML_INTERNALS";
+  "#include <caml/alloc.h>";
+  "#include <caml/mlvalues.h>";
+  "#include <caml/memory.h>";
+  "#include <caml/startup_aux.h>";
+  "#include <stdio.h>";
+  "#include <assert.h>";
+  "";
+  "#define tag__Null 0";
+  "#define tag__Cons 0";
+  "";
+  "#define tag__None 0";
+  "#define tag__Some 0";
+  "";
+  "#define tag__ 0";
+  "";
+  "#define exn_tag 239";
+]
+
 let compile_and_print ff dfs =
   let _ = process_defs init_env dfs in
   let program = Cat [
+      Atom (List.map (fun x -> Line x) header);
       Cat (List.rev !decls);
       Cat (List.rev !defs);
-      Atom [Line "void init() {"; IndentChange 2; Line "CAMLlocal1(tmp);"];
+      Atom [Line "void init() {"; IndentChange 2; Line "CAMLparam0();"; Line "CAMLlocal1(tmp);"];
       print_tempvars !init_tempvars;
       Cat (List.rev !inits);
       Atom [Line "CAMLreturn0;"; IndentChange (-2); Line "}"]
