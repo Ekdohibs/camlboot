@@ -370,6 +370,15 @@ and process_fundef tenv fullname args body =
   let tenv = List.fold_left (fun env (x, _, _) ->
       { env with env_vars = SMap.add x (true, (true, x)) env.env_vars }) tenv args
   in
+  let body = List.fold_right (fun (x, _, def) body ->
+      match def with
+      | None -> body
+      | Some def ->
+        ELet ([PVar x, EMatch (EVar (Lident x),
+                               [(PConstructor (Lident "None", []), def);
+                                (PConstructor (Lident "Some", [x]), EVar (Lident x))])], body)
+    ) args body
+  in
   let declaration =
     if args = [] then
       "value " ^ fullname
