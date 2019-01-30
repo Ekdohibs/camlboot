@@ -43,12 +43,14 @@
 %token ELSE
 %token END
 %token EXCEPTION
+%token EXTERNAL
 %token FUN
 %token IF
 %token IN
 %token LET
 %token MATCH
 %token MODULE
+%token MUTABLE
 %token OF
 %token OPEN
 %token REC
@@ -281,7 +283,7 @@ pattern_lines:
   ioption(BAR); l = pattern_lines { l }
 
 field_decl:
-  | f = LIDENT; COLON; type_ignore { f }
+  | ioption(MUTABLE); f = LIDENT; COLON; type_ignore { f }
 
 %inline type_representation:
   | ioption(BAR); l = separated_nonempty_list(BAR, constr_decl)
@@ -295,9 +297,12 @@ constr_decl:
   | n = UIDENT; OF; type_ignore { (n, true) }
 
 labelled_args:
-  | x = LIDENT { (x, Nolabel) }
-  | TILDE; x = LIDENT { (x, Labelled x) }
-  | QUESTION; x = LIDENT { (x, Optional x) }
+  | x = LIDENT { (x, Nolabel, None) }
+  | TILDE; x = LIDENT { (x, Labelled x, None) }
+  | QUESTION; x = LIDENT { (x, Optional x, None) }
+  | LPAREN; x = LIDENT; COLON; type_ignore; RPAREN { (x, Nolabel, None) }
+  | LPAREN; RPAREN { ("_", Nolabel, None) }
+  | QUESTION; LPAREN; x = LIDENT; EQ; e = expr; RPAREN { (x, Optional x, Some e) }
 
 letdef:
   | name = LIDENT; vars = list(labelled_args); EQ; body = expr { (name, vars, body) }
@@ -320,9 +325,10 @@ definition:
   | EXCEPTION; e = constr_decl { MException (fst e, snd e) }
   | OPEN; m = longident_uident { MOpen m }
   | MODULE; n = UIDENT; EQ; STRUCT; l = list(semidefinition); END { MStruct (n, l) }
+  | EXTERNAL; n = LIDENT; COLON; type_ignore; EQ; s = STRING { MExternal (n, s) }
 
 semidefinition:
-  | ioption(SEMICOLONSEMICOLON); d = definition { d }
+  | d = definition; ioption(SEMICOLONSEMICOLON) { d }
 
 definitions:
   | l = list(semidefinition); EOF { l }

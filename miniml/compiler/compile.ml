@@ -17,7 +17,9 @@ let rec flatten_catenable_list l =
   in
   aux l []
 
+let cur_tempvars = ref 0
 let mktempvar tvindex =
+  cur_tempvars := max (tvindex + 1) !cur_tempvars;
   "tmp__" ^ string_of_int tvindex
 
 let list_max = List.fold_left max 0
@@ -26,30 +28,6 @@ let pattern_vars = function
   | PVar v -> if v = "_" then 0 else 1
   | PConstructor (_, l) -> List.fold_left (+) 0 (List.map (fun v -> if v = "_" then 0 else 1) l)
   | PInt _ -> 0
-
-let rec expr_tempvars = function
-  | EVar _ -> 0
-  | EConstant _ -> 0
-  | EConstr (_, l) -> if l = [] then 0 else 1 + list_max (List.map expr_tempvars l)
-  | EGetfield (e, _) -> expr_tempvars e
-  | ESetfield (e1, _, e2) -> max (expr_tempvars e1) (1 + expr_tempvars e2)
-  | ERecord l -> 1 + list_max (List.map (fun (_, e) -> expr_tempvars e) l)
-  | ERecordwith (e, l) ->
-     max (expr_tempvars e) (1 + list_max (List.map (fun (_, e) -> expr_tempvars e) l))
-  | EApply (_, l) ->
-     max (List.length l) (list_max (List.mapi (fun i (e, _) -> i + expr_tempvars e) l))
-  | EIf (e1, e2, e3) -> max (expr_tempvars e1) (max (expr_tempvars e2) (expr_tempvars e3))
-  | EChain (e1, e2) -> max (expr_tempvars e1) (expr_tempvars e2)
-  | EMatch (e, l) ->
-      max (expr_tempvars e) (list_max (List.map (fun (p, e) -> pattern_vars p + expr_tempvars e) l))
-  | ETry (e, l) ->
-      max (expr_tempvars e) (list_max (List.map (fun (p, e) -> pattern_vars p + expr_tempvars e) l))
-  | ELet (bindings, body) ->
-    (* HACK *)
-    (match bindings with
-     | [] -> expr_tempvars body
-     | (p, e) :: rest -> expr_tempvars (EMatch (e, [(p, ELet (rest, body))])))
-  | ELambda _ -> 0
 
 let pp_sep_string x ff () = Format.fprintf ff "%s" x
 let pp_sep_comma = pp_sep_string ", "
@@ -183,7 +161,7 @@ let rec print_expr env tvindex ret err is_tail expr =
     let tempvar = mktempvar tvindex in
     Cat [
       print_expr env tvindex (tempvar ^ " = ", ";") err false e1;
-      print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ env_get_field env f, ");") err false e2;
+      print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ env_get_field env f ^ ", ", ");") err false e2;
       Atom [result "Val_unit"]
     ]
   | ERecord args ->
@@ -192,7 +170,7 @@ let rec print_expr env tvindex ret err is_tail expr =
     Cat [
       Atom [Line (tempvar ^ " = caml_alloc(" ^ string_of_int (List.length args) ^ ", 0);")];
       Cat (List.map (fun (f, e) ->
-          print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ env_get_field env f, ");") err false e
+          print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ env_get_field env f ^ ", ", ");") err false e
       ) args);
       Atom [result tempvar]
     ]
@@ -205,7 +183,7 @@ let rec print_expr env tvindex ret err is_tail expr =
         Line ("for (size_t i = 0; i < Wosize_val(" ^ tempvar ^ "); i++) { Store_field(tmp, i, Field(" ^ tempvar ^ ", i)); }; " ^ tempvar ^ " = tmp;");
       ];
       Cat (List.map (fun (f, e) ->
-          print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ env_get_field env f, ");") err false e
+          print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ env_get_field env f ^ ", ", ");") err false e
       ) args);
       Atom [result tempvar]
     ]
@@ -240,7 +218,13 @@ let rec print_expr env tvindex ret err is_tail expr =
             extract_first (fun (_, lab) -> lab = Nolabel) args
         in
         e :: align shape nargs
-      | Optional s :: shape -> assert false
+      | Optional s :: shape ->
+        let (e, lab), nargs =
+          try extract_first (fun (_, lab) -> lab = Labelled s || lab = Optional s) args
+          with Not_found -> ((EConstr (Lident "None", []), Optional s), args)
+        in
+        let e = match lab with Labelled _ -> EConstr (Lident "Some", [e]) | _ -> e in
+        e :: align shape nargs
     in
     let args = align funshape args in
     let callf =
@@ -293,7 +277,10 @@ let rec print_expr env tvindex ret err is_tail expr =
        print_expr env tvindex ret err is_tail (EMatch (e, [(p, ELet (rest, body))])))
   | ELambda (args, body) ->
     let fullname = gen_lambda () in
-    process_fundef env fullname (List.map (fun x -> (x, Nolabel)) args) body;
+    let ct = !cur_tempvars in
+    cur_tempvars := 0;
+    process_fundef env fullname (List.map (fun x -> (x, Nolabel, None)) args) body;
+    cur_tempvars := ct;
     Atom [result ("(value)(&" ^ fullname ^ ")")]
   | ETry (e, m) ->
     let lab = gen_label () in
@@ -378,44 +365,53 @@ and print_match env tvindex ret err is_tail is_exn_matching l =
   end
 
 and process_fundef tenv fullname args body =
-  let tenv = List.fold_left (fun env (x, _) ->
+  let ctv = !cur_tempvars in
+  cur_tempvars := 0;
+  let tenv = List.fold_left (fun env (x, _, _) ->
       { env with env_vars = SMap.add x (true, (true, x)) env.env_vars }) tenv args
   in
   let declaration =
     if args = [] then
       "value " ^ fullname
     else
-      "value " ^ fullname ^ "(" ^ String.concat ", " (List.map (fun (x, _) -> "value " ^ x) args) ^ ")"
+      "value " ^ fullname ^ "(" ^ String.concat ", " (List.map (fun (x, _, _) -> "value " ^ x) args) ^ ")"
   in
   if fullname <> "_" then
     decls := Atom [Line (declaration ^ ";")] :: !decls;
-  let tv = expr_tempvars body in
   if args = [] then begin
-    let initcode = Cat [
-        print_expr tenv 0 (fullname ^ " = ", ";") "assert(0);" false body;
-        Atom [Line ("caml_register_global_root(&" ^ fullname ^ ");")]
-      ] in
+    let initcode =
+      if fullname = "_" then
+        print_expr tenv 0 ("tmp = ", ";") "assert(0);" false body
+      else
+        Cat [
+          print_expr tenv 0 (fullname ^ " = ", ";") "assert(0);" false body;
+          Atom [Line ("caml_register_global_root(&" ^ fullname ^ ");")]
+        ]
+    in
     inits := initcode :: !inits;
-    init_tempvars := max !init_tempvars tv
+    init_tempvars := max !init_tempvars !cur_tempvars
   end else begin
+    let cbody = print_expr tenv 0 ("CAMLdrop; return ", ";") "CAMLdrop; return tmp;" true body in
     let fundef = Cat [
         Atom [
           Line (declaration ^ " {");
           IndentChange 2;
           Line ("CAMLparam" ^ string_of_int (List.length args) ^ "(" ^
-                String.concat ", " (List.map fst args) ^ ");");
+                String.concat ", " (List.map (fun (x, _, _) -> x) args) ^ ");");
           Line "CAMLlocal1(tmp);"
         ];
-        print_tempvars tv;
-        print_expr tenv 0 ("CAMLdrop; return ", ";") "CAMLdrop; return tmp;" true body;
+        print_tempvars !cur_tempvars;
+        cbody;
         Atom [IndentChange (-2); Line "}"; Line ""]
       ]
     in
-    let labels = List.map snd args in
+    let labels = List.map (fun (_, lab, _) -> lab) args in
     fun_shapes := SMap.add fullname labels !fun_shapes;
     defs := fundef :: !defs;
-  end
+  end;
+  cur_tempvars := ctv
 
+let exnid = ref 0
 
 let rec process_def env = function
   | MOpen m ->
@@ -434,7 +430,8 @@ let rec process_def env = function
      with Not_found -> env)
   | MException (name, _) ->
     let fullname = "tag__" ^ env.env_name_prefix ^ name in
-    let value = string_of_int ((Hashtbl.hash name) land (1 lsl 30 - 1)) in
+    let value = string_of_int !exnid in
+    incr exnid;
     decls := Atom [Line ("#define " ^ fullname ^ " " ^ value)] :: !decls;
     { env with
       env_constrs = SMap.add name (true, fullname) env.env_constrs
@@ -489,6 +486,10 @@ let rec process_def env = function
     } in
     let nenv = process_defs modenv l in
     { env with env_modules = SMap.add n (true, nenv) env.env_modules }
+  | MExternal (n, s) ->
+    let fullname = env.env_name_prefix ^ n in
+    decls := Atom [Line ("#define " ^ fullname ^ " " ^ s)] :: !decls;
+    { env with env_vars = SMap.add n (true, (false, fullname)) env.env_vars }
 
 and process_defs env = function
   | [] -> env
@@ -503,6 +504,7 @@ let header = [
   "#include <caml/startup_aux.h>";
   "#include <stdio.h>";
   "#include <assert.h>";
+  "#include \"std.h\"";
   "";
   "#define tag__Null 0";
   "#define tag__Cons 0";

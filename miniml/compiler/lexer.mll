@@ -9,12 +9,14 @@
     "else", ELSE;
     "end", END;
     "exception", EXCEPTION;
+    "external", EXTERNAL;
     "fun", FUN;
     "if", IF;
     "in", IN;
     "let", LET;
     "match", MATCH;
     "module", MODULE;
+    "mutable", MUTABLE;
     "of", OF;
     "open", OPEN;
     "rec", REC;

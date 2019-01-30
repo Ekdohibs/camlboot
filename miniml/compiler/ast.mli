@@ -39,8 +39,9 @@ type expr =
   | ELambda of string list * expr
 
 type definition =
-  | MLet of bool * (string * (string * label) list * expr) list
+  | MLet of bool * (string * (string * label * expr option) list * expr) list
   | MTypedef of (string * typerepr) list
   | MException of string * bool
   | MOpen of longident
   | MStruct of string * definition list
+  | MExternal of string * string
