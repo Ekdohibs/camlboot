@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-files=( lexing.ml parsing.ml clflags.ml location.ml asttypes.mli warnings.ml syntaxerr.ml docstrings.ml longident.ml parsetree.mli ast_helper.ml parser.ml lexer.ml )
-modules=( Lexing Parsing Clflags Location Asttypes Warnings Syntaxerr Docstrings Longident Parsetree Ast_helper Parser Lexer )
+files=( buffer.ml lexing.ml parsing.ml clflags.ml location.ml asttypes.mli warnings.ml syntaxerr.ml docstrings.ml longident.ml parsetree.mli ast_helper.ml parser.ml lexer.ml )
+modules=( Buffer Lexing Parsing Clflags Location Asttypes Warnings Syntaxerr Docstrings Longident Parsetree Ast_helper Parser Lexer )
 out=out.ml
 cat std.ml > $out
 for i in "${!files[@]}"; do

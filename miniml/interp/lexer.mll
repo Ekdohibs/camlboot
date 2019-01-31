@@ -146,7 +146,7 @@ let rec hex_num_value_loop lexbuf last acc i =
     acc
   else
     let value = hex_digit_value (Lexing.lexeme_char lexbuf i) in
-    loop (16 * acc + value) (i + 1)
+    hex_num_value_loop lexbuf last (16 * acc + value) (i + 1)
 
 let hex_num_value lexbuf ~first ~last =
   hex_num_value_loop lexbuf last 0 first
@@ -164,7 +164,7 @@ let char_for_decimal_code lexbuf i =
                 (Char.code(Lexing.lexeme_char lexbuf (i+2)) - 48) in
   if (c < 0 || c > 255) then
     if in_comment ()
-    then (* 'x' *) assert false
+    then 'x'
     else raise (Error(Illegal_escape (Lexing.lexeme lexbuf),
                       Location.curr lexbuf))
   else Char.chr c
@@ -193,7 +193,7 @@ let uchar_for_uchar_escape lexbuf =
   | false ->
       let cp = hex_num_value lexbuf ~first ~last in
       if Uchar.is_valid cp then Uchar.unsafe_of_int cp else
-      ie_err lexbuf (", " ^ Printf.sprintf "%X" cp ^ " is not a Unicode scalar value")
+      (* ie_err lexbuf (", " ^ Printf.sprintf "%X" cp ^ " is not a Unicode scalar value") *) assert false
 
 (* recover the name from a LABEL or OPTLABEL token *)
 
@@ -245,6 +245,7 @@ let comments _ = List.rev !comment_list
 
 (* Error report *)
 
+(*
 open Format
 
 let report_error ppf e = (* match e with
@@ -279,6 +280,7 @@ let _ =
       | _ ->
           None
     )
+*)
 
 }
 

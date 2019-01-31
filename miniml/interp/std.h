@@ -12,5 +12,3 @@ value times(value x, value y) { return Val_long(Long_val(x) * Long_val(y)); }
 value caml_assert(value x) { assert (Long_val(x)); return Val_long(0); }
 value fst(value x) { return Field(x, 0); }
 value snd(value x) { return Field(x, 1); }
-value ref_get(value x) { return Field(x, 0); }
-value ref_set(value x, value s) { CAMLparam2(x, s); Store_field(x, 0, s); CAMLreturn (Val_long(0)); }

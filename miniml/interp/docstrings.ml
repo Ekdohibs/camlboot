@@ -134,19 +134,18 @@ let empty_text = []
 let empty_text_lazy = lazy []
 
 let text_loc = {txt = "ocaml.text"; loc = Location.none}
-(*
+
 let text_attr ds =
-  let open Parsetree in
   let exp =
-    { pexp_desc = Pexp_constant (Pconst_string(ds.ds_body, None));
-      pexp_loc = ds.ds_loc;
-      pexp_attributes = []; }
+    { Parsetree.pexp_desc = Parsetree.Pexp_constant (Parsetree.Pconst_string(ds.ds_body, None));
+      Parsetree.pexp_loc = ds.ds_loc;
+      Parsetree.pexp_attributes = []; }
   in
   let item =
-    { pstr_desc = Pstr_eval (exp, []); pstr_loc = exp.pexp_loc }
+    { Parsetree.pstr_desc = Parsetree.Pstr_eval (exp, []); Parsetree.pstr_loc = exp.Parsetree.pexp_loc }
   in
-    (text_loc, PStr [item])
-*)
+    (text_loc, Parsetree.PStr [item])
+
 let add_text_attrs dsl attrs = (*
   let fdsl = List.filter (function {ds_body=""} -> false| _ ->true) dsl in
   (List.map text_attr fdsl) @ attrs *) attrs
@@ -183,10 +182,10 @@ let associate_docstrings dsl = (*
     dsl *) ()
 
 (* Map from positions to pre docstrings *)
-
+(*
 let pre_table =
   Hashtbl.create 50
-
+*)
 let set_pre_docstrings pos dsl =
   (* if dsl <> [] then Hashtbl.add pre_table pos dsl *) ()
 
@@ -204,10 +203,10 @@ let mark_pre_docs pos =
   with Not_found -> () *) ()
 
 (* Map from positions to post docstrings *)
-
+(*
 let post_table =
   Hashtbl.create 50
-
+*)
 let set_post_docstrings pos dsl =
   (*if dsl <> [] then Hashtbl.add post_table pos dsl *) ()
  
@@ -231,10 +230,10 @@ let get_info pos =
   with Not_found -> None*) None
 
 (* Map from positions to floating docstrings *)
-
+(*
 let floating_table =
   Hashtbl.create 50
-
+*)
 let set_floating_docstrings pos dsl =
   (* if dsl <> [] then Hashtbl.add floating_table pos dsl *) ()
 
@@ -251,10 +250,10 @@ let get_post_text pos =
   with Not_found -> [] *) []
 
 (* Maps from positions to extra docstrings *)
-
+(*
 let pre_extra_table =
   Hashtbl.create 50
-
+*)
 let set_pre_extra_docstrings pos dsl =
   (* if dsl <> [] then Hashtbl.add pre_extra_table pos dsl *) ()
 
@@ -263,10 +262,10 @@ let get_pre_extra_text pos =
     let dsl = Hashtbl.find pre_extra_table pos in
       get_docstrings dsl
   with Not_found -> [] *) []
-
+(*
 let post_extra_table =
   Hashtbl.create 50
-
+*)
 let set_post_extra_docstrings pos dsl =
   (* if dsl <> [] then Hashtbl.add post_extra_table pos dsl *) ()
 
@@ -345,10 +344,10 @@ let rhs_post_extra_text pos =
 (* (Re)Initialise all comment state *)
 
 let init () =
-  docstrings := [];
+  docstrings := [] (*;
   Hashtbl.reset pre_table;
   Hashtbl.reset post_table;
   Hashtbl.reset floating_table;
   Hashtbl.reset pre_extra_table;
-  Hashtbl.reset post_extra_table
+  Hashtbl.reset post_extra_table*)
 

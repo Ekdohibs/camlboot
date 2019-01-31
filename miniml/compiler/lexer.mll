@@ -10,6 +10,7 @@
     "end", END;
     "exception", EXCEPTION;
     "external", EXTERNAL;
+    "false", UIDENT "false";
     "fun", FUN;
     "if", IF;
     "in", IN;
@@ -22,6 +23,7 @@
     "rec", REC;
     "struct", STRUCT;
     "then", THEN;
+    "true", UIDENT "true";
     "try", TRY;
     "type", TYPE;
     "with", WITH

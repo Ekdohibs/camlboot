@@ -75,12 +75,13 @@ let ghsig d = Sig.mk ~loc:(symbol_gloc()) d
 
 let mkinfix arg1 name arg2 =
   mkexp(Pexp_apply(mkoperator name 2, [Nolabel, arg1; Nolabel, arg2]))
-(*
+
 let neg_string f =
   if String.length f > 0 && f.[0] = '-'
   then String.sub f 1 (String.length f - 1)
   else "-" ^ f
- 
+
+(*
 let mkuminus name arg =
   match name, arg.pexp_desc with
   | "-", Pexp_constant(Pconst_integer (n,m)) ->
@@ -97,7 +98,11 @@ let mkuplus name arg =
   | ("+" | "+."), Pexp_constant(Pconst_float _) -> mkexp desc
   | _ ->
       mkexp(Pexp_apply(mkoperator ("~" ^ name) 1, [Nolabel, arg]))
-      *)
+*)
+
+let mkuminus name arg = mkexp(Pexp_apply(mkoperator ("~" ^ name) 1, [Nolabel, arg]))
+let mkuplus name arg = mkexp(Pexp_apply(mkoperator ("~" ^ name) 1, [Nolabel, arg]))
+
 let mkexp_cons consloc args loc =
   Exp.mk ~loc (Pexp_construct(mkloc (Lident "::") consloc, Some args))
 

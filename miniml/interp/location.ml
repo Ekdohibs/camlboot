@@ -326,7 +326,7 @@ let print_error_prefix ppf = (*
   fprintf ppf "@{<error>%s@}" error_prefix; *) assert false
 ;;
 
-let print_compact ppf loc =
+let print_compact ppf loc = assert false (*
   if loc.loc_start.pos_fname = "//toplevel//"
   && highlight_locations ppf [loc] then ()
   else begin
@@ -334,7 +334,7 @@ let print_compact ppf loc =
     let endchar = loc.loc_end.pos_cnum - loc.loc_start.pos_cnum + startchar in
     fprintf ppf "%a:%i" print_filename file line;
     if startchar >= 0 then fprintf ppf ",%i--%i" startchar endchar
-  end
+  end *)
 ;;
 
 let print_error ppf loc = (*
@@ -371,11 +371,11 @@ let print_warning loc ppf w =
 
 (* let formatter_for_warnings = ref err_formatter;; *)
 let prerr_warning loc w = assert false (*print_warning loc !formatter_for_warnings w;;*)
-
+(*
 let echo_eof () =
   print_newline ();
   incr num_loc_lines
-
+*)
 type  loc = {
   txt : 'a;
   loc : t;
@@ -520,8 +520,9 @@ let raise_errorf ?(loc = none) ?(sub = []) ?(if_highlight = "") =
   pp_ksprintf
     ~before:print_phanton_error_prefix
     (fun msg -> raise (Error ({loc; msg; sub; if_highlight})))
-
+*)
+*)
 let deprecated ?(def = none) ?(use = none) loc msg =
-  prerr_warning loc (Warnings.Deprecated (msg, def, use))
-*)
-*)
+  (* prerr_warning loc (Warnings.Deprecated (msg, def, use)) *) ()
+
+

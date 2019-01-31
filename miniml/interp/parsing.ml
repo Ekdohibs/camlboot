@@ -126,31 +126,33 @@ let clear_parser() =
 
 let current_lookahead_fun = ref (fun _ -> false)
 
-(*
-let yyparse tables start lexer lexbuf =
-  let rec loop cmd arg =
+
+  let rec yyloop tables lexer lexbuf cmd arg =
     match parse_engine tables env cmd arg with
       Read_token ->
         let t = Obj.repr(lexer lexbuf) in
         env.symb_start <- lexbuf.lex_start_p;
         env.symb_end <- lexbuf.lex_curr_p;
-        loop Token_read t
+        yyloop tables lexer lexbuf Token_read t
     | Raise_parse_error ->
         raise Parse_error
     | Compute_semantic_action ->
         let (action, value) =
-          try
-            (Semantic_action_computed, tables.actions.(env.rule_number) env)
+          try let act = tables.actions.(env.rule_number) in
+            (Semantic_action_computed, act env)
           with Parse_error ->
             (Error_detected, Obj.repr ()) in
-        loop action value
+        yyloop tables lexer lexbuf action value
     | Grow_stacks_1 ->
-        grow_stacks(); loop Stacks_grown_1 (Obj.repr ())
+        grow_stacks(); yyloop tables lexer lexbuf Stacks_grown_1 (Obj.repr ())
     | Grow_stacks_2 ->
-        grow_stacks(); loop Stacks_grown_2 (Obj.repr ())
+        grow_stacks(); yyloop tables lexer lexbuf Stacks_grown_2 (Obj.repr ())
     | Call_error_function ->
-        tables.error_function "syntax error";
-        loop Error_detected (Obj.repr ()) in
+        let f = tables.error_function in f "syntax error";
+        yyloop tables lexer lexbuf Error_detected (Obj.repr ())
+
+let yyparse tables start lexer lexbuf =
+
   let init_asp = env.asp
   and init_sp = env.sp
   and init_stackbase = env.stackbase
@@ -162,7 +164,7 @@ let yyparse tables start lexer lexbuf =
   env.curr_char <- start;
   env.symb_end <- lexbuf.lex_curr_p;
   try
-    loop Start (Obj.repr ())
+    yyloop tables lexer lexbuf Start (Obj.repr ())
   with exn ->
     let curr_char = env.curr_char in
     env.asp <- init_asp;
@@ -176,27 +178,27 @@ let yyparse tables start lexer lexbuf =
       YYexit v ->
         Obj.magic v
     | _ ->
-        current_lookahead_fun :=
+        (* current_lookahead_fun :=
           (fun tok ->
             if Obj.is_block tok
             then tables.transl_block.(Obj.tag tok) = curr_char
             else tables.transl_const.(Obj.magic tok) = curr_char);
-        raise exn
+        raise exn *) assert false
 
 let peek_val env n =
   Obj.magic env.v_stack.(env.asp - n)
 
-let symbol_start_pos () =
-  let rec loop i =
+  let rec symbol_loop i =
     if i <= 0 then env.symb_end_stack.(env.asp)
     else begin
       let st = env.symb_start_stack.(env.asp - i + 1) in
       let en = env.symb_end_stack.(env.asp - i + 1) in
-      if st <> en then st else loop (i - 1)
+      if st <> en then st else symbol_loop (i - 1)
     end
-  in
-  loop env.rule_len
-*)
+
+let symbol_start_pos () =
+  symbol_loop env.rule_len
+
 
 let symbol_end_pos () = env.symb_end_stack.(env.asp)
 let rhs_start_pos n = env.symb_start_stack.(env.asp - (env.rule_len - n))
