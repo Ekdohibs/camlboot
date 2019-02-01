@@ -298,7 +298,7 @@ and print_match env tvindex ret err is_tail is_exn_matching l =
   assert (l <> []);
   let print_default =
     match default with
-    | None -> if is_exn_matching then Atom [result "raise(tmp)"] else Atom []
+    | None -> if is_exn_matching then Atom [result "_raise(tmp)"] else Atom []
     | Some (vn, e) ->
       if vn = "_" then
         print_expr env tvindex ret err is_tail e
@@ -513,6 +513,7 @@ let header = [
   "#include <caml/startup_aux.h>";
   "#include <stdio.h>";
   "#include <assert.h>";
+  "#include <prims.c>";
   "#include \"std.h\"";
   "";
   "#define tag__Null 0";
@@ -524,6 +525,8 @@ let header = [
   "#define tag__ 0";
   "";
   "#define exn_tag 239";
+  "";
+  "value _raise(value x) { CAMLparam1(x); CAMLlocal1(res); res = caml_alloc(1, exn_tag); Store_field(res, 0, x); CAMLreturn(res); }";
 ]
 
 let compile_and_print ff dfs =
@@ -535,7 +538,8 @@ let compile_and_print ff dfs =
       Atom [Line "void init() {"; IndentChange 2; Line "CAMLparam0();"; Line "CAMLlocal1(tmp);"];
       print_tempvars !init_tempvars;
       Cat (List.rev !inits);
-      Atom [Line "CAMLreturn0;"; IndentChange (-2); Line "}"]
+      Atom [Line "CAMLreturn0;"; IndentChange (-2); Line "}"];
+      Atom [Line ""; Line "#include \"main.c\""];
     ]
   in
   print_elems ff 0 (flatten_catenable_list program);

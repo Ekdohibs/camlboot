@@ -165,10 +165,10 @@ let unclosed opening_name opening_num closing_name closing_num =
                                            rhs_loc closing_num, closing_name)))
 
 let expecting pos nonterm =
-    raise Syntaxerr.Error(Syntaxerr.Expecting(rhs_loc pos, nonterm))
+    raise (Syntaxerr.Error(Syntaxerr.Expecting(rhs_loc pos, nonterm)))
 
 let not_expecting pos nonterm =
-    raise Syntaxerr.Error(Syntaxerr.Not_expecting(rhs_loc pos, nonterm))
+    raise (Syntaxerr.Error(Syntaxerr.Not_expecting(rhs_loc pos, nonterm)))
 
 let bigarray_function str name =
   ghloc (Ldot(Ldot(Lident "Bigarray", str), name))
@@ -389,7 +389,7 @@ let class_of_let_bindings lbs body =
       lbs.lbs_bindings
   in
     if lbs.lbs_extension <> None then
-      raise Syntaxerr.Error(Syntaxerr.Not_expecting(lbs.lbs_loc, "extension"));
+      raise (Syntaxerr.Error(Syntaxerr.Not_expecting(lbs.lbs_loc, "extension")));
     mkclass(Pcl_let (lbs.lbs_rec, List.rev bindings, body))
 
 

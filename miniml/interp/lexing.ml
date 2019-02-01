@@ -80,10 +80,19 @@ let new_engine tbl state buf =
   end;
   result
 
-(*
-let lex_refill read_fun aux_buffer lexbuf =
+let rec lex_refill_loop t i s =
+  if i < 0 then () else begin
+    let v = t.(i) in
+    if v >= 0 then t.(i) <- v-s;
+    lex_refill_loop t (i-1) s
+  end
+
+let refill_buff lexbuf =
+  let aux_buffer, ic = lexbuf.refill_buff in
   let read =
-    read_fun aux_buffer (Bytes.length aux_buffer) in
+    (* read_fun aux_buffer (Bytes.length aux_buffer) *)
+    input ic aux_buffer 0 (Bytes.length aux_buffer)
+  in
   let n =
     if read > 0
     then read
@@ -109,7 +118,7 @@ let lex_refill read_fun aux_buffer lexbuf =
          space since n <= String.length aux_buffer <= String.length buffer.
          Watch out for string length overflow, though. *)
       let newlen =
-        min (2 * Bytes.length lexbuf.lex_buffer) Sys.max_string_length in
+        2 * Bytes.length lexbuf.lex_buffer in
       if lexbuf.lex_buffer_len - lexbuf.lex_start_pos + n > newlen
       then failwith "Lexing.lex_refill: cannot grow buffer";
       let newbuf = Bytes.create newlen in
@@ -128,16 +137,15 @@ let lex_refill read_fun aux_buffer lexbuf =
     lexbuf.lex_last_pos <- lexbuf.lex_last_pos - s;
     lexbuf.lex_buffer_len <- lexbuf.lex_buffer_len - s ;
     let t = lexbuf.lex_mem in
-    for i = 0 to Array.length t-1 do
+    (*for i = 0 to Array.length t-1 do
       let v = t.(i) in
       if v >= 0 then
         t.(i) <- v-s
-    done
+    done*) lex_refill_loop t (Array.length t - 1) s
   end;
   (* There is now enough space at the end of the buffer *)
   Bytes.blit aux_buffer 0 lexbuf.lex_buffer lexbuf.lex_buffer_len n;
   lexbuf.lex_buffer_len <- lexbuf.lex_buffer_len + n
-*)
 
 let zero_pos = {
   pos_fname = "";
@@ -146,8 +154,9 @@ let zero_pos = {
   pos_cnum = 0;
 }
 
-let from_function f =
-  { refill_buff = lex_refill f (Bytes.create 512);
+
+let from_channel ic =
+  { refill_buff = (Bytes.create 512, ic);
     lex_buffer = Bytes.create 1024;
     lex_buffer_len = 0;
     lex_abs_pos = 0;
@@ -161,6 +170,7 @@ let from_function f =
     lex_curr_p = zero_pos;
   }
 
+(*
 let from_channel ic =
   (* from_function (fun buf n -> input ic buf 0 n) *) assert false
 
@@ -178,7 +188,7 @@ let from_string s =
     lex_eof_reached = true;
     lex_start_p = zero_pos;
     lex_curr_p = zero_pos;
-  }
+  } *)
 
 let lexeme lexbuf =
   let len = lexbuf.lex_curr_pos - lexbuf.lex_start_pos in
