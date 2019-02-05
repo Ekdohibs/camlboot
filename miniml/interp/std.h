@@ -16,8 +16,8 @@ value land_(value x, value y) { return Val_long(Long_val(x) & Long_val(y)); }
 value lor_(value x, value y) { return Val_long(Long_val(x) | Long_val(y)); }
 value lxor_(value x, value y) { return Val_long(Long_val(x) ^ Long_val(y)); }
 value lsl_(value x, value y) { return Val_long(Long_val(x) << Long_val(y)); }
-value asr_(value x, value y) { return Val_long(((long long int)Long_val(x)) >> Long_val(y)); }
-value lsr_(value x, value y) { return Val_long(((unsigned long long int)Long_val(x)) >> Long_val(y)); }
+value asr_(value x, value y) { intnat u = x; int v = Long_val(y); return (u >> v); }
+value lsr_(value x, value y) { uintnat u = x; int v = Long_val(y); return (u >> v); }
 value caml_eq(value x, value y) { return Val_long(x == y); }
 value caml_noteq(value x, value y) { return Val_long(x != y); }
 
@@ -33,3 +33,5 @@ value caml_obj_set_field(value x, value i, value v) {
   CAMLdrop; return Val_unit;
 }
 value caml_obj_is_int(value x) { return Val_long(Is_long(x)); }
+
+value print_string(value s) { printf("%s\n", String_val(s)); return Val_unit; }

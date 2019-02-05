@@ -860,12 +860,13 @@ and eval_expr env expr =
       if is_true (eval_expr env arg1) then eval_expr env arg2 else Obj.repr false
     else begin
       let args = List.map1 (fun env le -> let (lab, e) = le in (lab, eval_expr env e)) env l in
-      (* if trace then begin match f.pexp_desc with Pexp_ident lident ->
-        Format.eprintf "apply %s@." (String.concat "." (Longident.flatten lident.txt));
-        incr tracecur;
+      if trace then begin match f.pexp_desc with Pexp_ident lident ->
+        (* Format.eprintf "apply %s@." (String.concat "." (Longident.flatten lident.txt)); *)
+        print_string (lident_name lident.txt);
+        incr tracecur
         (*if !tracecur > tracearg_from then Format.eprintf " %a" (Format.pp_print_list ~pp_sep:(fun ff () -> Format.fprintf ff " ") (fun ff (_, v) -> Format.fprintf ff "%a" pp_print_value v)) args; *)
-        Format.eprintf "@." | _ -> ()
-         end; *)
+        | _ -> ()
+         end;
       apply fc args
     end
   | Pexp_tuple l ->
@@ -875,20 +876,11 @@ and eval_expr env expr =
   | Pexp_coerce (e, _, _) -> eval_expr env e
   | Pexp_constraint (e, _) -> eval_expr env e
   | Pexp_sequence (e1, e2) -> let _ = eval_expr env e1 in eval_expr env e2
-  | Pexp_while (e1, e2) -> eval_expr_while env e1 e2 (* while is_true (eval_expr env e1) do ignore (eval_expr env e2) done; unit *) 
+  | Pexp_while (e1, e2) -> eval_expr_while env e1 e2
   | Pexp_for (p, e1, e2, flag, e3) ->
     let (v1 : int) = Obj.magic (eval_expr env e1) in
     let (v2 : int) = Obj.magic (eval_expr env e2) in
     eval_expr_for env flag v1 v2 p e3
-    (* if flag = Upto then
-      for x = v1 to v2 do
-        ignore (eval_expr (pattern_bind env p (Obj.repr x)) e3)
-      done
-    else
-      for x = v1 downto v2 do
-        ignore (eval_expr (pattern_bind env p (Obj.repr x)) e3)
-      done;
-       unit *)
   | Pexp_ifthenelse (e1, e2, e3) ->
     if is_true (eval_expr env e1) then eval_expr env e2 else (match e3 with None -> unit | Some e3 -> eval_expr env e3)
   | Pexp_unreachable -> failwith "reached unreachable"
@@ -1518,6 +1510,5 @@ let compiler_path = (*"/home/nathanael/.opam/4.07.0/lib/ocaml/compiler-libs"*) "
 let compiler_modules = List.map (fun np -> let (n, p) = np in (n, compiler_path ^ "/" ^ p)) compiler_modules
 
 let _ =
-  try ignore (load_modules init_env compiler_modules)
-  with InternalException e -> (*Format.eprintf "Code raised exception.@." (* pp_print_value e*) *) ()
+  load_modules init_env compiler_modules
 

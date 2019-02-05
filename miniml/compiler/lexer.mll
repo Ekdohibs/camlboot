@@ -117,7 +117,7 @@ rule token = parse
   | lident as s                 { try Hashtbl.find keywords s
                                   with Not_found -> LIDENT s }
   | uident as s                 { UIDENT s }
-  | integer_literal as s        { INT s }
+  | integer_literal as s        { INT (s ^ "LL") }
   | "#"
       {
         let at_beginning_of_line pos = (pos.pos_cnum = pos.pos_bol) in
