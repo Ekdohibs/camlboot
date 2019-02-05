@@ -8,7 +8,7 @@ type pattern =
   | PConstructor of longident * string list
 
 type typerepr =
-  | ISum of (string * bool) list
+  | ISum of (string * int) list
   | IRecord of string list
   | IRebind
 
@@ -41,7 +41,7 @@ type expr =
 type definition =
   | MLet of bool * (string * (string * label * expr option) list * expr) list
   | MTypedef of (string * typerepr) list
-  | MException of string * bool
+  | MException of string * int
   | MOpen of longident
   | MStruct of string * definition list
   | MExternal of string * string

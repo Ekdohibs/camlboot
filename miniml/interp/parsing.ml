@@ -182,8 +182,8 @@ let yyparse tables start lexer lexbuf =
           (fun tok ->
             if Obj.is_block tok
             then tables.transl_block.(Obj.tag tok) = curr_char
-            else tables.transl_const.(Obj.magic tok) = curr_char);
-        raise exn *) assert false
+            else tables.transl_const.(Obj.magic tok) = curr_char);*)
+        raise exn
 
 let peek_val env n =
   Obj.magic env.v_stack.(env.asp - n)

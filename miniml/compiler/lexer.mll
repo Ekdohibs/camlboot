@@ -36,6 +36,26 @@
     let pos = lexbuf.lex_curr_p in
     lexbuf.lex_curr_p <-
       { pos with pos_lnum = pos.pos_lnum + 1; pos_bol = pos.pos_cnum }
+
+  let int_of_char_hex c =
+    if '0' <= c && c <= '9' then Char.code c - Char.code '0'
+    else if 'a' <= c && c <= 'f' then Char.code c - Char.code 'a' + 10
+    else if 'A' <= c && c <= 'F' then Char.code c - Char.code 'A' + 10
+    else assert false
+
+  let char_of_escape_sequence s =
+    assert (s.[0] = '\\');
+    if s.[1] = '\\' then "\\"
+    else if s.[1] = '\"' then "\""
+    else if s.[1] = '\'' then "\'"
+    else if s.[1] = 'n' then "\n"
+    else if s.[1] = 't' then "\t"
+    else if s.[1] = 'b' then "\b"
+    else if s.[1] = 'r' then "\r"
+    else if s.[1] = ' ' then "\ "
+    else if s.[1] = 'x' then String.make 1 (Char.chr (16 * int_of_char_hex s.[2] + int_of_char_hex s.[3]))
+    else String.make 1 (Char.chr (100 * int_of_char_hex s.[1] + 10 * int_of_char_hex s.[2] + int_of_char_hex s.[3]))
+
 }
 
 let digits = ['0'-'9']
@@ -132,7 +152,7 @@ and string_chars = parse
   | '\"' { [] }
   | '\n' { newline lexbuf; "\n" :: (string_chars lexbuf) }
   | [^ '\\' '\"'] as c { (String.make 1 c) :: (string_chars lexbuf)}
-  | escape_sequence as s { s :: (string_chars lexbuf) }
+  | escape_sequence as s { char_of_escape_sequence s :: (string_chars lexbuf) }
   | '\\' { string_escape_newline lexbuf; string_chars lexbuf }
   | _ { raise (Lexing_error "Unrecognized escape sequence") }
 

@@ -50,7 +50,8 @@ type env = {
   env_name_prefix : string ;
   (* second boolean to say whether the variable is a local variable of the function or a global variable *)
   env_vars : (bool * (bool * string)) SMap.t ;
-  env_constrs : (bool * string) SMap.t ;
+  (* int = arity *)
+  env_constrs : (bool * (int * string)) SMap.t ;
   env_fields : (bool * string) SMap.t ;
   env_modules : (bool * env) SMap.t ;
 }
@@ -73,7 +74,7 @@ let env_get_var env li =
 
 let env_get_constr env li =
   try let env, s = env_get_env_li env li in snd (SMap.find s env.env_constrs)
-  with Not_found -> "tag__" ^ longident_name li
+  with Not_found -> (-1, "tag__" ^ longident_name li)
 
 let env_get_field env li =
   try let env, s = env_get_env_li env li in snd (SMap.find s env.env_fields)
@@ -99,7 +100,14 @@ let rec split_pattern_matching env = function
   | (PVar v, e) :: _ -> [], [], Some (v, e)
   | (PConstructor (c, l), e) :: r ->
     let a, b, v = split_pattern_matching env r in
-    if l = [] then (env_get_constr env c, e) :: a, b, v else a, (env_get_constr env c, l, e) :: b, v
+    let arity, cc = env_get_constr env c in
+    if l = [] then begin
+      assert (arity = 0 || arity = -1);
+      (cc, e) :: a, b, v
+    end else begin
+      assert (arity <> 0);
+      a, (cc, arity, l, e) :: b, v
+    end
   | (PInt n, e) :: r ->
     let a, b, v = split_pattern_matching env r in
     (n, e) :: a, b, v
@@ -128,6 +136,17 @@ let rec print_elems ff indent elems =
     print_elems ff indent elems
   | IndentChange c :: elems -> print_elems ff (indent + c) elems
 
+let escaped s =
+  let res = Bytes.make (4 * String.length s) '\\' in
+  let hex = "0123456789abcdef" in
+  for i = 0 to String.length s - 1 do
+    res.[4 * i] <- '\\';
+    res.[4 * i + 1] <- 'x';
+    res.[4 * i + 2] <- hex.[(Char.code s.[i]) lsr 4];
+    res.[4 * i + 3] <- hex.[(Char.code s.[i]) land 15];
+  done;
+  Bytes.to_string res
+
 let rec print_expr env tvindex ret err is_tail expr =
   let (rf1, rf2) = ret in
   let result x = Line (rf1 ^ "(" ^ x ^ ")" ^ rf2) in
@@ -140,13 +159,19 @@ let rec print_expr env tvindex ret err is_tail expr =
   | EConstant CUnit ->
     Atom [result "Val_unit"]
   | EConstant (CString s) ->
-    Atom [result ("caml_alloc_initialized_string(" ^ string_of_int (String.length s) ^ ", \"" ^ s ^ "\")")]
+    Atom [result ("caml_alloc_initialized_string(" ^ string_of_int (String.length s) ^ ", \"" ^ escaped s ^ "\")")]
   | EConstr (name, []) ->
-    Atom [result ("Val_long(" ^ env_get_constr env name ^ ")")]
+    let arity, c = env_get_constr env name in
+    assert (arity = 0 || arity = -1);
+    Atom [result ("Val_long(" ^ c ^ ")")]
   | EConstr (name, args) ->
     let tempvar = mktempvar tvindex in
+    let arity, c = env_get_constr env name in
+    let args = match args with [EConstr (Lident "", args)] when arity <> 1 -> args | _ -> args in
+    assert (arity <> 0);
+    assert (arity = -1 || arity = 1 || arity = List.length args);
     Cat [
-      Atom [Line (tempvar ^ " = caml_alloc(" ^ string_of_int (List.length args) ^ ", " ^ env_get_constr env name ^ ");")];
+      Atom [Line (tempvar ^ " = caml_alloc(" ^ string_of_int (List.length args) ^ ", " ^ c ^ ");")];
       Cat (List.mapi (fun i e ->
           print_expr env (tvindex + 1) ("Store_field(" ^ tempvar ^ ", " ^ string_of_int i ^ ", ", ");") err false e
       ) args);
@@ -204,6 +229,7 @@ let rec print_expr env tvindex ret err is_tail expr =
       | [] -> raise Not_found
       | x :: l -> if f x then x, l else let a, l1 = extract_first f l in a, x :: l1
     in
+    (* Format.eprintf "%s@." f; *)
     let rec align shape args =
       match shape with
       | [] -> assert (args = []); []
@@ -279,7 +305,7 @@ let rec print_expr env tvindex ret err is_tail expr =
     let fullname = gen_lambda () in
     let ct = !cur_tempvars in
     cur_tempvars := 0;
-    process_fundef env fullname (List.map (fun x -> (x, Nolabel, None)) args) body;
+    process_fundef (env_remove_tempvars env) fullname (List.map (fun x -> (x, Nolabel, None)) args) body;
     cur_tempvars := ct;
     Atom [result ("(value)(&" ^ fullname ^ ")")]
   | ETry (e, m) ->
@@ -328,7 +354,7 @@ and print_match env tvindex ret err is_tail is_exn_matching l =
         Line "}} else { switch (Tag_val(tmp)) {";
         IndentChange 2
       ];
-      Cat (List.map (fun (c, l, e) ->
+      Cat (List.map (fun (c, arity, l, e) ->
           let rec set_variables tvindex env i setvar = function
             | [] -> setvar, tvindex, env
             | "_" :: l -> set_variables tvindex env (i + 1) setvar l
@@ -341,9 +367,12 @@ and print_match env tvindex ret err is_tail is_exn_matching l =
               in
               set_variables (tvindex + 1) (env_add_tempvar env x tvindex) (i + 1) nsetvar l
           in
+          (* Format.eprintf "%s %d %d@." c arity (List.length l); *)
+          assert (arity = -1 || arity = 1 || arity = List.length l || l = ["_"]);
           let setvar, ntv, nenv = set_variables tvindex env 0 (Atom []) l in
           Cat [
             Atom [Line ("case " ^ c ^ ":"); IndentChange 2];
+            if arity = 1 && List.length l <> 1 then Atom [Line "tmp = Field(tmp, 0);"] else Atom [];
             setvar;
             print_expr nenv ntv ret err is_tail e;
             Atom [Line "break;"; IndentChange (-2)]
@@ -437,13 +466,13 @@ let rec process_def env = function
             menv.env_modules env.env_modules ;
       }
      with Not_found -> env)
-  | MException (name, _) ->
+  | MException (name, arity) ->
     let fullname = "tag__" ^ env.env_name_prefix ^ name in
     let value = string_of_int !exnid in
     incr exnid;
     decls := Atom [Line ("#define " ^ fullname ^ " " ^ value)] :: !decls;
     { env with
-      env_constrs = SMap.add name (true, fullname) env.env_constrs
+      env_constrs = SMap.add name (true, (arity, fullname)) env.env_constrs
     }
   | MLet (rec_flag, l) ->
     let nenv =
@@ -464,12 +493,12 @@ let rec process_def env = function
         | (name, ISum l) ->
           let c1 = ref 0 in
           let c2 = ref 0 in
-          let nenv = List.fold_left (fun env (n, has_arguments) ->
-              let c = if has_arguments then c1 else c2 in
+          let nenv = List.fold_left (fun env (n, arity) ->
+              let c = if arity > 0 then c1 else c2 in
               let a = !c in incr c;
               let fullname = "tag__" ^ env.env_name_prefix ^ n in
               decls := Atom [Line ("#define " ^ fullname ^ " " ^ string_of_int a)] :: !decls;
-              { env with env_constrs = SMap.add n (true, fullname) env.env_constrs }
+              { env with env_constrs = SMap.add n (true, (arity, fullname)) env.env_constrs }
             ) env l
           in
           decls := Atom [Line ""] :: !decls;

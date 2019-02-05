@@ -126,6 +126,13 @@ type_ignore:
   | longident_lident; type_ignore { () }
   | LPAREN; type_ignore; RPAREN; type_ignore { () }
 
+type_count_stars:
+  | { 0 }
+  | STAR; t = type_count_stars { t + 1 }
+  | longident_lident; t = type_count_stars { t }
+  | QUOTE; t = type_count_stars { t }
+  | LPAREN; type_ignore; RPAREN; t = type_count_stars { t }
+
 constant:
   | s = STRING { CString s }
   | LPAREN; RPAREN { CUnit }
@@ -185,6 +192,7 @@ simple_expr:
       { ERecordwith (e, l) }
   | LBRACK; RBRACK { EConstr (Lident "Null", []) }
   | LBRACK; l = semi_separated_expr_list_opt; RBRACK { List.fold_right (fun e r -> EConstr (Lident "Cons", [e; r])) l (EConstr (Lident "Null", [])) }
+  | LBRACKBAR; BARRBRACK { EVar (Ldot (Lident "Array", "empty_array")) }
   | LBRACKBAR; l = semi_separated_expr_list_opt; BARRBRACK { EConstr (Lident "", l) }
   | BANG; e = simple_expr
       { EApply (Lident "ref_get", [(e, Nolabel)]) }
@@ -293,8 +301,8 @@ field_decl:
   | type_ignore { IRebind }
 
 constr_decl:
-  | n = UIDENT { (n, false) }
-  | n = UIDENT; OF; type_ignore { (n, true) }
+  | n = UIDENT { (n, 0) }
+  | n = UIDENT; OF; t = type_count_stars { (n, t + 1) }
 
 labelled_args:
   | x = LIDENT { (x, Nolabel, None) }

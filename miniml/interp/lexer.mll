@@ -414,15 +414,6 @@ rule token = parse
         else
           COMMENT ("*" ^ s, loc)
       }
-  | "(**" (('*'+) as stars)
-      { let s, loc =
-          with_comment_buffer
-            (fun lexbuf ->
-               store_string ("*" ^ stars);
-               comment lexbuf)
-            lexbuf
-        in
-        COMMENT (s, loc) }
   | "(*)"
       { if !print_warnings then
           Location.prerr_warning (Location.curr lexbuf) Warnings.Comment_start;
