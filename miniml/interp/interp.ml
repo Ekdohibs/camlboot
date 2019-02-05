@@ -155,7 +155,7 @@ let read_caml_int s =
     if String.length s >= init + 2 && s.[init] = '0' then
       let c = s.[init + 1] in
       let b = if c = 'x' || c = 'X' then 16 else if c = 'b' || c = 'B' then 2 else if c = 'o' || c = 'O' then 8 else assert false in
-      (caml_int64_of_int b, init + 1)
+      (caml_int64_of_int b, init + 2)
     else
       (caml_int64_of_int 10, init)
   in
@@ -642,6 +642,27 @@ let rec find_field fnames idx name =
   | [] -> assert false
   | fname :: fnames -> if fname = name then idx else find_field fnames (idx + 1) name
 
+(*
+let rec apply_loop1 f clos i j =
+  if i = j then f
+  else let w = Obj.magic f in apply_loop1 (w (Obj.field clos i)) clos (i + 1) j
+
+let prim_complete_apply vf arg =
+  let w = Obj.magic (apply_loop1 (Obj.field vf 0) vf 2 (Obj.size vf)) in
+  w arg
+*)
+
+let prim_complete_apply vf arg =
+  let f = Obj.magic (Obj.field vf 0) in
+  let arity = Obj.magic (Obj.field vf 1) in
+  match arity with
+  | 1 -> f arg
+  | 2 -> f (Obj.field vf 2) arg
+  | 3 -> f (Obj.field vf 2) (Obj.field vf 3) arg
+  | 4 -> f (Obj.field vf 2) (Obj.field vf 3) (Obj.field vf 4) arg
+  | 5 -> f (Obj.field vf 2) (Obj.field vf 3) (Obj.field vf 4) (Obj.field vf 5) arg
+  | _ -> assert false
+
 let rec apply_labelled vf labarg =
   let lab, arg = labarg in
   assert (Obj.tag vf = tag_Fun);
@@ -686,10 +707,6 @@ and apply_optional_noarg vf =
   in
   eval_expr (pattern_bind !fenv p arg) e
 
-and apply_loop1 f clos i j =
-  if i = j then f
-  else let w = Obj.magic f in apply_loop1 (w (Obj.field clos i)) clos (i + 1) j
-
 and apply_one hlwl vf arg =
   let (has_labelled, with_label) = hlwl in
   let tag = Obj.tag vf in
@@ -723,8 +740,7 @@ and apply_one hlwl vf arg =
     let (arity : int) = Obj.magic (Obj.field vf 1) in
     let current_args = Obj.size vf - 2 in
     if current_args + 1 = arity then
-      let w = Obj.magic (apply_loop1 (Obj.field vf 0) vf 2 (Obj.size vf)) in
-      w arg
+      prim_complete_apply vf arg
     else
       let no = Obj.new_block tag_Prim (Obj.size vf + 1) in
       obj_copy vf no 0 (Obj.size vf);
@@ -778,6 +794,35 @@ and apply vf args =
     let vf = List.fold_left1 apply_one (has_labelled, with_label) vf unlabelled in
     apply_loop2 with_label vf
 
+and eval_expr_while env e1 e2 =
+  if is_true (eval_expr env e1) then begin
+    ignore (eval_expr env e2);
+    eval_expr_while env e1 e2
+  end else
+    unit
+
+and eval_expr_for_up env v1 v2 p e =
+  if v1 > v2 then
+    unit
+  else begin
+    ignore (eval_expr (pattern_bind env p (Obj.repr v1)) e);
+    eval_expr_for_up env (v1 + 1) v2 p e
+  end
+
+and eval_expr_for_down env v1 v2 p e =
+  if v1 > v2 then
+    unit
+  else begin
+    ignore (eval_expr (pattern_bind env p (Obj.repr v2)) e);
+    eval_expr_for_up env v1 (v2 - 1) p e
+  end
+
+and eval_expr_for env flag v1 v2 p e =
+  if flag = Upto then
+    eval_expr_for_up env v1 v2 p e
+  else
+    eval_expr_for_down env v1 v2 p e
+
 and eval_expr env expr =
   match expr.pexp_desc with
   | Pexp_ident lident -> env_get_value env lident.txt
@@ -830,10 +875,11 @@ and eval_expr env expr =
   | Pexp_coerce (e, _, _) -> eval_expr env e
   | Pexp_constraint (e, _) -> eval_expr env e
   | Pexp_sequence (e1, e2) -> let _ = eval_expr env e1 in eval_expr env e2
-  | Pexp_while (e1, e2) -> (* while is_true (eval_expr env e1) do ignore (eval_expr env e2) done; unit *) assert false
+  | Pexp_while (e1, e2) -> eval_expr_while env e1 e2 (* while is_true (eval_expr env e1) do ignore (eval_expr env e2) done; unit *) 
   | Pexp_for (p, e1, e2, flag, e3) ->
     let (v1 : int) = Obj.magic (eval_expr env e1) in
     let (v2 : int) = Obj.magic (eval_expr env e2) in
+    eval_expr_for env flag v1 v2 p e3
     (* if flag = Upto then
       for x = v1 to v2 do
         ignore (eval_expr (pattern_bind env p (Obj.repr x)) e3)
@@ -842,7 +888,7 @@ and eval_expr env expr =
       for x = v1 downto v2 do
         ignore (eval_expr (pattern_bind env p (Obj.repr x)) e3)
       done;
-       unit *) assert false
+       unit *)
   | Pexp_ifthenelse (e1, e2, e3) ->
     if is_true (eval_expr env e1) then eval_expr env e2 else (match e3 with None -> unit | Some e3 -> eval_expr env e3)
   | Pexp_unreachable -> failwith "reached unreachable"
@@ -1287,7 +1333,7 @@ let _ = eval_expr_ref := eval_expr
 let parse filename =
   let inc = open_in filename in
   let lexbuf = Lexing.from_channel inc in
-  let parsed = Parser.implementation Lexer.token lexbuf in
+  let parsed = Parser.implementation Lexer.real_token lexbuf in
   close_in inc;
   parsed
 
@@ -1311,7 +1357,7 @@ let stdlib_modules = [
   ("Array", "array.ml");
   ("Int64", "int64.ml");
   ("Int32", "int32.ml");
-  ("Nativeint", "nativeint.ml";)
+  ("Nativeint", "nativeint.ml");
   ("Digest", "digest.ml");
   ("Random", "random.ml");
   ("Hashtbl", "hashtbl.ml");

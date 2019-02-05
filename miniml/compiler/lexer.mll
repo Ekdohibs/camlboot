@@ -45,16 +45,16 @@
 
   let char_of_escape_sequence s =
     assert (s.[0] = '\\');
-    if s.[1] = '\\' then "\\"
-    else if s.[1] = '\"' then "\""
-    else if s.[1] = '\'' then "\'"
-    else if s.[1] = 'n' then "\n"
-    else if s.[1] = 't' then "\t"
-    else if s.[1] = 'b' then "\b"
-    else if s.[1] = 'r' then "\r"
-    else if s.[1] = ' ' then "\ "
-    else if s.[1] = 'x' then String.make 1 (Char.chr (16 * int_of_char_hex s.[2] + int_of_char_hex s.[3]))
-    else String.make 1 (Char.chr (100 * int_of_char_hex s.[1] + 10 * int_of_char_hex s.[2] + int_of_char_hex s.[3]))
+    if s.[1] = '\\' then '\\'
+    else if s.[1] = '\"' then '\"'
+    else if s.[1] = '\'' then '\''
+    else if s.[1] = 'n' then '\n'
+    else if s.[1] = 't' then '\t'
+    else if s.[1] = 'b' then '\b'
+    else if s.[1] = 'r' then '\r'
+    else if s.[1] = ' ' then '\ '
+    else if s.[1] = 'x' then Char.chr (16 * int_of_char_hex s.[2] + int_of_char_hex s.[3])
+    else Char.chr (100 * int_of_char_hex s.[1] + 10 * int_of_char_hex s.[2] + int_of_char_hex s.[3])
 
 }
 
@@ -113,6 +113,7 @@ rule token = parse
   | eof                         { EOF }
   | '\"'                        { STRING (String.concat "" (string_chars lexbuf)) }
   | "'" ([^ '\''] as c) "'"     { INT ("'" ^ String.make 1 c ^ "'") }
+  | "'" (escape_sequence as c) "'" { INT (string_of_int (Char.code (char_of_escape_sequence c))) }
   | lident as s                 { try Hashtbl.find keywords s
                                   with Not_found -> LIDENT s }
   | uident as s                 { UIDENT s }
@@ -152,7 +153,7 @@ and string_chars = parse
   | '\"' { [] }
   | '\n' { newline lexbuf; "\n" :: (string_chars lexbuf) }
   | [^ '\\' '\"'] as c { (String.make 1 c) :: (string_chars lexbuf)}
-  | escape_sequence as s { char_of_escape_sequence s :: (string_chars lexbuf) }
+  | escape_sequence as s { String.make 1 (char_of_escape_sequence s) :: (string_chars lexbuf) }
   | '\\' { string_escape_newline lexbuf; string_chars lexbuf }
   | _ { raise (Lexing_error "Unrecognized escape sequence") }
 

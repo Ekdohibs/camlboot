@@ -84,7 +84,7 @@ let rec lex_refill_loop t i s =
   if i < 0 then () else begin
     let v = t.(i) in
     if v >= 0 then t.(i) <- v-s;
-    lex_refill_loop t (i-1) s
+    lex_refill_loop t (i - 1) s
   end
 
 let refill_buff lexbuf =

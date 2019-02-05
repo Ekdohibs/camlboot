@@ -396,19 +396,16 @@ let class_of_let_bindings lbs body =
 (* Alternatively, we could keep the generic module type in the Parsetree
    and extract the package type during type-checking. In that case,
    the assertions below should be turned into explicit checks. *)
-let package_type_of_module_type pmty = (*
-  let err loc s =
-    raise (Syntaxerr.Error (Syntaxerr.Invalid_package_type (loc, s)))
-  in
-  let map_cstr = function
+let package_type_of_module_type pmty =
+  let map_cstr = fun cstr -> match cstr with
     | Pwith_type (lid, ptyp) ->
         let loc = ptyp.ptype_loc in
         if ptyp.ptype_params <> [] then
-          err loc "parametrized types are not supported";
+          assert false;
         if ptyp.ptype_cstrs <> [] then
-          err loc "constrained types are not supported";
+          assert false;
         if ptyp.ptype_private <> Public then
-          err loc "private types are not supported";
+          assert false;
 
         (* restrictions below are checked by the 'with_constraint' rule *)
         assert (ptyp.ptype_kind = Ptype_abstract);
@@ -420,16 +417,17 @@ let package_type_of_module_type pmty = (*
         in
         (lid, ty)
     | _ ->
-        err pmty.pmty_loc "only 'with type t =' constraints are supported"
+        assert false
   in
-  match pmty with
-  | {pmty_desc = Pmty_ident lid} -> (lid, [])
-  | {pmty_desc = Pmty_with({pmty_desc = Pmty_ident lid}, cstrs)} ->
-      (lid, List.map map_cstr cstrs)
+  match pmty.pmty_desc with
+  | Pmty_ident lid -> (lid, [])
+  | Pmty_with(z, cstrs) -> (
+      match z.pmty_desc with
+      | Pmty_ident lid -> (lid, List.map map_cstr cstrs)
+      | _ -> assert false
+  )
   | _ ->
-      err pmty.pmty_loc
-        "only module type identifier and 'with type' constraints are supported"
-                                        *) assert false
+      assert false
 
 %}
 

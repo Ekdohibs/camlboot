@@ -58,7 +58,7 @@ let reset b =
   b.length <- Bytes.length b.buffer
 
 let rec make_new_len new_len x =
-  if x > !new_len then () else begin new_len := 2 * !new_len; make_new_len new_len x end
+  if x <= !new_len then () else begin new_len := 2 * !new_len; make_new_len new_len x end
 
 let resize b more =
   let len = b.length in

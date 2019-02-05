@@ -319,12 +319,12 @@ let rec print_expr env tvindex ret err is_tail expr =
 
 and print_match env tvindex ret err is_tail is_exn_matching l =
   let no_arg, with_arg, default = split_pattern_matching env l in
-  let rf1, rf2 = ret in
-  let result x = Line (rf1 ^ "(" ^ x ^ ")" ^ rf2) in
+  (* let rf1, rf2 = ret in
+     let result x = Line (rf1 ^ "(" ^ x ^ ")" ^ rf2) in *)
   assert (l <> []);
   let print_default =
     match default with
-    | None -> if is_exn_matching then Atom [result "_raise(tmp)"] else Atom []
+    | None -> if is_exn_matching then Atom [Line ("tmp = _raise(tmp);" ^ err)] else Atom []
     | Some (vn, e) ->
       if vn = "_" then
         print_expr env tvindex ret err is_tail e
@@ -339,7 +339,7 @@ and print_match env tvindex ret err is_tail is_exn_matching l =
   end else begin
     let has_def = default <> None in
     let lab_def = if has_def || is_exn_matching then gen_label () else "BUG" in
-    let do_def = if has_def then "goto " ^ lab_def ^ ";" else "assert(0);" in
+    let do_def = if has_def || is_exn_matching then "goto " ^ lab_def ^ ";" else "assert(0);" in
     Cat [
       Atom [Line ("if (Is_long(tmp)) { switch (Int_val(tmp)) {"); IndentChange 2];
       Cat (List.map (fun (c, e) ->

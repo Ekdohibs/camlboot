@@ -18,8 +18,8 @@ value lxor_(value x, value y) { return Val_long(Long_val(x) ^ Long_val(y)); }
 value lsl_(value x, value y) { return Val_long(Long_val(x) << Long_val(y)); }
 value asr_(value x, value y) { return Val_long(((long long int)Long_val(x)) >> Long_val(y)); }
 value lsr_(value x, value y) { return Val_long(((unsigned long long int)Long_val(x)) >> Long_val(y)); }
-value caml_eq(value x, value y) { return Long_val(x == y); }
-value caml_noteq(value x, value y) { return Long_val(x != y); }
+value caml_eq(value x, value y) { return Val_long(x == y); }
+value caml_noteq(value x, value y) { return Val_long(x != y); }
 
 value caml_assert(value x) { assert (Long_val(x)); return Val_unit; }
 value fst(value x) { return Field(x, 0); }

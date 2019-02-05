@@ -151,12 +151,13 @@ let rec hex_num_value_loop lexbuf last acc i =
 let hex_num_value lexbuf ~first ~last =
   hex_num_value_loop lexbuf last 0 first
 
-let char_for_backslash c = (*match c with
+let char_for_backslash c = match c with
   | 'n' -> '\010'
   | 'r' -> '\013'
   | 'b' -> '\008'
   | 't' -> '\009'
-                             | c   -> c *) assert false
+  | c   -> c
+
 
 let char_for_decimal_code lexbuf i =
   let c = 100 * (Char.code(Lexing.lexeme_char lexbuf i) - 48) +
@@ -547,7 +548,7 @@ and comment = parse
   | "\""
       {
         string_start_loc := Location.curr lexbuf;
-        (* store_string_char '\"'; *)         assert false;
+        store_string_char '\"';
         is_in_string := true;
         (*begin try string lexbuf
         with Error (Unterminated_string, str_start) ->
@@ -561,7 +562,7 @@ and comment = parse
           end;*)
         string lexbuf;
         is_in_string := false;
-        (*store_string_char '\"';*) assert false;
+        store_string_char '\"';
         comment lexbuf }
   | "{" lowercase* "|"
       {
@@ -583,9 +584,9 @@ and comment = parse
         quoted_string delim lexbuf;
         is_in_string := false;
         assert false;
-        (*store_string_char '|';
+        store_string_char '|';
         store_string delim;
-          store_string_char '}';*)
+        store_string_char '}';
         comment lexbuf }
 
   | "\'\'"
@@ -792,6 +793,13 @@ and skip_hash_bang = parse
     in
       loop NoLine Initial lexbuf
 *)
+  let rec real_token lexbuf =
+     match token lexbuf with
+     | COMMENT _ -> real_token lexbuf
+     | EOL -> real_token lexbuf
+     | DOCSTRING _ -> real_token lexbuf
+     | tok -> tok
+
   let init _ =
     is_in_string := false;
     comment_start_loc := [];
