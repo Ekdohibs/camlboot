@@ -16,8 +16,8 @@ value land_(value x, value y) { return Val_long(Long_val(x) & Long_val(y)); }
 value lor_(value x, value y) { return Val_long(Long_val(x) | Long_val(y)); }
 value lxor_(value x, value y) { return Val_long(Long_val(x) ^ Long_val(y)); }
 value lsl_(value x, value y) { return Val_long(Long_val(x) << Long_val(y)); }
-value asr_(value x, value y) { intnat u = x; int v = Long_val(y); return (u >> v); }
-value lsr_(value x, value y) { uintnat u = x; int v = Long_val(y); return (u >> v); }
+value asr_(value x, value y) { intnat u = x; int v = Long_val(y); return ((u >> v) | 1); }
+value lsr_(value x, value y) { uintnat u = x; int v = Long_val(y); return ((u >> v) | 1); }
 value caml_eq(value x, value y) { return Val_long(x == y); }
 value caml_noteq(value x, value y) { return Val_long(x != y); }
 

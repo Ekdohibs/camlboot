@@ -161,7 +161,7 @@ module Array = struct
     | hd :: tl -> unsafe_set a i hd; of_list_loop a (i + 1) tl
   let of_list l = match l with
     | [] -> empty_array
-    | hd :: tl -> let a = make (List.length l) in of_list_loop a 1 tl
+    | hd :: tl -> let a = make (List.length l) hd in of_list_loop a 1 tl
 end
 
 module Hashtbl = struct
@@ -216,3 +216,4 @@ module Sys = struct
   | Bytecode
   | Other of string
 end
+
