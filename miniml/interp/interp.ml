@@ -308,6 +308,11 @@ let env_extend exported env ev1 =
     env_fields = SMap.fold1 (fun exported key f fe -> SMap.add key (exported, f) fe) exported fe1 env.env_fields ;
   }
 
+let rec longident_flatten li = match li with
+  | Longident.Lident s -> s
+  | Longident.Ldot (li, s) -> longident_flatten li ^ "." ^ s
+  | _ -> assert false
+
 let make_module env =
   let ve = SMap.map snd (SMap.filter (fun _ bb -> fst bb) env.env_vars) in
   let me = SMap.map snd (SMap.filter (fun _ bb -> fst bb) env.env_modules) in
@@ -821,7 +826,7 @@ and eval_expr_for env flag v1 v2 p e =
   if flag = Upto then
     eval_expr_for_up env v1 v2 p e
   else
-    eval_expr_for_down env v1 v2 p e
+    eval_expr_for_down env v2 v1 p e
 
 and eval_expr env expr =
   match expr.pexp_desc with
@@ -862,7 +867,7 @@ and eval_expr env expr =
       let args = List.map1 (fun env le -> let (lab, e) = le in (lab, eval_expr env e)) env l in
       if trace then begin match f.pexp_desc with Pexp_ident lident ->
         (* Format.eprintf "apply %s@." (String.concat "." (Longident.flatten lident.txt)); *)
-        print_string (lident_name lident.txt);
+        print_string (longident_flatten lident.txt);
         incr tracecur
         (*if !tracecur > tracearg_from then Format.eprintf " %a" (Format.pp_print_list ~pp_sep:(fun ff () -> Format.fprintf ff " ") (fun ff (_, v) -> Format.fprintf ff "%a" pp_print_value v)) args; *)
         | _ -> ()
