@@ -277,7 +277,13 @@ let rec env_get_module ((_, module_env, _) as env) { txt = lident; loc } =
   | Longident.Lident str ->
     (try snd (SMap.find str module_env)
      with Not_found ->
-       if debug then Format.eprintf "Module not found in env: %s@." str;
+       if debug
+       then
+         Format.eprintf
+           "%a@.Module not found in env: %s@."
+           Location.print_loc
+           loc
+           str;
        raise Not_found)
   | Longident.Ldot (ld, str) ->
     let md = env_get_module env { txt = ld; loc } in
@@ -289,7 +295,9 @@ let rec env_get_module ((_, module_env, _) as env) { txt = lident; loc } =
          if debug
          then
            Format.eprintf
-             "Module not found in submodule: %s@."
+             "%a@.Module not found in submodule: %s@."
+             Location.print_loc
+             loc
              (String.concat "." (Longident.flatten lident));
          raise Not_found))
   | Longident.Lapply _ -> failwith "Lapply lookups not supported"
@@ -299,7 +307,13 @@ let env_get_value ((value_env, _, _) as env) { txt = lident; loc } =
   | Longident.Lident str ->
     (try snd (SMap.find str value_env)
      with Not_found ->
-       if debug then Format.eprintf "Variable not found in env: %s@." str;
+       if debug
+       then
+         Format.eprintf
+           "%a@.Variable not found in env: %s@."
+           Location.print_loc
+           loc
+           str;
        raise Not_found)
   | Longident.Ldot (ld, str) ->
     let md = env_get_module env { txt = ld; loc } in
@@ -311,7 +325,9 @@ let env_get_value ((value_env, _, _) as env) { txt = lident; loc } =
          if debug
          then
            Format.eprintf
-             "Value not found in submodule: %s@."
+             "%a@.Value not found in submodule: %s@."
+             Location.print_loc
+             loc
              (String.concat "." (Longident.flatten lident));
          raise Not_found))
   | Longident.Lapply _ -> failwith "Lapply lookups not supported"
@@ -321,7 +337,13 @@ let env_get_constr ((_, _, constr_env) as env) { txt = lident; loc } =
   | Longident.Lident str ->
     (try snd (SMap.find str constr_env)
      with Not_found ->
-       if debug then Format.eprintf "Constructor not found in env: %s@." str;
+       if debug
+       then
+         Format.eprintf
+           "%a@.Constructor not found in env: %s@."
+           Location.print_loc
+           loc
+           str;
        raise Not_found)
   | Longident.Ldot (ld, str) ->
     let md = env_get_module env { txt = ld; loc } in
@@ -333,7 +355,9 @@ let env_get_constr ((_, _, constr_env) as env) { txt = lident; loc } =
          if debug
          then
            Format.eprintf
-             "Constructor not found in submodule: %s@."
+             "%a@.Constructor not found in submodule: %s@."
+             Location.print_loc
+             loc
              (String.concat "." (Longident.flatten lident));
          raise Not_found))
   | Longident.Lapply _ -> failwith "Lapply lookups not supported"
@@ -1771,12 +1795,18 @@ and eval_structitem init_ignored env it =
       let nenv = List.fold_left (bind_value_rec er) env vals in
       er := nenv;
       nenv)
-  | Pstr_primitive { pval_name = { txt = name }; pval_prim = l } ->
+  | Pstr_primitive { pval_name = { txt = name; loc }; pval_prim = l } ->
     let prim_name = List.hd l in
     let prim =
       try SMap.find prim_name prims
       with Not_found ->
-        if debug then Format.eprintf "Unknown primitive: %s@." prim_name;
+        if debug
+        then
+          Format.eprintf
+            "%a@.Unknown primitive: %s@."
+            Location.print_loc
+            loc
+            prim_name;
         Prim (fun _ -> failwith ("Unimplemented: " ^ prim_name))
     in
     env_set_value name prim env
@@ -1903,6 +1933,7 @@ let () = apply_ref := apply
 let parse filename =
   let inc = open_in filename in
   let lexbuf = Lexing.from_channel inc in
+  Location.init lexbuf filename;
   let parsed = Parse.implementation lexbuf in
   close_in inc;
   parsed
