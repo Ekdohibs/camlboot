@@ -1332,6 +1332,12 @@ let prims =
       prim1 random_seed unwrap_unit (wrap_array wrap_int) );
     (* Gc *)
     ("caml_gc_quick_stat", prim1 Gc.quick_stat unwrap_unit wrap_gc_stat);
+    (* utils/profile.ml *)
+    ("caml_sys_time_include_children",
+     let module Prim = struct
+        external time_include_children: bool -> float = "caml_sys_time_include_children"
+      end in
+     prim1 Prim.time_include_children unwrap_bool wrap_float);
     (* Digest *)
     ( "caml_md5_string",
       prim3
