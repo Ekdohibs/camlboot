@@ -1839,14 +1839,9 @@ and eval_structitem init_ignored env it =
     let prim =
       try SMap.find prim_name prims
       with Not_found ->
-        if debug
-        then
-          Format.eprintf
-            "%a@.Unknown primitive: %s@."
-            Location.print_loc
-            loc
-            prim_name;
-        Prim (fun _ -> failwith ("Unimplemented: " ^ prim_name))
+        Prim (fun _ ->
+            if debug then Format.eprintf "%a@." Location.print_loc loc;
+            failwith ("Unimplemented primitive " ^ prim_name))
     in
     env_set_value name prim env
   | Pstr_type (_, tl) ->
