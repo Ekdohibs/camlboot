@@ -4,7 +4,17 @@ open Parsetree
 let trace = false
 let tracearg_from = 742740000
 let tracecur = ref 0
-let debug = false
+let debug =
+  match Sys.getenv_opt "OCAMLINTERP_DEBUG" with
+  | Some ("1" | "true" | "yes") -> true
+  | Some ("0" | "false" | "no") -> false
+  | Some other ->
+    Printf.kprintf failwith
+      "Error: unknown OCAMLINTERP_DEBUG value %S, use 'true' or 'false'"
+      other
+  | None ->
+    (* default *)
+    false
 
 module SMap = Map.Make(String)
 module SSet = Set.Make(String)
