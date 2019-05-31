@@ -1,8 +1,12 @@
-
 OBJS=interp.cmo
 FLAGS=-g -package compiler-libs.common -linkpkg
 OCAML=ocamlfind ocamlc
 OCAMLOPT=ocamlfind ocamlopt
+
+all: interp interpopt
+clean:
+	for f in $(wildcard *.cm*) $(wildcard *.o); do rm $$f; done
+
 
 .SUFFIXES: .mli .ml .cmi .cmo .cmx
 
