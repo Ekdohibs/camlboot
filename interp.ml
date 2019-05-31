@@ -617,19 +617,56 @@ let unwrap_position = function
       }
   | _ -> assert false
 
-let wrap_position pos =
-  Lexing.(
-    Record
-      (SMap.add
-         "pos_fname"
-         (ref (wrap_string pos.pos_fname))
-         (SMap.add
-            "pos_lnum"
-            (ref (wrap_int pos.pos_lnum))
-            (SMap.add
-               "pos_bol"
-               (ref (wrap_int pos.pos_bol))
-               (SMap.singleton "pos_cnum" (ref (wrap_int pos.pos_cnum)))))))
+let wrap_position Lexing.{ pos_fname; pos_lnum; pos_bol; pos_cnum } =
+  Record
+    (SMap.of_seq
+    @@ List.to_seq
+         [ ("pos_fname", ref (wrap_string pos_fname));
+           ("pos_lnum", ref (wrap_int pos_lnum));
+           ("pos_bol", ref (wrap_int pos_bol));
+           ("pos_cnum", ref (wrap_int pos_cnum))
+         ])
+
+let wrap_gc_stat
+    Gc.
+      { minor_words;
+        promoted_words;
+        major_words;
+        minor_collections;
+        major_collections;
+        heap_words;
+        heap_chunks;
+        live_words;
+        live_blocks;
+        free_words;
+        free_blocks;
+        largest_free;
+        fragments;
+        compactions;
+        top_heap_words;
+        stack_size
+      }
+  =
+  Record
+    (SMap.of_seq
+    @@ List.to_seq
+         [ ("minor_words", ref (wrap_float minor_words));
+           ("promoted_words", ref (wrap_float promoted_words));
+           ("major_words", ref (wrap_float major_words));
+           ("minor_collections", ref (wrap_int minor_collections));
+           ("major_collections", ref (wrap_int major_collections));
+           ("heap_words", ref (wrap_int heap_words));
+           ("heap_chunks", ref (wrap_int heap_chunks));
+           ("live_words", ref (wrap_int live_words));
+           ("live_blocks", ref (wrap_int live_blocks));
+           ("free_words", ref (wrap_int free_words));
+           ("free_blocks", ref (wrap_int free_blocks));
+           ("largest_free", ref (wrap_int largest_free));
+           ("fragments", ref (wrap_int fragments));
+           ("compactions", ref (wrap_int compactions));
+           ("top_heap_words", ref (wrap_int top_heap_words));
+           ("stack_size", ref (wrap_int stack_size))
+         ])
 
 type parser_env =
   { mutable s_stack : int array;
@@ -1293,6 +1330,8 @@ let prims =
     (* Random *)
     ( "caml_sys_random_seed",
       prim1 random_seed unwrap_unit (wrap_array wrap_int) );
+    (* Gc *)
+    ("caml_gc_quick_stat", prim1 Gc.quick_stat unwrap_unit wrap_gc_stat);
     (* Digest *)
     ( "caml_md5_string",
       prim3
@@ -1962,6 +2001,7 @@ let stdlib_modules =
     ("Printf", "printf.ml", z);
     ("Format", "format.ml", z);
     ("Obj", "obj.ml", z);
+    ("Gc", "gc.ml", z);
     ("CamlinternalLazy", "camlinternalLazy.ml", z);
     ("Lazy", "lazy.ml", z);
     ("Array", "array.ml", z);
