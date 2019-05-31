@@ -251,7 +251,7 @@ let rec eval_fun_or_function envref expr =
     eval_fun_or_function envref e
   | _ -> failwith "unsupported rhs of rec"
 
-let rec env_get_module ((_, module_env, _) as env) lident =
+let rec env_get_module ((_, module_env, _) as env) { txt = lident; loc } =
   match lident with
   | Longident.Lident str ->
     (try snd (SMap.find str module_env)
@@ -259,7 +259,7 @@ let rec env_get_module ((_, module_env, _) as env) lident =
        if debug then Format.eprintf "Module not found in env: %s@." str;
        raise Not_found)
   | Longident.Ldot (ld, str) ->
-    let md = env_get_module env ld in
+    let md = env_get_module env { txt = ld; loc } in
     (match md with
     | Functor _ -> failwith "Ldot tried to access functor"
     | Module (_, md, _) ->
@@ -273,7 +273,7 @@ let rec env_get_module ((_, module_env, _) as env) lident =
          raise Not_found))
   | Longident.Lapply _ -> failwith "Lapply lookups not supported"
 
-let env_get_value ((value_env, _, _) as env) lident =
+let env_get_value ((value_env, _, _) as env) { txt = lident; loc } =
   match lident with
   | Longident.Lident str ->
     (try snd (SMap.find str value_env)
@@ -281,7 +281,7 @@ let env_get_value ((value_env, _, _) as env) lident =
        if debug then Format.eprintf "Variable not found in env: %s@." str;
        raise Not_found)
   | Longident.Ldot (ld, str) ->
-    let md = env_get_module env ld in
+    let md = env_get_module env { txt = ld; loc } in
     (match md with
     | Functor _ -> failwith "Ldot tried to access functor"
     | Module (md, _, _) ->
@@ -295,7 +295,7 @@ let env_get_value ((value_env, _, _) as env) lident =
          raise Not_found))
   | Longident.Lapply _ -> failwith "Lapply lookups not supported"
 
-let env_get_constr ((_, _, constr_env) as env) lident =
+let env_get_constr ((_, _, constr_env) as env) { txt = lident; loc } =
   match lident with
   | Longident.Lident str ->
     (try snd (SMap.find str constr_env)
@@ -303,7 +303,7 @@ let env_get_constr ((_, _, constr_env) as env) lident =
        if debug then Format.eprintf "Constructor not found in env: %s@." str;
        raise Not_found)
   | Longident.Ldot (ld, str) ->
-    let md = env_get_module env ld in
+    let md = env_get_module env { txt = ld; loc; } in
     (match md with
     | Functor _ -> failwith "Ldot tried to access functor"
     | Module (_, _, md) ->
@@ -1322,7 +1322,7 @@ let rec apply vf args =
 
 and eval_expr env expr =
   match expr.pexp_desc with
-  | Pexp_ident { txt = lident } -> env_get_value env lident
+  | Pexp_ident id -> env_get_value env id
   | Pexp_constant c -> value_of_constant c
   | Pexp_let (f, vals, e) ->
     if f = Nonrecursive
@@ -1350,8 +1350,8 @@ and eval_expr env expr =
       if trace
       then (
         match f.pexp_desc with
-        | Pexp_ident { txt = lident } ->
-          Format.eprintf "apply %s" (String.concat "." (Longident.flatten lident));
+        | Pexp_ident lident ->
+          Format.eprintf "apply %s" (String.concat "." (Longident.flatten lident.txt));
           incr tracecur;
           if !tracecur > tracearg_from
           then
@@ -1364,7 +1364,7 @@ and eval_expr env expr =
           Format.eprintf "@."
         | _ -> ());
       (match f.pexp_desc with
-      | Pexp_ident { txt = lident } when lident_name lident = "yyparse" -> cur_env := env
+      | Pexp_ident lident when lident_name lident.txt = "yyparse" -> cur_env := env
       | _ -> ());
       (*Hack for parsing.c*)
       apply fc args)
@@ -1415,8 +1415,8 @@ and eval_expr env expr =
     (try eval_expr env e
      with InternalException v ->
        (try eval_match env cs (Ok v) with Match_fail -> raise (InternalException v)))
-  | Pexp_construct ({ txt = c }, e) ->
-    let cn = lident_name c in
+  | Pexp_construct (c, e) ->
+    let cn = lident_name c.txt in
     let d = env_get_constr env c in
     let ee =
       match e with
@@ -1463,19 +1463,19 @@ and eval_expr env expr =
   | Pexp_new _ -> assert false
   | Pexp_setinstvar _ -> assert false
   | Pexp_override _ -> assert false
-  | Pexp_letexception ({ pext_name = { txt = name }; pext_kind = k }, e) ->
+  | Pexp_letexception ({ pext_name = name; pext_kind = k }, e) ->
     let nenv =
       match k with
       | Pext_decl _ ->
         let d = !exn_id in
         incr exn_id;
-        env_set_constr name d env
-      | Pext_rebind { txt = path } -> env_set_constr name (env_get_constr env path) env
+        env_set_constr name.txt d env
+      | Pext_rebind path -> env_set_constr name.txt (env_get_constr env path) env
     in
     eval_expr nenv e
-  | Pexp_letmodule ({ txt = name }, me, e) ->
+  | Pexp_letmodule (name, me, e) ->
     let m = eval_module_expr env me in
-    eval_expr (env_set_module name m env) e
+    eval_expr (env_set_module name.txt m env) e
   | Pexp_assert e ->
     if is_true (eval_expr env e)
     then unit
@@ -1490,7 +1490,7 @@ and eval_expr env expr =
   | Pexp_lazy e -> Lz (ref (fun () -> eval_expr env e))
   | Pexp_poly _ -> assert false
   | Pexp_newtype (_, e) -> eval_expr env e
-  | Pexp_open (_, { txt = lident }, e) ->
+  | Pexp_open (_, lident, e) ->
     let nenv =
       match env_get_module env lident with
       | Module (venv, menv, cenv) -> env_extend false env (venv, menv, cenv)
@@ -1517,8 +1517,8 @@ and bind_value_rec evalenvref bindenv vb =
 and pattern_bind env pat v =
   match pat.ppat_desc with
   | Ppat_any -> env
-  | Ppat_var { txt = s } -> env_set_value s v env
-  | Ppat_alias (p, { txt = s }) -> env_set_value s v (pattern_bind env p v)
+  | Ppat_var s -> env_set_value s.txt v env
+  | Ppat_alias (p, s) -> env_set_value s.txt v (pattern_bind env p v)
   | Ppat_constant c ->
     if value_equal (value_of_constant c) v then env else raise Match_fail
   | Ppat_interval (c1, c2) ->
@@ -1531,8 +1531,8 @@ and pattern_bind env pat v =
       assert (List.length l = List.length vl);
       List.fold_left2 pattern_bind env l vl
     | _ -> assert false)
-  | Ppat_construct ({ txt = c }, p) ->
-    let cn = lident_name c in
+  | Ppat_construct (c, p) ->
+    let cn = lident_name c.txt in
     let dn = env_get_constr env c in
     (match v with
     | Constructor (ccn, ddn, e) ->
@@ -1543,7 +1543,7 @@ and pattern_bind env pat v =
       | Some p, Some e -> pattern_bind env p e
       | _ -> assert false)
     | String s ->
-      assert (lident_name c = "Format");
+      assert (lident_name c.txt = "Format");
       let p =
         match p with
         | None -> assert false
@@ -1572,8 +1572,8 @@ and pattern_bind env pat v =
     (match v with
     | Record r ->
       List.fold_left
-        (fun env ({ txt = lident }, p) ->
-          pattern_bind env p !(SMap.find (lident_name lident) r))
+        (fun env (lident, p) ->
+          pattern_bind env p !(SMap.find (lident_name lident.txt) r))
         env
         rp
     | _ -> assert false)
@@ -1583,9 +1583,9 @@ and pattern_bind env pat v =
   | Ppat_constraint (p, _) -> pattern_bind env p v
   | Ppat_type _ -> assert false
   | Ppat_lazy _ -> assert false
-  | Ppat_unpack { txt = name } ->
+  | Ppat_unpack name ->
     (match v with
-    | ModVal m -> env_set_module name m env
+    | ModVal m -> env_set_module name.txt m env
     | _ -> assert false)
   | Ppat_exception _ -> raise Match_fail
   | Ppat_extension _ -> assert false
@@ -1620,7 +1620,7 @@ and eval_match env cl arg =
 
 and eval_module_expr env me =
   match me.pmod_desc with
-  | Pmod_ident { txt = lident } -> env_get_module env lident
+  | Pmod_ident lident -> env_get_module env lident
   | Pmod_structure str -> make_module (eval_structure None env str)
   | Pmod_functor ({ txt = arg_name }, _, e) -> Functor (arg_name, e, env)
   | Pmod_constraint (me, _) -> eval_module_expr env me
@@ -1679,28 +1679,28 @@ and eval_structitem init_ignored env it =
       env
       tl
   | Pstr_typext _ -> env
-  | Pstr_exception { pext_name = { txt = name }; pext_kind = k } ->
+  | Pstr_exception { pext_name = name; pext_kind = k } ->
     (match k with
     | Pext_decl _ ->
       let d = !exn_id in
       incr exn_id;
-      env_set_constr name d env
-    | Pext_rebind { txt = path } -> env_set_constr name (env_get_constr env path) env)
-  | Pstr_module { pmb_name = { txt = name }; pmb_expr = me } ->
+      env_set_constr name.txt d env
+    | Pext_rebind path -> env_set_constr name.txt (env_get_constr env path) env)
+  | Pstr_module { pmb_name = name; pmb_expr = me } ->
     (match init_ignored with
-    | None -> env_set_module name (eval_module_expr env me) env
+    | None -> env_set_module name.txt (eval_module_expr env me) env
     | Some ign ->
-      (try env_set_module name (eval_module_expr env me) env
+      (try env_set_module name.txt (eval_module_expr env me) env
        with Not_found ->
          assert (
            match me.pmod_desc with
-           | Pmod_ident { txt = Longident.Lident s } -> s = name
+           | Pmod_ident { txt = Longident.Lident s } -> s = name.txt
            | _ -> false);
-         ign := SSet.add name !ign;
+         ign := SSet.add name.txt !ign;
          env))
   | Pstr_recmodule _ -> assert false
   | Pstr_modtype _ -> env
-  | Pstr_open { popen_lid = { txt = lident } } ->
+  | Pstr_open { popen_lid = lident } ->
     (match env_get_module env lident with
     | Module (venv, menv, cenv) -> env_extend false env (venv, menv, cenv)
     | Functor _ -> assert false)
@@ -1801,7 +1801,8 @@ let stdlib_modules =
     ( "CamlinternalFormat",
       "camlinternalFormat.ml",
       fun env ->
-        fmt_ebb_of_string_fct := env_get_value env (Longident.Lident "fmt_ebb_of_string");
+        fmt_ebb_of_string_fct :=
+          env_get_value env (Location.mknoloc (Longident.Lident "fmt_ebb_of_string"));
         env );
     ("Printf", "printf.ml", z);
     ("Format", "format.ml", z);
