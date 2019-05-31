@@ -1,4 +1,5 @@
 profile = janestreet
+margin = 80
 break-infix-before-func = false
 break-separators = after
 parens-tuple = always

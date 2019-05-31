@@ -54,7 +54,8 @@ exception InternalException of value
 let rec pp_print_value ff = function
   | Int n -> Format.fprintf ff "%d" n
   | Int64 n -> Format.fprintf ff "%Ld" n
-  | Fun _ | Function _ | Prim _ | SeqOr | SeqAnd | Lz _ | Fun_with_extra_args _ ->
+  | Fun _ | Function _ | Prim _ | SeqOr | SeqAnd | Lz _ | Fun_with_extra_args _
+    ->
     Format.fprintf ff "<function>"
   | String s -> Format.fprintf ff "%S" (Bytes.to_string s)
   | Float f -> Format.fprintf ff "%f" f
@@ -62,10 +63,13 @@ let rec pp_print_value ff = function
     Format.fprintf
       ff
       "(%a)"
-      (Format.pp_print_list ~pp_sep:(fun ff () -> Format.fprintf ff ", ") pp_print_value)
+      (Format.pp_print_list
+         ~pp_sep:(fun ff () -> Format.fprintf ff ", ")
+         pp_print_value)
       l
   | Constructor (c, d, None) -> Format.fprintf ff "%s#%d" c d
-  | Constructor (c, d, Some v) -> Format.fprintf ff "%s#%d %a" c d pp_print_value v
+  | Constructor (c, d, Some v) ->
+    Format.fprintf ff "%s#%d %a" c d pp_print_value v
   | ModVal _ -> Format.fprintf ff "<module>"
   | InChannel _ -> Format.fprintf ff "<in_channel>"
   | OutChannel _ -> Format.fprintf ff "<out_channel>"
@@ -77,12 +81,16 @@ let rec pp_print_value ff = function
     Format.fprintf
       ff
       "[|%a|]"
-      (Format.pp_print_list ~pp_sep:(fun ff () -> Format.fprintf ff "; ") pp_print_value)
+      (Format.pp_print_list
+         ~pp_sep:(fun ff () -> Format.fprintf ff "; ")
+         pp_print_value)
       (Array.to_list a)
 
 let read_caml_int s =
   let c = ref 0L in
-  let sign, init = if String.length s > 0 && s.[0] = '-' then (-1L, 1) else (1L, 0) in
+  let sign, init =
+    if String.length s > 0 && s.[0] = '-' then (-1L, 1) else (1L, 0)
+  in
   let base, init =
     if String.length s >= init + 2 && s.[init] = '0'
     then
@@ -99,9 +107,13 @@ let read_caml_int s =
     | '0' .. '9' as x ->
       c := Int64.(add (mul base !c) (of_int (int_of_char x - int_of_char '0')))
     | 'a' .. 'f' as x ->
-      c := Int64.(add (mul base !c) (of_int (int_of_char x - int_of_char 'a' + 10)))
+      c :=
+        Int64.(
+          add (mul base !c) (of_int (int_of_char x - int_of_char 'a' + 10)))
     | 'A' .. 'F' as x ->
-      c := Int64.(add (mul base !c) (of_int (int_of_char x - int_of_char 'A' + 10)))
+      c :=
+        Int64.(
+          add (mul base !c) (of_int (int_of_char x - int_of_char 'A' + 10)))
     | '_' -> ()
     | _ ->
       Format.eprintf "FIXME literal: %s@." s;
@@ -110,7 +122,8 @@ let read_caml_int s =
   Int64.mul sign !c
 
 let value_of_constant = function
-  | Pconst_integer (s, (None | Some 'l')) -> Int (Int64.to_int (read_caml_int s))
+  | Pconst_integer (s, (None | Some 'l')) ->
+    Int (Int64.to_int (read_caml_int s))
   | Pconst_integer (s, Some ('L' | 'n')) -> Int64 (read_caml_int s)
   | Pconst_integer (s, Some c) ->
     Format.eprintf "Unsupported suffix %c@." c;
@@ -141,7 +154,8 @@ let rec value_equal v1 v2 =
   | Int64 n1, Int64 n2 -> n1 = n2
   | Float f1, Float f2 -> f1 = f2
   | String s1, String s2 -> s1 = s2
-  | Constructor (c1, d1, None), Constructor (c2, d2, None) -> d1 = d2 && c1 = c2
+  | Constructor (c1, d1, None), Constructor (c2, d2, None) ->
+    d1 = d2 && c1 = c2
   | Constructor (c1, d1, Some v1), Constructor (c2, d2, Some v2) ->
     d1 = d2 && c1 = c2 && value_equal v1 v2
   | Constructor _, Constructor _ -> false
@@ -205,7 +219,11 @@ let rec value_compare v1 v2 =
       | _ -> assert false)
   | Tuple l1, Tuple l2 ->
     assert (List.length l1 = List.length l2);
-    List.fold_left2 (fun cur x y -> if cur = 0 then value_compare x y else cur) 0 l1 l2
+    List.fold_left2
+      (fun cur x y -> if cur = 0 then value_compare x y else cur)
+      0
+      l1
+      l2
   | Record r1, Record r2 ->
     let map1 =
       SMap.merge
@@ -217,7 +235,10 @@ let rec value_compare v1 v2 =
         r1
         r2
     in
-    SMap.fold (fun _ (u, v) cur -> if cur = 0 then value_compare u v else cur) map1 0
+    SMap.fold
+      (fun _ (u, v) cur -> if cur = 0 then value_compare u v else cur)
+      map1
+      0
   | _ -> assert false
 
 let value_lt v1 v2 = value_compare v1 v2 < 0
@@ -303,7 +324,7 @@ let env_get_constr ((_, _, constr_env) as env) { txt = lident; loc } =
        if debug then Format.eprintf "Constructor not found in env: %s@." str;
        raise Not_found)
   | Longident.Ldot (ld, str) ->
-    let md = env_get_module env { txt = ld; loc; } in
+    let md = env_get_module env { txt = ld; loc } in
     (match md with
     | Functor _ -> failwith "Ldot tried to access functor"
     | Module (_, _, md) ->
@@ -353,13 +374,14 @@ let rec seeded_hash_param meaningful total seed = function
   | Constructor (c, _, v) -> Hashtbl.seeded_hash seed c
   | Array a -> 0
   | Record r -> 0
-  | Fun _ | Function _ | SeqOr | SeqAnd | InChannel _ | OutChannel _ | Prim _ | Lz _
-  | ModVal _ | Fun_with_extra_args _ ->
+  | Fun _ | Function _ | SeqOr | SeqAnd | InChannel _ | OutChannel _ | Prim _
+  | Lz _ | ModVal _ | Fun_with_extra_args _ ->
     assert false
 
 let prim1 f unwrap1 wrap = Prim (fun x -> wrap (f (unwrap1 x)))
 
-let prim2 f unwrap1 unwrap2 wrap = Prim (fun x -> prim1 (f (unwrap1 x)) unwrap2 wrap)
+let prim2 f unwrap1 unwrap2 wrap =
+  Prim (fun x -> prim1 (f (unwrap1 x)) unwrap2 wrap)
 
 let prim3 f unwrap1 unwrap2 unwrap3 wrap =
   Prim (fun x -> prim2 (f (unwrap1 x)) unwrap2 unwrap3 wrap)
@@ -481,7 +503,8 @@ let rec wrap_list wrapf = function
 
 let rec unwrap_list unwrapf = function
   | Constructor ("[]", _, None) -> []
-  | Constructor ("::", _, Some (Tuple [ x; l ])) -> unwrapf x :: unwrap_list unwrapf l
+  | Constructor ("::", _, Some (Tuple [ x; l ])) ->
+    unwrapf x :: unwrap_list unwrapf l
   | _ -> assert false
 
 let unwrap_marshal_flag = function
@@ -490,7 +513,10 @@ let unwrap_marshal_flag = function
   | Constructor ("Compat_32", _, None) -> Marshal.Compat_32
   | _ -> assert false
 
-external open_descriptor_out : int -> out_channel = "caml_ml_open_descriptor_out"
+external open_descriptor_out
+  :  int ->
+  out_channel
+  = "caml_ml_open_descriptor_out"
 
 external open_descriptor_in : int -> in_channel = "caml_ml_open_descriptor_in"
 external open_desc : string -> open_flag list -> int -> int = "caml_sys_open"
@@ -501,7 +527,10 @@ external set_out_channel_name
   unit
   = "caml_ml_set_channel_name"
 
-external out_channels_list : unit -> out_channel list = "caml_ml_out_channels_list"
+external out_channels_list
+  :  unit ->
+  out_channel list
+  = "caml_ml_out_channels_list"
 
 external unsafe_output
   :  out_channel ->
@@ -519,15 +548,30 @@ external unsafe_output_string
   unit
   = "caml_ml_output"
 
-external set_in_channel_name : in_channel -> string -> unit = "caml_ml_set_channel_name"
+external set_in_channel_name
+  :  in_channel ->
+  string ->
+  unit
+  = "caml_ml_set_channel_name"
 
-external unsafe_input : in_channel -> bytes -> int -> int -> int = "caml_ml_input"
+external unsafe_input
+  :  in_channel ->
+  bytes ->
+  int ->
+  int ->
+  int
+  = "caml_ml_input"
 
 external format_int : string -> int -> string = "caml_format_int"
 external format_float : string -> float -> string = "caml_format_float"
 external random_seed : unit -> int array = "caml_sys_random_seed"
 
-external digest_unsafe_string : string -> int -> int -> string = "caml_md5_string"
+external digest_unsafe_string
+  :  string ->
+  int ->
+  int ->
+  string
+  = "caml_md5_string"
 
 external marshal_to_channel
   :  out_channel ->
@@ -631,7 +675,8 @@ let unwrap_parser_input = function
   | Constructor ("Token_read", _, None) -> Token_read
   | Constructor ("Stacks_grown_1", _, None) -> Stacks_grown_1
   | Constructor ("Stacks_grown_2", _, None) -> Stacks_grown_2
-  | Constructor ("Semantic_action_computed", _, None) -> Semantic_action_computed
+  | Constructor ("Semantic_action_computed", _, None) ->
+    Semantic_action_computed
   | Constructor ("Error_detected", _, None) -> Error_detected
   | _ -> assert false
 
@@ -657,8 +702,10 @@ let unwrap_parser_env = function
   | Record r ->
     { s_stack = unwrap_array unwrap_int !(SMap.find "s_stack" r);
       v_stack = Obj.magic (unwrap_array_id !(SMap.find "v_stack" r));
-      symb_start_stack = unwrap_array unwrap_position !(SMap.find "symb_start_stack" r);
-      symb_end_stack = unwrap_array unwrap_position !(SMap.find "symb_end_stack" r);
+      symb_start_stack =
+        unwrap_array unwrap_position !(SMap.find "symb_start_stack" r);
+      symb_end_stack =
+        unwrap_array unwrap_position !(SMap.find "symb_end_stack" r);
       stacksize = unwrap_int !(SMap.find "stacksize" r);
       stackbase = unwrap_int !(SMap.find "stackbase" r);
       curr_char = unwrap_int !(SMap.find "curr_char" r);
@@ -679,7 +726,8 @@ let sync_parser_env pe = function
     let open Parsing in
     SMap.find "s_stack" r := wrap_array wrap_int pe.s_stack;
     SMap.find "v_stack" r := wrap_array_id (Obj.magic pe.v_stack);
-    SMap.find "symb_start_stack" r := wrap_array wrap_position pe.symb_start_stack;
+    SMap.find "symb_start_stack" r
+    := wrap_array wrap_position pe.symb_start_stack;
     SMap.find "symb_end_stack" r := wrap_array wrap_position pe.symb_end_stack;
     SMap.find "stacksize" r := wrap_int pe.stacksize;
     SMap.find "stackbase" r := wrap_int pe.stackbase;
@@ -720,7 +768,9 @@ let unwrap_parse_tables syncenv = function
       error_function =
         (fun s ->
           unwrap_unit
-            (!apply_ref !(SMap.find "error_function" r) [ (Nolabel, wrap_string s) ]));
+            (!apply_ref
+               !(SMap.find "error_function" r)
+               [ (Nolabel, wrap_string s) ]));
       names_const = unwrap_string_unsafe !(SMap.find "names_const" r);
       names_block = unwrap_string_unsafe !(SMap.find "names_block" r)
     }
@@ -842,7 +892,8 @@ let parse_engine_prim =
 
 let lex_engine_prim = prim3 lex_engine_wrapper id unwrap_int id wrap_int
 
-let new_lex_engine_prim = prim3 new_lex_engine_wrapper id unwrap_int id wrap_int
+let new_lex_engine_prim =
+  prim3 new_lex_engine_wrapper id unwrap_int id wrap_int
 
 let initial_env = ref (empty_env : env)
 let exn_id = ref 0
@@ -878,7 +929,8 @@ let _ = declare_builtin_constructor "()" 0
 
 let prims =
   [ ("%apply", Prim (fun vf -> Prim (fun v -> !apply_ref vf [ (Nolabel, v) ])));
-    ("%revapply", Prim (fun v -> Prim (fun vf -> !apply_ref vf [ (Nolabel, v) ])));
+    ( "%revapply",
+      Prim (fun v -> Prim (fun vf -> !apply_ref vf [ (Nolabel, v) ])) );
     ("%raise", Prim (fun v -> raise (InternalException v)));
     ("%reraise", Prim (fun v -> raise (InternalException v)));
     ("%raise_notrace", Prim (fun v -> raise (InternalException v)));
@@ -916,11 +968,19 @@ let prims =
     ("%noteq", prim2 ( != ) id id wrap_bool);
     ("%identity", Prim (fun x -> x));
     ("caml_register_named_value", Prim (fun _ -> Prim (fun _ -> unit)));
-    ("caml_int64_float_of_bits", prim1 Int64.float_of_bits unwrap_int64 wrap_float);
-    ("caml_ml_open_descriptor_out", prim1 open_descriptor_out unwrap_int wrap_out_channel);
-    ("caml_ml_open_descriptor_in", prim1 open_descriptor_in unwrap_int wrap_in_channel);
+    ( "caml_int64_float_of_bits",
+      prim1 Int64.float_of_bits unwrap_int64 wrap_float );
+    ( "caml_ml_open_descriptor_out",
+      prim1 open_descriptor_out unwrap_int wrap_out_channel );
+    ( "caml_ml_open_descriptor_in",
+      prim1 open_descriptor_in unwrap_int wrap_in_channel );
     ( "caml_sys_open",
-      prim3 open_desc unwrap_string (unwrap_list unwrap_open_flag) unwrap_int wrap_int );
+      prim3
+        open_desc
+        unwrap_string
+        (unwrap_list unwrap_open_flag)
+        unwrap_int
+        wrap_int );
     ( "caml_ml_set_channel_name",
       prim2
         (fun v s ->
@@ -942,8 +1002,13 @@ let prims =
     ( "caml_ml_out_channels_list",
       prim1 out_channels_list unwrap_unit (wrap_list wrap_out_channel) );
     ( "caml_ml_output_bytes",
-      prim4 unsafe_output unwrap_out_channel unwrap_bytes unwrap_int unwrap_int wrap_unit
-    );
+      prim4
+        unsafe_output
+        unwrap_out_channel
+        unwrap_bytes
+        unwrap_int
+        unwrap_int
+        wrap_unit );
     ( "caml_ml_output",
       prim4
         unsafe_output_string
@@ -954,13 +1019,21 @@ let prims =
         wrap_unit );
     ( "caml_ml_output_int",
       prim2 output_binary_int unwrap_out_channel unwrap_int wrap_unit );
-    ("caml_ml_output_char", prim2 output_char unwrap_out_channel unwrap_char wrap_unit);
+    ( "caml_ml_output_char",
+      prim2 output_char unwrap_out_channel unwrap_char wrap_unit );
     ("caml_ml_flush", prim1 flush unwrap_out_channel wrap_unit);
     ("caml_ml_input_char", prim1 input_char unwrap_in_channel wrap_char);
     ("caml_ml_input_int", prim1 input_binary_int unwrap_in_channel wrap_int);
-    ("caml_ml_input_scan_line", prim1 input_scan_line unwrap_in_channel wrap_int);
+    ( "caml_ml_input_scan_line",
+      prim1 input_scan_line unwrap_in_channel wrap_int );
     ( "caml_ml_input",
-      prim4 unsafe_input unwrap_in_channel unwrap_bytes unwrap_int unwrap_int wrap_int );
+      prim4
+        unsafe_input
+        unwrap_in_channel
+        unwrap_bytes
+        unwrap_int
+        unwrap_int
+        wrap_int );
     ("caml_ml_seek_in", prim2 seek_in unwrap_in_channel unwrap_int wrap_unit);
     ("caml_ml_pos_out", prim1 pos_out unwrap_out_channel wrap_int);
     ("caml_ml_pos_in", prim1 pos_in unwrap_in_channel wrap_int);
@@ -1004,11 +1077,16 @@ let prims =
         | _ -> assert false) );
     ("%ignore", Prim (fun _ -> unit));
     ("caml_format_int", prim2 format_int unwrap_string unwrap_int wrap_string);
-    ("caml_format_float", prim2 format_float unwrap_string unwrap_float wrap_string);
+    ( "caml_format_float",
+      prim2 format_float unwrap_string unwrap_float wrap_string );
     ("caml_int_of_string", prim1 int_of_string unwrap_string wrap_int);
     ( "caml_output_value",
-      prim3 marshal_to_channel unwrap_out_channel id (unwrap_list unwrap_unit) wrap_unit
-    );
+      prim3
+        marshal_to_channel
+        unwrap_out_channel
+        id
+        (unwrap_list unwrap_unit)
+        wrap_unit );
     ( "caml_output_value_to_buffer",
       prim5
         Marshal.to_buffer
@@ -1025,7 +1103,9 @@ let prims =
     ("caml_new_lex_engine", new_lex_engine_prim);
     (* Sys *)
     ( "caml_sys_get_argv",
-      Prim (fun _ -> Tuple [ wrap_string ""; Array (Array.map wrap_string Sys.argv) ]) );
+      Prim
+        (fun _ ->
+          Tuple [ wrap_string ""; Array (Array.map wrap_string Sys.argv) ]) );
     ( "caml_sys_get_config",
       Prim (fun _ -> Tuple [ wrap_string "Unix"; Int 0; wrap_bool true ]) );
     ("%big_endian", Prim (fun _ -> wrap_bool Sys.big_endian));
@@ -1036,7 +1116,8 @@ let prims =
     ("%ostype_win32", Prim (fun _ -> wrap_bool false));
     ("%ostype_cygwin", Prim (fun _ -> wrap_bool false));
     ( "%backend_type",
-      Prim (fun _ -> Constructor ("Other", 0, Some (wrap_string "Interpreter"))) );
+      Prim (fun _ -> Constructor ("Other", 0, Some (wrap_string "Interpreter")))
+    );
     ("caml_sys_getenv", Prim (fun _ -> raise (InternalException not_found_exn)));
     ("caml_sys_file_exists", prim1 Sys.file_exists unwrap_string wrap_bool);
     ("caml_sys_getcwd", prim1 Sys.getcwd unwrap_unit wrap_string);
@@ -1045,16 +1126,25 @@ let prims =
     (* Bytes *)
     ("caml_create_bytes", prim1 Bytes.create unwrap_int wrap_bytes);
     ( "caml_fill_bytes",
-      prim4 Bytes.unsafe_fill unwrap_bytes unwrap_int unwrap_int unwrap_char wrap_unit );
+      prim4
+        Bytes.unsafe_fill
+        unwrap_bytes
+        unwrap_int
+        unwrap_int
+        unwrap_char
+        wrap_unit );
     ("%bytes_to_string", Prim (fun v -> v));
     ("%bytes_of_string", Prim (fun v -> v));
     ("%string_length", prim1 Bytes.length unwrap_bytes wrap_int);
     ("%bytes_length", prim1 Bytes.length unwrap_bytes wrap_int);
     ("%string_safe_get", prim2 Bytes.get unwrap_bytes unwrap_int wrap_char);
-    ("%string_unsafe_get", prim2 Bytes.unsafe_get unwrap_bytes unwrap_int wrap_char);
+    ( "%string_unsafe_get",
+      prim2 Bytes.unsafe_get unwrap_bytes unwrap_int wrap_char );
     ("%bytes_safe_get", prim2 Bytes.get unwrap_bytes unwrap_int wrap_char);
-    ("%bytes_unsafe_get", prim2 Bytes.unsafe_get unwrap_bytes unwrap_int wrap_char);
-    ("%bytes_safe_set", prim3 Bytes.set unwrap_bytes unwrap_int unwrap_char wrap_unit);
+    ( "%bytes_unsafe_get",
+      prim2 Bytes.unsafe_get unwrap_bytes unwrap_int wrap_char );
+    ( "%bytes_safe_set",
+      prim3 Bytes.set unwrap_bytes unwrap_int unwrap_char wrap_unit );
     ( "%bytes_unsafe_set",
       prim3 Bytes.unsafe_set unwrap_bytes unwrap_int unwrap_char wrap_unit );
     ( "caml_blit_string",
@@ -1095,7 +1185,8 @@ let prims =
     ("%int64_or", prim2 Int64.logor unwrap_int64 unwrap_int64 wrap_int64);
     ("%int64_xor", prim2 Int64.logxor unwrap_int64 unwrap_int64 wrap_int64);
     ("%int64_lsl", prim2 Int64.shift_left unwrap_int64 unwrap_int wrap_int64);
-    ("%int64_lsr", prim2 Int64.shift_right_logical unwrap_int64 unwrap_int wrap_int64);
+    ( "%int64_lsr",
+      prim2 Int64.shift_right_logical unwrap_int64 unwrap_int wrap_int64 );
     ("%int64_asr", prim2 Int64.shift_right unwrap_int64 unwrap_int wrap_int64);
     ("%int64_of_int", prim1 Int64.of_int unwrap_int wrap_int64);
     ("%int64_to_int", prim1 Int64.to_int unwrap_int64 wrap_int);
@@ -1113,9 +1204,12 @@ let prims =
     ("%nativeint_and", prim2 Int64.logand unwrap_int64 unwrap_int64 wrap_int64);
     ("%nativeint_or", prim2 Int64.logor unwrap_int64 unwrap_int64 wrap_int64);
     ("%nativeint_xor", prim2 Int64.logxor unwrap_int64 unwrap_int64 wrap_int64);
-    ("%nativeint_lsl", prim2 Int64.shift_left unwrap_int64 unwrap_int wrap_int64);
-    ("%nativeint_lsr", prim2 Int64.shift_right_logical unwrap_int64 unwrap_int wrap_int64);
-    ("%nativeint_asr", prim2 Int64.shift_right unwrap_int64 unwrap_int wrap_int64);
+    ( "%nativeint_lsl",
+      prim2 Int64.shift_left unwrap_int64 unwrap_int wrap_int64 );
+    ( "%nativeint_lsr",
+      prim2 Int64.shift_right_logical unwrap_int64 unwrap_int wrap_int64 );
+    ( "%nativeint_asr",
+      prim2 Int64.shift_right unwrap_int64 unwrap_int wrap_int64 );
     ("%nativeint_of_int", prim1 Int64.of_int unwrap_int wrap_int64);
     ("%nativeint_to_int", prim1 Int64.to_int unwrap_int64 wrap_int);
     ("caml_nativeint_of_string", prim1 Int64.of_string unwrap_string wrap_int64);
@@ -1127,7 +1221,8 @@ let prims =
     ("%array_safe_get", prim2 Array.get unwrap_array_id unwrap_int id);
     ("%array_unsafe_get", prim2 Array.unsafe_get unwrap_array_id unwrap_int id);
     ("%array_safe_set", prim3 Array.set unwrap_array_id unwrap_int id wrap_unit);
-    ("%array_unsafe_set", prim3 Array.unsafe_set unwrap_array_id unwrap_int id wrap_unit);
+    ( "%array_unsafe_set",
+      prim3 Array.unsafe_set unwrap_array_id unwrap_int id wrap_unit );
     ( "caml_array_blit",
       prim5
         Array.blit
@@ -1137,9 +1232,11 @@ let prims =
         unwrap_int
         unwrap_int
         wrap_unit );
-    ("caml_array_append", prim2 append_prim unwrap_array_id unwrap_array_id wrap_array_id);
+    ( "caml_array_append",
+      prim2 append_prim unwrap_array_id unwrap_array_id wrap_array_id );
     (* Hashtbl *)
-    ("caml_hash", prim4 seeded_hash_param unwrap_int unwrap_int unwrap_int id wrap_int);
+    ( "caml_hash",
+      prim4 seeded_hash_param unwrap_int unwrap_int unwrap_int id wrap_int );
     (* TODO: records defined in different order... *)
 
     (* Weak *)
@@ -1149,9 +1246,11 @@ let prims =
         unwrap_int
         wrap_array_id );
     ("caml_weak_get", prim2 (fun a n -> a.(n)) unwrap_array_id unwrap_int id);
-    ("caml_weak_get_copy", prim2 (fun a n -> a.(n)) unwrap_array_id unwrap_int id);
+    ( "caml_weak_get_copy",
+      prim2 (fun a n -> a.(n)) unwrap_array_id unwrap_int id );
     ( "caml_weak_set",
-      prim3 (fun a n v -> a.(n) <- v) unwrap_array_id unwrap_int id wrap_unit );
+      prim3 (fun a n v -> a.(n) <- v) unwrap_array_id unwrap_int id wrap_unit
+    );
     ( "caml_weak_check",
       prim2
         (fun a n -> a.(n) <> Constructor ("None", 0, None))
@@ -1168,11 +1267,18 @@ let prims =
         unwrap_int
         wrap_unit );
     (* Random *)
-    ("caml_sys_random_seed", prim1 random_seed unwrap_unit (wrap_array wrap_int));
+    ( "caml_sys_random_seed",
+      prim1 random_seed unwrap_unit (wrap_array wrap_int) );
     (* Digest *)
     ( "caml_md5_string",
-      prim3 digest_unsafe_string unwrap_string unwrap_int unwrap_int wrap_string );
-    ("caml_md5_chan", prim2 Digest.channel unwrap_in_channel unwrap_int wrap_string);
+      prim3
+        digest_unsafe_string
+        unwrap_string
+        unwrap_int
+        unwrap_int
+        wrap_string );
+    ( "caml_md5_chan",
+      prim2 Digest.channel unwrap_in_channel unwrap_int wrap_string );
     (* Ugly *)
     ( "%obj_size",
       prim1
@@ -1189,15 +1295,18 @@ let prims =
         id )
   ]
 
-let prims = List.fold_left (fun env (name, v) -> SMap.add name v env) SMap.empty prims
+let prims =
+  List.fold_left (fun env (name, v) -> SMap.add name v env) SMap.empty prims
 
 let rec expr_label_shape = function
-  | Pexp_fun (label, default, _, e) -> (label, default) :: expr_label_shape e.pexp_desc
+  | Pexp_fun (label, default, _, e) ->
+    (label, default) :: expr_label_shape e.pexp_desc
   | Pexp_function _ -> [ (Nolabel, None) ]
   | _ -> []
 
 let fun_label_shape = function
-  | Fun (lab, default, _, e, _) -> (lab, default) :: expr_label_shape e.pexp_desc
+  | Fun (lab, default, _, e, _) ->
+    (lab, default) :: expr_label_shape e.pexp_desc
   | Function _ -> [ (Nolabel, None) ]
   | Prim _ -> [ (Nolabel, None) ]
   | SeqOr | SeqAnd -> [ (Nolabel, None); (Nolabel, None) ]
@@ -1260,7 +1369,9 @@ let rec apply vf args =
       eval_expr (pattern_bind !fenv p (eval_expr !fenv def)) e
     | _ -> assert false
   in
-  let unlabelled = List.map snd (List.filter (fun (lab, _) -> lab = Nolabel) args) in
+  let unlabelled =
+    List.map snd (List.filter (fun (lab, _) -> lab = Nolabel) args)
+  in
   let with_label =
     ref
       (List.fold_left
@@ -1274,7 +1385,8 @@ let rec apply vf args =
   let has_labelled = not (SMap.is_empty !with_label) in
   let rec apply_one vf arg =
     match vf with
-    | Fun (Nolabel, default, p, e, fenv) -> eval_expr (pattern_bind !fenv p arg) e
+    | Fun (Nolabel, default, p, e, fenv) ->
+      eval_expr (pattern_bind !fenv p arg) e
     | Fun (((Labelled s | Optional s) as lab), default, p, e, fenv) ->
       if has_labelled
       then
@@ -1291,14 +1403,17 @@ let rec apply vf args =
       else eval_expr (pattern_bind !fenv p arg) e
     | Function (cl, fenv) -> eval_match !fenv cl (Ok arg)
     | Prim prim -> prim arg
-    | SeqOr -> if is_true arg then Prim (fun _ -> wrap_bool true) else Prim (fun x -> x)
-    | SeqAnd -> if is_true arg then Prim (fun x -> x) else Prim (fun _ -> wrap_bool false)
+    | SeqOr ->
+      if is_true arg then Prim (fun _ -> wrap_bool true) else Prim (fun x -> x)
+    | SeqAnd ->
+      if is_true arg then Prim (fun x -> x) else Prim (fun _ -> wrap_bool false)
     | v ->
       Format.eprintf "%a@." pp_print_value v;
       assert false
   in
   if SMap.is_empty !with_label
-  then (* Special case to get tail recursion *)
+  then
+    (* Special case to get tail recursion *)
     List.fold_left apply_one vf unlabelled
   else (
     let vf = List.fold_left apply_one vf unlabelled in
@@ -1351,7 +1466,9 @@ and eval_expr env expr =
       then (
         match f.pexp_desc with
         | Pexp_ident lident ->
-          Format.eprintf "apply %s" (String.concat "." (Longident.flatten lident.txt));
+          Format.eprintf
+            "apply %s"
+            (String.concat "." (Longident.flatten lident.txt));
           incr tracecur;
           if !tracecur > tracearg_from
           then
@@ -1364,7 +1481,8 @@ and eval_expr env expr =
           Format.eprintf "@."
         | _ -> ());
       (match f.pexp_desc with
-      | Pexp_ident lident when lident_name lident.txt = "yyparse" -> cur_env := env
+      | Pexp_ident lident when lident_name lident.txt = "yyparse" ->
+        cur_env := env
       | _ -> ());
       (*Hack for parsing.c*)
       apply fc args)
@@ -1414,7 +1532,8 @@ and eval_expr env expr =
   | Pexp_try (e, cs) ->
     (try eval_expr env e
      with InternalException v ->
-       (try eval_match env cs (Ok v) with Match_fail -> raise (InternalException v)))
+       (try eval_match env cs (Ok v)
+        with Match_fail -> raise (InternalException v)))
   | Pexp_construct (c, e) ->
     let cn = lident_name c.txt in
     let d = env_get_constr env c in
@@ -1470,7 +1589,8 @@ and eval_expr env expr =
         let d = !exn_id in
         incr exn_id;
         env_set_constr name.txt d env
-      | Pext_rebind path -> env_set_constr name.txt (env_get_constr env path) env
+      | Pext_rebind path ->
+        env_set_constr name.txt (env_get_constr env path) env
     in
     eval_expr nenv e
   | Pexp_letmodule (name, me, e) ->
@@ -1669,7 +1789,8 @@ and eval_structitem init_ignored env it =
             List.fold_left
               (fun (u, v, env) cd ->
                 match cd.pcd_args with
-                | Pcstr_tuple [] -> (u + 1, v, env_set_constr cd.pcd_name.txt u env)
+                | Pcstr_tuple [] ->
+                  (u + 1, v, env_set_constr cd.pcd_name.txt u env)
                 | _ -> (u, v + 1, env_set_constr cd.pcd_name.txt v env))
               (0, 0, env)
               l
@@ -1717,7 +1838,8 @@ and eval_structitem init_ignored env it =
 and eval_structure_ init_ignored env str =
   match str with
   | [] -> env
-  | it :: str -> eval_structure_ init_ignored (eval_structitem init_ignored env it) str
+  | it :: str ->
+    eval_structure_ init_ignored (eval_structitem init_ignored env it) str
 
 and eval_structure init_ignored env str =
   eval_structure_ init_ignored (prevent_export env) str
@@ -1802,7 +1924,9 @@ let stdlib_modules =
       "camlinternalFormat.ml",
       fun env ->
         fmt_ebb_of_string_fct :=
-          env_get_value env (Location.mknoloc (Longident.Lident "fmt_ebb_of_string"));
+          env_get_value
+            env
+            (Location.mknoloc (Longident.Lident "fmt_ebb_of_string"));
         env );
     ("Printf", "printf.ml", z);
     ("Format", "format.ml", z);
@@ -1840,13 +1964,17 @@ let stdlib_path =
       path)
 
 let stdlib_modules =
-  List.map (fun (n, p, modifier) -> (n, stdlib_path ^ "/" ^ p, modifier)) stdlib_modules
+  List.map
+    (fun (n, p, modifier) -> (n, stdlib_path ^ "/" ^ p, modifier))
+    stdlib_modules
 
 let load_modules env modules =
   List.fold_left
     (fun env (modname, modpath, modifier) ->
       if debug then Format.eprintf "Loading %s from %s@." modname modpath;
-      let module_contents = modifier (eval_structure None env (parse modpath)) in
+      let module_contents =
+        modifier (eval_structure None env (parse modpath))
+      in
       env_set_module modname (make_module module_contents) env)
     env
     modules
@@ -1872,7 +2000,9 @@ let compiler_modules =
     ("Ccomp", "utils/ccomp.ml", z);
     ("Warnings", "utils/warnings.ml", z);
     ("Consistbl", "utils/consistbl.ml", z);
-    ("Strongly_connected_components", "utils/strongly_connected_components.ml", z);
+    ( "Strongly_connected_components",
+      "utils/strongly_connected_components.ml",
+      z );
     ("Build_path_prefix_map", "utils/build_path_prefix_map.ml", z);
     ("Targetint", "utils/targetint.ml", z);
     (* Parsing *)
@@ -1979,8 +2109,8 @@ let compiler_source_path =
   | Some path -> path
   | None ->
     failwith
-      "Error: please set an OCAMLINTERP_SRC_PATH variable pointing to a checkout of the \
-       OCaml compiler distribution sources"
+      "Error: please set an OCAMLINTERP_SRC_PATH variable pointing to a \
+       checkout of the OCaml compiler distribution sources"
 
 let compiler_modules =
   List.map
