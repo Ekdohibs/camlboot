@@ -1350,7 +1350,7 @@ let stdlib_modules = [
 ]
 
 let stdlib_path =
-  match Sys.getenv_opt "OCAML_STDLIB_PATH" with
+  match Sys.getenv_opt "OCAMLINTERP_STDLIB_PATH" with
   | Some path -> path
   | None ->
     let input = Unix.open_process_in "ocamlc -where" in
@@ -1502,10 +1502,10 @@ let compiler_modules = [
 ]
 
 let compiler_source_path =
-  match Sys.getenv_opt "OCAML_SRC_PATH" with
+  match Sys.getenv_opt "OCAMLINTERP_SRC_PATH" with
   | Some path -> path
   | None ->
-    failwith "Error: please set an OCAML_SRC_PATH variable pointing to \
+    failwith "Error: please set an OCAMLINTERP_SRC_PATH variable pointing to \
               a checkout of the OCaml compiler distribution sources"
 let compiler_modules = List.map (fun (n, p, modifier) -> (n, compiler_source_path ^ "/" ^ p, modifier)) compiler_modules
 
