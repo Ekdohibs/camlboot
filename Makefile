@@ -1,5 +1,5 @@
 OBJS=interp.cmo
-FLAGS=-g -package compiler-libs.common -linkpkg
+FLAGS=-g -package unix -package compiler-libs.common -linkpkg
 OCAML=ocamlfind ocamlc
 OCAMLOPT=ocamlfind ocamlopt
 

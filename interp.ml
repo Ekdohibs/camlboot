@@ -1349,7 +1349,19 @@ let stdlib_modules = [
   ("Marshal", "marshal.ml", z);
 ]
 
-let stdlib_path = "/home/nathanael/.opam/4.07.0/lib/ocaml"
+let stdlib_path =
+  match Sys.getenv_opt "OCAML_STDLIB_PATH" with
+  | Some path -> path
+  | None ->
+    let input = Unix.open_process_in "ocamlc -where" in
+    match input_line input with
+    | exception _ ->
+      close_in input;
+      failwith "Error: unable to determine the standard library location"
+    | path ->
+      close_in input;
+      path
+
 let stdlib_modules = List.map (fun (n, p, modifier) -> (n, stdlib_path ^ "/" ^ p, modifier)) stdlib_modules
 
 let load_modules env modules =
@@ -1489,8 +1501,13 @@ let compiler_modules = [
   ("Main", "driver/main.ml", z);
 ]
 
-let compiler_path = (*"/home/nathanael/.opam/4.07.0/lib/ocaml/compiler-libs"*) "/home/nathanael/Projects/ocaml"
-let compiler_modules = List.map (fun (n, p, modifier) -> (n, compiler_path ^ "/" ^ p, modifier)) compiler_modules
+let compiler_source_path =
+  match Sys.getenv_opt "OCAML_SRC_PATH" with
+  | Some path -> path
+  | None ->
+    failwith "Error: please set an OCAML_SRC_PATH variable pointing to \
+              a checkout of the OCaml compiler distribution sources"
+let compiler_modules = List.map (fun (n, p, modifier) -> (n, compiler_source_path ^ "/" ^ p, modifier)) compiler_modules
 
 (* let _ = eval_structure None init_env parsed *)
 let () =
