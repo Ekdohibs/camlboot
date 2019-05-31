@@ -1,0 +1,8 @@
+profile = janestreet
+break-infix-before-func = false
+break-separators = after
+parens-tuple = always
+single-case = compact
+module-item-spacing = preserve
+let-binding-spacing = compact
+field-space = loose
