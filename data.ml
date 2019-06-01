@@ -24,7 +24,15 @@ type value =
   | Array of value array
   | Fun_with_extra_args of value * value list * (arg_label * value) SMap.t
 
-and env = (bool * value) SMap.t * (bool * mdl) SMap.t * (bool * int) SMap.t
+and 'a env_map = (bool * 'a) SMap.t
+(* the boolean tracks whether the value should be exported in the
+   output environment *)
+
+and env = {
+  values : value env_map;
+  modules : mdl env_map;
+  constructors : int env_map;
+}
 
 and mdl =
   | Module of value SMap.t * mdl SMap.t * int SMap.t
