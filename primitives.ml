@@ -4,15 +4,19 @@ open Runtime_lib
 open Runtime_stdlib
 open Runtime_compiler
 
+let next_exn_id =
+  let last_exn_id = ref (-1) in
+  fun () ->
+    incr last_exn_id;
+    !last_exn_id
+
 let initial_env = ref (empty_env : env)
-let exn_id = ref 0
 
 let declare_builtin_constructor name d =
   initial_env := env_set_constr name d !initial_env
 
 let declare_exn name =
-  let d = !exn_id in
-  incr exn_id;
+  let d = next_exn_id () in
   declare_builtin_constructor name d;
   d
 

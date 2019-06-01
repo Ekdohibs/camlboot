@@ -307,8 +307,7 @@ and eval_expr env expr =
     let nenv =
       match k with
       | Pext_decl _ ->
-        let d = !Primitives.exn_id in
-        incr Primitives.exn_id;
+        let d = Primitives.next_exn_id () in
         env_set_constr name.txt d env
       | Pext_rebind path ->
         env_set_constr name.txt (env_get_constr env path) env
@@ -530,8 +529,7 @@ and eval_structitem init_ignored env it =
   | Pstr_exception { pext_name = name; pext_kind = k; _ } ->
     (match k with
     | Pext_decl _ ->
-      let d = !Primitives.exn_id in
-      incr Primitives.exn_id;
+      let d = Primitives.next_exn_id () in
       env_set_constr name.txt d env
     | Pext_rebind path -> env_set_constr name.txt (env_get_constr env path) env)
   | Pstr_module { pmb_name = name; pmb_expr = me; _ } ->
