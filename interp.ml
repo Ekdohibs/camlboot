@@ -49,8 +49,6 @@ let rec fun_num_args = function
   | _ -> 0
 *)
 
-let fmt_ebb_of_string_fct = ref (Int 0)
-
 module R = Runtime_stdlib
 
 let rec apply vf args =
@@ -392,7 +390,11 @@ and pattern_bind env pat v =
         | None -> assert false
         | Some p -> p
       in
-      let fmt = apply !fmt_ebb_of_string_fct [ (Nolabel, String s) ] in
+      let fmt_ebb_of_string =
+        let lid =
+          Longident.(Ldot (Lident "CamlinternalFormat", "fmt_ebb_of_string")) in
+        env_get_value env { loc = c.loc; txt = lid } in
+      let fmt = apply fmt_ebb_of_string [ (Nolabel, String s) ] in
       let fmt =
         match fmt with
         | Constructor ("Fmt_EBB", _, Some fmt) -> fmt
@@ -647,13 +649,7 @@ let stdlib_modules =
     ("Buffer", "buffer.ml", z);
     ("CamlinternalFormatBasics", "camlinternalFormatBasics.ml", z);
     ( "CamlinternalFormat",
-      "camlinternalFormat.ml",
-      fun env ->
-        fmt_ebb_of_string_fct :=
-          env_get_value
-            env
-            (Location.mknoloc (Longident.Lident "fmt_ebb_of_string"));
-        env );
+      "camlinternalFormat.ml", z);
     ("Printf", "printf.ml", z);
     ("Format", "format.ml", z);
     ("Obj", "obj.ml", z);
