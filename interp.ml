@@ -322,11 +322,7 @@ and eval_expr env expr =
     else
       (*failwith "assert failure"*)
       raise
-        (InternalException
-           (Constructor
-              ( "Assert_failure",
-                Primitives.assert_failure_id,
-                Some (Tuple [ R.wrap_string ""; Int 0; Int 0 ]) )))
+        (InternalException (Primitives.assert_failure_exn "" 0 0))
   | Pexp_lazy e -> Lz (ref (fun () -> eval_expr env e))
   | Pexp_poly _ -> assert false
   | Pexp_newtype (_, e) -> eval_expr env e
@@ -638,7 +634,7 @@ let init_env =
   let stdlib_path = stdlib_path () in
   let stdlib_main = parse (stdlib_path ^ "/stdlib.ml") in
   let ign = ref SSet.empty in
-  let env = eval_structure (Some ign) !Primitives.initial_env stdlib_main in
+  let env = eval_structure (Some ign) Primitives.initial_env stdlib_main in
   let env = load_modules env stdlib_modules in
   env_set_module "Stdlib" (make_module env) env
 

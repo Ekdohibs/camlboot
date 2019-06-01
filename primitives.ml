@@ -10,35 +10,48 @@ let next_exn_id =
     incr last_exn_id;
     !last_exn_id
 
-let initial_env = ref (empty_env : env)
+let declare_builtin_constructor name d env =
+  env_set_constr name d env
 
-let declare_builtin_constructor name d =
-  initial_env := env_set_constr name d !initial_env
-
-let declare_exn name =
+let declare_exn name env =
   let d = next_exn_id () in
-  declare_builtin_constructor name d;
-  d
+  declare_builtin_constructor name d env
 
-let not_found_exn_id = declare_exn "Not_found"
-let not_found_exn = Constructor ("Not_found", not_found_exn_id, None)
-let _ = declare_exn "Exit"
-let _ = declare_exn "Invalid_argument"
-let _ = declare_exn "Failure"
-let _ = declare_exn "Match_failure"
-let assert_failure_id = declare_exn "Assert_failure"
-let _ = declare_exn "Sys_blocked_io"
-let _ = declare_exn "Sys_error"
-let _ = declare_exn "End_of_file"
-let _ = declare_exn "Division_by_zero"
-let _ = declare_exn "Undefined_recursive_module"
-let _ = declare_builtin_constructor "false" 0
-let _ = declare_builtin_constructor "true" 1
-let _ = declare_builtin_constructor "None" 0
-let _ = declare_builtin_constructor "Some" 0
-let _ = declare_builtin_constructor "[]" 0
-let _ = declare_builtin_constructor "::" 0
-let _ = declare_builtin_constructor "()" 0
+let initial_env =
+  empty_env
+  |> declare_exn "Not_found"
+  |> declare_exn "Exit"
+  |> declare_exn "Invalid_argument"
+  |> declare_exn "Failure"
+  |> declare_exn "Match_failure"
+  |> declare_exn "Assert_failure"
+  |> declare_exn "Sys_blocked_io"
+  |> declare_exn "Sys_error"
+  |> declare_exn "End_of_file"
+  |> declare_exn "Division_by_zero"
+  |> declare_exn "Undefined_recursive_module"
+  |> declare_builtin_constructor "false" 0
+  |> declare_builtin_constructor "true" 1
+  |> declare_builtin_constructor "None" 0
+  |> declare_builtin_constructor "Some" 0
+  |> declare_builtin_constructor "[]" 0
+  |> declare_builtin_constructor "::" 0
+  |> declare_builtin_constructor "()" 0
+
+let builtin_exn_id id =
+  env_get_constr initial_env (Location.mknoloc (Longident.Lident id))
+
+let not_found_exn =
+  let not_found = "Not_found" in
+  Constructor (not_found, builtin_exn_id not_found, None)
+
+let assert_failure_exn =
+  let assert_failure_id = builtin_exn_id "Assert_failure" in
+  fun file line char ->
+    Constructor
+      ( "Assert_failure",
+        assert_failure_id,
+        Some (Tuple [ String (Bytes.of_string file); Int line; Int char ]))
 
 let prims =
   [ ("%apply", Prim (fun vf -> Prim (fun v -> !apply_ref vf [ (Nolabel, v) ])));
