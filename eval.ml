@@ -34,21 +34,6 @@ let fun_label_shape = function
   | SeqOr | SeqAnd -> [ (Nolabel, None); (Nolabel, None) ]
   | _ -> []
 
-(*
-let rec expr_num_args = function
-  | Pexp_fun (_, _, _, e) -> 1 + expr_num_args e.pexp_desc
-  | Pexp_function _ -> 1
-  | _ -> 0
-
-let rec fun_num_args = function
-  | Fun (_, _, _, e, _) -> 1 + expr_num_args e.pexp_desc
-  | Function _ -> 1
-  | Prim _ -> 1
-  | SeqOr | SeqAnd -> 2
-  | Fun_with_extra_args (f, l, m) -> fun_num_args f - List.length l - SMap.cardinal m
-  | _ -> 0
-*)
-
 module R = Runtime_stdlib
 
 let rec apply vf args =
