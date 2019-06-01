@@ -31,7 +31,6 @@ let fun_label_shape = function
     (lab, default) :: expr_label_shape e.pexp_desc
   | Function _ -> [ (Nolabel, None) ]
   | Prim _ -> [ (Nolabel, None) ]
-  | SeqOr | SeqAnd -> [ (Nolabel, None); (Nolabel, None) ]
   | _ -> []
 
 module R = Runtime_stdlib
@@ -110,14 +109,6 @@ let rec apply vf args =
       else eval_expr (pattern_bind !fenv p arg) e
     | Function (cl, fenv) -> eval_match !fenv cl (Ok arg)
     | Prim prim -> prim arg
-    | SeqOr ->
-      if is_true arg
-      then Prim (fun _ -> R.wrap_bool true)
-      else Prim (fun x -> x)
-    | SeqAnd ->
-      if is_true arg
-      then Prim (fun x -> x)
-      else Prim (fun _ -> R.wrap_bool false)
     | v ->
       Format.eprintf "%a@." pp_print_value v;
       assert false
@@ -163,15 +154,16 @@ and eval_expr env expr =
   | Pexp_function cl -> Function (cl, ref env)
   | Pexp_fun (label, default, p, e) -> Fun (label, default, p, e, ref env)
   | Pexp_apply (f, l) ->
-    let fc = eval_expr env f in
-    (match (fc, l) with
-    | SeqOr, [ (_, arg1); (_, arg2) ] ->
-      let a1 = eval_expr env arg1 in
-      if is_true a1 then R.wrap_bool true else eval_expr env arg2
-    | SeqAnd, [ (_, arg1); (_, arg2) ] ->
-      let a1 = eval_expr env arg1 in
-      if is_true a1 then eval_expr env arg2 else R.wrap_bool false
-    | _ ->
+    (match eval_expr env f with
+    | Fexpr fexpr ->
+      let loc = expr.pexp_loc in
+      (match fexpr loc l with
+       | None ->
+         if debug then
+           Format.eprintf "%a@.F-expr failure.@." Location.print_loc loc;
+         assert false
+       | Some expr -> eval_expr env expr)
+    | func_value ->
       let args = List.map (fun (lab, e) -> (lab, eval_expr env e)) l in
       if trace
       then (
@@ -191,7 +183,7 @@ and eval_expr env expr =
               args;
           Format.eprintf "@."
         | _ -> ());
-      apply fc args)
+      apply func_value args)
   | Pexp_tuple l ->
     let args = List.map (eval_expr env) l in
     Tuple args

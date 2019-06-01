@@ -14,15 +14,17 @@ type value =
   | Tuple of value list
   | Constructor of string * int * value option
   | Prim of (value -> value)
+  | Fexpr of fexpr
   | ModVal of mdl
   | InChannel of in_channel
   | OutChannel of out_channel
   | Record of value ref SMap.t
-  | SeqOr
-  | SeqAnd
   | Lz of (unit -> value) ref
   | Array of value array
   | Fun_with_extra_args of value * value list * (arg_label * value) SMap.t
+
+and fexpr =
+  Location.t -> (arg_label * expression) list -> expression option
 
 and 'a env_map = (bool * 'a) SMap.t
 (* the boolean tracks whether the value should be exported in the
@@ -52,7 +54,8 @@ let is_true = function
 let rec pp_print_value ff = function
   | Int n -> Format.fprintf ff "%d" n
   | Int64 n -> Format.fprintf ff "%Ld" n
-  | Fun _ | Function _ | Prim _ | SeqOr | SeqAnd | Lz _ | Fun_with_extra_args _
+  | Fexpr _ -> Format.fprintf ff "<fexpr>"
+  | Fun _ | Function _ | Prim _ | Lz _ | Fun_with_extra_args _
     ->
     Format.fprintf ff "<function>"
   | String s -> Format.fprintf ff "%S" (Bytes.to_string s)
@@ -136,10 +139,6 @@ let rec value_equal v1 v2 =
   | Function _, _
   | _, Fun _
   | _, Function _
-  | SeqOr, _
-  | SeqAnd, _
-  | _, SeqOr
-  | _, SeqAnd
   | Lz _, _
   | _, Lz _
   | Fun_with_extra_args _, _
@@ -148,6 +147,8 @@ let rec value_equal v1 v2 =
   | ModVal _, _ | _, ModVal _ -> failwith "tried to compare module"
   | InChannel _, _ | OutChannel _, _ | _, InChannel _ | _, OutChannel _ ->
     failwith "tried to compare channel"
+  | Fexpr _, _ | _, Fexpr _ ->
+    failwith "tried to compare fexpr"
   | Int n1, Int n2 -> n1 = n2
   | Int64 n1, Int64 n2 -> n1 = n2
   | Float f1, Float f2 -> f1 = f2
@@ -188,10 +189,6 @@ let rec value_compare v1 v2 =
   | Function _, _
   | _, Fun _
   | _, Function _
-  | SeqOr, _
-  | SeqAnd, _
-  | _, SeqOr
-  | _, SeqAnd
   | Lz _, _
   | _, Lz _
   | Fun_with_extra_args _, _

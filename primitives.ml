@@ -53,15 +53,53 @@ let assert_failure_exn =
         assert_failure_id,
         Some (Tuple [ String (Bytes.of_string file); Int line; Int char ]))
 
+let exp_of_desc loc desc =
+  Parsetree.{ pexp_desc = desc; pexp_loc = loc; pexp_attributes = [] }
+
+let seq_or loc = function
+  | [ (_, arg1); (_, arg2) ] ->
+    let open Parsetree in
+    let expr_true =
+      Pexp_construct ({ txt = Longident.Lident "true"; loc }, None)
+    in
+    Some
+      (exp_of_desc
+         loc
+         (Pexp_ifthenelse (arg1, exp_of_desc loc expr_true, Some arg2)))
+  | _ -> None
+
+let seq_and loc = function
+  | [ (_, arg1); (_, arg2) ] ->
+    let open Parsetree in
+    let expr_false =
+      Pexp_construct ({ txt = Longident.Lident "false"; loc }, None)
+    in
+    Some
+      (exp_of_desc
+         loc
+         (Pexp_ifthenelse (arg1, arg2, Some (exp_of_desc loc expr_false))))
+  | _ -> None
+
+let apply loc = function
+  | [ (_, f); (_, x) ] ->
+    let open Parsetree in
+    Some (exp_of_desc loc (Pexp_apply (f, [ (Nolabel, x) ])))
+  | _ -> None
+
+let rev_apply loc = function
+  | [ (_, x); (_, f) ] ->
+    let open Parsetree in
+    Some (exp_of_desc loc (Pexp_apply (f, [ (Nolabel, x) ])))
+  | _ -> None
+
 let prims =
-  [ ("%apply", Prim (fun vf -> Prim (fun v -> !apply_ref vf [ (Nolabel, v) ])));
-    ( "%revapply",
-      Prim (fun v -> Prim (fun vf -> !apply_ref vf [ (Nolabel, v) ])) );
+  [ ("%apply", Fexpr apply);
+    ("%revapply", Fexpr rev_apply);
     ("%raise", Prim (fun v -> raise (InternalException v)));
     ("%reraise", Prim (fun v -> raise (InternalException v)));
     ("%raise_notrace", Prim (fun v -> raise (InternalException v)));
-    ("%sequand", SeqAnd);
-    ("%sequor", SeqOr);
+    ("%sequand", Fexpr seq_and);
+    ("%sequor", Fexpr seq_or);
     ("%boolnot", prim1 not unwrap_bool wrap_bool);
     ("%negint", prim1 ( ~- ) unwrap_int wrap_int);
     ("%succint", prim1 succ unwrap_int wrap_int);

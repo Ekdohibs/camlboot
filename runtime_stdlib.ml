@@ -184,8 +184,8 @@ let seeded_hash_param meaningful total seed = function
   | Constructor (c, _, _v) -> Hashtbl.seeded_hash_param meaningful total seed c
   | Array _a -> 0
   | Record _r -> 0
-  | Fun _ | Function _ | SeqOr | SeqAnd | InChannel _ | OutChannel _ | Prim _
-  | Lz _ | ModVal _ | Fun_with_extra_args _ ->
+  | Fexpr _ | Fun _ | Function _ | InChannel _ | OutChannel _ | Prim _ | Lz _
+  | ModVal _ | Fun_with_extra_args _ ->
     assert false
 
 external digest_unsafe_string
