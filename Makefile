@@ -13,7 +13,7 @@ OCAMLOPT=ocamlfind ocamlopt
 	$(OCAML) $(FLAGS) -c $<
 
 interp: $(OBJS)
-	$(OCAML) $(FLAGS) -linkpkg -o $@ $<
+	$(OCAML) $(FLAGS) -linkpkg -o $@ $+
 
 interpopt: $(OBJS:.cmo=.cmx)
-	$(OCAMLOPT) $(FLAGS) -linkpkg -o $@ $<
+	$(OCAMLOPT) $(FLAGS) -linkpkg -o $@ $+
