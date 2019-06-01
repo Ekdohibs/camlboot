@@ -571,60 +571,6 @@ and eval_structure_ init_ignored env str =
 and eval_structure init_ignored env str =
   eval_structure_ init_ignored (prevent_export env) str
 
-(*
-and eval_sigitem_noimpl env = function
-  | Psig_attribute _ -> env
-  | Psig_class _ -> assert false
-  | Psig_class_type _ -> assert false
-  | Psig_exception { pext_name = { txt = name } ; pext_kind = k } ->
-    begin
-      match k with
-      | Pext_decl _ -> let d = !exn_id in incr exn_id; env_set_constr name d env
-      | Pext_rebind { txt = path } -> env_set_constr name (env_get_constr env path) env
-    end
-  | Psig_extension _ -> assert false
-  | Psig_include { pincl_mod = mt } ->
-    let m = eval_module_type env mt in
-    (match m with
-     | Module (venv, menv, cenv) -> env_extend true env (venv, menv, cenv)
-     | Functor _ -> assert false)
-  | Psig_open { popen_lid = { txt = lident } } ->
-    (match env_get_module env lident with
-     | Module (venv, menv, cenv) -> env_extend false env (venv, menv, cenv)
-     | Functor _ -> assert false)
-  | Psig_value z -> assert false (* load mlis without implementation only *)
-  | Psig_module _ -> assert false (* TODO *)
-  | Psig_modtype _ -> assert false
-  | Psig_type (_, tl) ->
-    List.fold_left (fun env t ->
-        match t.ptype_kind with
-        | Ptype_variant l ->
-          let (_, _, env) = List.fold_left (fun (u, v, env) cd ->
-              match cd.pcd_args with
-              | Pcstr_tuple [] -> (u + 1, v, env_set_constr cd.pcd_name.txt u env)
-              | _ -> (u, v + 1, env_set_constr cd.pcd_name.txt v env)
-            ) (0, 0, env) l in
-          env
-        | _ -> env
-      ) env tl
-  | Psig_typext _ -> assert false
-  | Psig_recmodule _ -> assert false
-
-and eval_module_type env mt =
-  match mt.pmty_desc with
-  | Pmty_ident { txt = lident } -> env_get_module env lident
-  | Pmty_signature sg -> make_module (eval_signature_noimpl env sg)
-  | Pmty_functor ({ txt = argname }, input_type, result) -> (* hope it doesn't happen *) assert false
-  | Pmty_with _ -> assert false
-  | Pmty_typeof _ -> assert false
-  | Pmty_alias _ -> assert false
-  | Pmty_extension _ -> assert false
-
-and eval_signature_noimpl env = function
-  | [] -> env
-  | it :: sg -> eval_signature_noimpl (eval_sigitem_noimpl env it.psig_desc) sg
-*)
-
 let () = Runtime_lib.apply_ref := apply
 
 let parse filename =
