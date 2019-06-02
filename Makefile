@@ -1,5 +1,5 @@
 OBJS=conf.cmo data.cmo envir.cmo \
-	runtime_lib.cmo runtime_stdlib.cmo runtime_compiler.cmo \
+	runtime_lib.cmo runtime_base.cmo runtime_stdlib.cmo runtime_compiler.cmo \
 	primitives.cmo eval.cmo \
 	interp.cmo
 SRCS=$(OBJS:.cmo=.ml)

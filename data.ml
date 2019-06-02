@@ -240,3 +240,9 @@ let value_lt v1 v2 = value_compare v1 v2 < 0
 let value_le v1 v2 = value_compare v1 v2 <= 0
 let value_gt v1 v2 = value_compare v1 v2 > 0
 let value_ge v1 v2 = value_compare v1 v2 >= 0
+
+let next_exn_id =
+  let last_exn_id = ref (-1) in
+  fun () ->
+    incr last_exn_id;
+    !last_exn_id

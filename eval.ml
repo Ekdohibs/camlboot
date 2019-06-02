@@ -33,8 +33,6 @@ let fun_label_shape = function
   | Prim _ -> [ (Nolabel, None) ]
   | _ -> []
 
-module R = Runtime_stdlib
-
 let rec apply vf args =
   let vf, extral, extram =
     match vf with
@@ -284,7 +282,7 @@ and eval_expr env expr =
     let nenv =
       match k with
       | Pext_decl _ ->
-        let d = Primitives.next_exn_id () in
+        let d = next_exn_id () in
         env_set_constr name.txt d env
       | Pext_rebind path ->
         env_set_constr name.txt (env_get_constr env path) env
@@ -298,8 +296,11 @@ and eval_expr env expr =
     then unit
     else
       (*failwith "assert failure"*)
+      let loc = expr.pexp_loc in
+      let Lexing.{pos_fname; pos_lnum; pos_cnum; _} = loc.Location.loc_start in
       raise
-        (InternalException (Primitives.assert_failure_exn "" 0 0))
+        (InternalException
+           (Runtime_base.assert_failure_exn pos_fname pos_lnum pos_cnum))
   | Pexp_lazy e -> Lz (ref (fun () -> eval_expr env e))
   | Pexp_poly _ -> assert false
   | Pexp_newtype (_, e) -> eval_expr env e
@@ -502,7 +503,7 @@ and eval_structitem init_ignored env it =
   | Pstr_exception { pext_name = name; pext_kind = k; _ } ->
     (match k with
     | Pext_decl _ ->
-      let d = Primitives.next_exn_id () in
+      let d = next_exn_id () in
       env_set_constr name.txt d env
     | Pext_rebind path -> env_set_constr name.txt (env_get_constr env path) env)
   | Pstr_module { pmb_name = name; pmb_expr = me; _ } ->

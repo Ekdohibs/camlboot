@@ -72,7 +72,7 @@ let init_env =
   let stdlib_path = stdlib_path () in
   let stdlib_main = parse (stdlib_path ^ "/stdlib.ml") in
   let ign = ref SSet.empty in
-  let env = eval_structure (Some ign) Primitives.initial_env stdlib_main in
+  let env = eval_structure (Some ign) Runtime_base.initial_env stdlib_main in
   let env = load_modules env stdlib_modules in
   env_set_module "Stdlib" (make_module env) env
 

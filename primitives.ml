@@ -1,57 +1,9 @@
 open Data
 open Envir
 open Runtime_lib
+open Runtime_base
 open Runtime_stdlib
 open Runtime_compiler
-
-let next_exn_id =
-  let last_exn_id = ref (-1) in
-  fun () ->
-    incr last_exn_id;
-    !last_exn_id
-
-let declare_builtin_constructor name d env =
-  env_set_constr name d env
-
-let declare_exn name env =
-  let d = next_exn_id () in
-  declare_builtin_constructor name d env
-
-let initial_env =
-  empty_env
-  |> declare_exn "Not_found"
-  |> declare_exn "Exit"
-  |> declare_exn "Invalid_argument"
-  |> declare_exn "Failure"
-  |> declare_exn "Match_failure"
-  |> declare_exn "Assert_failure"
-  |> declare_exn "Sys_blocked_io"
-  |> declare_exn "Sys_error"
-  |> declare_exn "End_of_file"
-  |> declare_exn "Division_by_zero"
-  |> declare_exn "Undefined_recursive_module"
-  |> declare_builtin_constructor "false" 0
-  |> declare_builtin_constructor "true" 1
-  |> declare_builtin_constructor "None" 0
-  |> declare_builtin_constructor "Some" 0
-  |> declare_builtin_constructor "[]" 0
-  |> declare_builtin_constructor "::" 0
-  |> declare_builtin_constructor "()" 0
-
-let builtin_exn_id id =
-  env_get_constr initial_env (Location.mknoloc (Longident.Lident id))
-
-let not_found_exn =
-  let not_found = "Not_found" in
-  Constructor (not_found, builtin_exn_id not_found, None)
-
-let assert_failure_exn =
-  let assert_failure_id = builtin_exn_id "Assert_failure" in
-  fun file line char ->
-    Constructor
-      ( "Assert_failure",
-        assert_failure_id,
-        Some (Tuple [ String (Bytes.of_string file); Int line; Int char ]))
 
 let exp_of_desc loc desc =
   Parsetree.{ pexp_desc = desc; pexp_loc = loc; pexp_attributes = [] }
@@ -92,12 +44,20 @@ let rev_apply loc = function
     Some (exp_of_desc loc (Pexp_apply (f, [ (Nolabel, x) ])))
   | _ -> None
 
+external reraise : exn -> 'a = "%reraise"
+external raise_notrace : exn -> 'a = "%raise_notrace"
+
 let prims =
+  let prim1 f = prim1 f Runtime_base.wrap_exn in
+  let prim2 f = prim2 f Runtime_base.wrap_exn in
+  let prim3 f = prim3 f Runtime_base.wrap_exn in
+  let prim4 f = prim4 f Runtime_base.wrap_exn in
+  let prim5 f = prim5 f Runtime_base.wrap_exn in
   [ ("%apply", Fexpr apply);
     ("%revapply", Fexpr rev_apply);
     ("%raise", Prim (fun v -> raise (InternalException v)));
-    ("%reraise", Prim (fun v -> raise (InternalException v)));
-    ("%raise_notrace", Prim (fun v -> raise (InternalException v)));
+    ("%reraise", Prim (fun v -> reraise (InternalException v)));
+    ("%raise_notrace", Prim (fun v -> raise_notrace (InternalException v)));
     ("%sequand", Fexpr seq_and);
     ("%sequor", Fexpr seq_or);
     ("%boolnot", prim1 not unwrap_bool wrap_bool);
@@ -282,7 +242,7 @@ let prims =
     ( "%backend_type",
       Prim (fun _ -> Constructor ("Other", 0, Some (wrap_string "Interpreter")))
     );
-    ("caml_sys_getenv", Prim (fun _ -> raise (InternalException not_found_exn)));
+    ("caml_sys_getenv", prim1 Sys.getenv unwrap_string wrap_string);
     ("caml_sys_file_exists", prim1 Sys.file_exists unwrap_string wrap_bool);
     ("caml_sys_getcwd", prim1 Sys.getcwd unwrap_unit wrap_string);
     ("caml_sys_rename", prim2 Sys.rename unwrap_string unwrap_string wrap_unit);

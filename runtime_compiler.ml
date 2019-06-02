@@ -1,6 +1,12 @@
 open Data
 open Runtime_lib
-open Runtime_stdlib
+open Runtime_base
+
+let wrap_array_id a = Array a
+
+let unwrap_array_id = function
+  | Array a -> a
+  | _ -> assert false
 
 let unwrap_position = function
   | Record r ->
@@ -339,9 +345,17 @@ let new_lex_engine_wrapper tables n lexbuf =
   res
 
 let parse_engine_prim =
-  prim4 parse_engine_wrapper id id unwrap_parser_input id wrap_parser_output
+  prim4
+    parse_engine_wrapper
+    wrap_exn
+    id
+    id
+    unwrap_parser_input
+    id
+    wrap_parser_output
 
-let lex_engine_prim = prim3 lex_engine_wrapper id unwrap_int id wrap_int
+let lex_engine_prim =
+  prim3 lex_engine_wrapper wrap_exn id unwrap_int id wrap_int
 
 let new_lex_engine_prim =
-  prim3 new_lex_engine_wrapper id unwrap_int id wrap_int
+  prim3 new_lex_engine_wrapper wrap_exn id unwrap_int id wrap_int
