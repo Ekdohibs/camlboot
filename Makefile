@@ -1,6 +1,8 @@
 OBJS=conf.cmo data.cmo envir.cmo \
-	runtime_lib.cmo runtime_base.cmo runtime_stdlib.cmo runtime_compiler.cmo \
-	primitives.cmo eval.cmo \
+	runtime_lib.cmo runtime_base.cmo \
+	eval.cmo \
+	runtime_stdlib.cmo runtime_compiler.cmo \
+	primitives.cmo \
 	interp.cmo
 SRCS=$(OBJS:.cmo=.ml)
 FLAGS=-g -package unix -package compiler-libs.common -linkpkg

@@ -202,6 +202,11 @@ let sync_parser_env pe = function
     SMap.find "errflag" r := wrap_int pe.errflag
   | _ -> assert false
 
+let apply_ref =
+  ref
+    (fun _ _ -> assert false
+      : value -> (Asttypes.arg_label * value) list -> value)
+
 let unwrap_parse_tables syncenv = function
   | Record r ->
     let actions =

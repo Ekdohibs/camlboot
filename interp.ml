@@ -3,8 +3,6 @@ open Conf
 open Eval
 open Envir
 
-let () = Runtime_lib.apply_ref := apply Primitives.prims
-
 let parse filename =
   let inc = open_in filename in
   let lexbuf = Lexing.from_channel inc in

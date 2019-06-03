@@ -57,8 +57,3 @@ let exn3 env name wrap1 wrap2 wrap3 =
     let v2 = wrap2 arg2 in
     let v3 = wrap2 arg3 in
     Constructor (name, exn_id, Some (Tuple [ v1; v2; v3 ]))
-
-let apply_ref =
-  ref
-    (fun _ _ -> assert false
-      : value -> (Asttypes.arg_label * value) list -> value)
