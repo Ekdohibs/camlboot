@@ -23,18 +23,17 @@ type value =
   | Array of value array
   | Fun_with_extra_args of value * value list * (arg_label * value) SMap.t
 
-and fexpr =
-  Location.t -> (arg_label * expression) list -> expression option
+and fexpr = Location.t -> (arg_label * expression) list -> expression option
 
 and 'a env_map = (bool * 'a) SMap.t
+
 (* the boolean tracks whether the value should be exported in the
    output environment *)
-
-and env = {
-  values : value env_map;
-  modules : mdl env_map;
-  constructors : int env_map;
-}
+and env =
+  { values : value env_map;
+    modules : mdl env_map;
+    constructors : int env_map
+    }
 
 and mdl =
   | Module of value SMap.t * mdl SMap.t * int SMap.t
@@ -55,8 +54,7 @@ let rec pp_print_value ff = function
   | Int n -> Format.fprintf ff "%d" n
   | Int64 n -> Format.fprintf ff "%Ld" n
   | Fexpr _ -> Format.fprintf ff "<fexpr>"
-  | Fun _ | Function _ | Prim _ | Lz _ | Fun_with_extra_args _
-    ->
+  | Fun _ | Function _ | Prim _ | Lz _ | Fun_with_extra_args _ ->
     Format.fprintf ff "<function>"
   | String s -> Format.fprintf ff "%S" (Bytes.to_string s)
   | Float f -> Format.fprintf ff "%f" f
@@ -147,8 +145,7 @@ let rec value_equal v1 v2 =
   | ModVal _, _ | _, ModVal _ -> failwith "tried to compare module"
   | InChannel _, _ | OutChannel _, _ | _, InChannel _ | _, OutChannel _ ->
     failwith "tried to compare channel"
-  | Fexpr _, _ | _, Fexpr _ ->
-    failwith "tried to compare fexpr"
+  | Fexpr _, _ | _, Fexpr _ -> failwith "tried to compare fexpr"
   | Int n1, Int n2 -> n1 = n2
   | Int64 n1, Int64 n2 -> n1 = n2
   | Float f1, Float f2 -> f1 = f2

@@ -3,7 +3,7 @@ open Conf
 open Eval
 open Envir
 
-let () = Runtime_lib.apply_ref := apply
+let () = Runtime_lib.apply_ref := apply Primitives.prims
 
 let parse filename =
   let inc = open_in filename in
@@ -26,8 +26,7 @@ let stdlib_modules =
     ("String", "string.ml", z);
     ("Buffer", "buffer.ml", z);
     ("CamlinternalFormatBasics", "camlinternalFormatBasics.ml", z);
-    ( "CamlinternalFormat",
-      "camlinternalFormat.ml", z);
+    ("CamlinternalFormat", "camlinternalFormat.ml", z);
     ("Printf", "printf.ml", z);
     ("Format", "format.ml", z);
     ("Obj", "obj.ml", z);
@@ -62,7 +61,7 @@ let load_modules env modules =
     (fun env (modname, modpath, modifier) ->
       if debug then Format.eprintf "Loading %s from %s@." modname modpath;
       let module_contents =
-        modifier (eval_structure None env (parse modpath))
+        modifier (eval_structure None Primitives.prims env (parse modpath))
       in
       env_set_module modname (make_module module_contents) env)
     env
@@ -72,7 +71,13 @@ let init_env =
   let stdlib_path = stdlib_path () in
   let stdlib_main = parse (stdlib_path ^ "/stdlib.ml") in
   let ign = ref SSet.empty in
-  let env = eval_structure (Some ign) Runtime_base.initial_env stdlib_main in
+  let env =
+    eval_structure
+      (Some ign)
+      Primitives.prims
+      Runtime_base.initial_env
+      stdlib_main
+  in
   let env = load_modules env stdlib_modules in
   env_set_module "Stdlib" (make_module env) env
 
@@ -205,4 +210,3 @@ let () =
   try ignore (load_modules init_env compiler_modules)
   with InternalException e ->
     Format.eprintf "Code raised exception: %a@." pp_print_value e
-

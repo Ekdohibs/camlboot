@@ -12,12 +12,12 @@ let rec lident_name = function
   | Longident.Ldot (_, s) -> s
   | Longident.Lapply (_l1, l2) -> lident_name l2
 
-let rec eval_fun_or_function envref expr =
+let rec eval_fun_or_function _prims envref expr =
   match expr.pexp_desc with
   | Pexp_function cl -> Function (cl, envref)
   | Pexp_fun (label, default, p, e) -> Fun (label, default, p, e, envref)
   | Pexp_constraint (e, _) | Pexp_coerce (e, _, _) | Pexp_newtype (_, e) ->
-    eval_fun_or_function envref e
+    eval_fun_or_function _prims envref e
   | _ -> failwith "unsupported rhs of rec"
 
 let rec expr_label_shape = function
@@ -33,7 +33,7 @@ let fun_label_shape = function
   | Prim _ -> [ (Nolabel, None) ]
   | _ -> []
 
-let rec apply vf args =
+let rec apply prims vf args =
   let vf, extral, extram =
     match vf with
     | Fun_with_extra_args (vf, extral, extram) -> (vf, extral, extram)
@@ -47,30 +47,39 @@ let rec apply vf args =
       (match (label, lab, default) with
       | Optional s, Labelled s', None ->
         assert (s = s');
-        eval_expr (pattern_bind !fenv p (Constructor ("Some", 0, Some arg))) e
+        eval_expr
+          prims
+          (pattern_bind prims !fenv p (Constructor ("Some", 0, Some arg)))
+          e
       | Optional s, Labelled s', Some _
       | Optional s, Optional s', None
       | Labelled s, Labelled s', None ->
         assert (s = s');
-        eval_expr (pattern_bind !fenv p arg) e
+        eval_expr prims (pattern_bind prims !fenv p arg) e
       | Optional s, Optional s', Some def ->
         assert (s = s');
         let arg =
           match arg with
-          | Constructor ("None", 0, None) -> eval_expr !fenv def
+          | Constructor ("None", 0, None) -> eval_expr prims !fenv def
           | Constructor ("Some", 0, Some arg) -> arg
           | _ -> assert false
         in
-        eval_expr (pattern_bind !fenv p arg) e
+        eval_expr prims (pattern_bind prims !fenv p arg) e
       | _ -> assert false)
     | _ -> assert false
   in
   let apply_optional_noarg vf =
     match vf with
     | Fun (Optional _, None, p, e, fenv) ->
-      eval_expr (pattern_bind !fenv p (Constructor ("None", 0, None))) e
+      eval_expr
+        prims
+        (pattern_bind prims !fenv p (Constructor ("None", 0, None)))
+        e
     | Fun (Optional _, Some def, p, e, fenv) ->
-      eval_expr (pattern_bind !fenv p (eval_expr !fenv def)) e
+      eval_expr
+        prims
+        (pattern_bind prims !fenv p (eval_expr prims !fenv def))
+        e
     | _ -> assert false
   in
   let unlabelled =
@@ -90,7 +99,7 @@ let rec apply vf args =
   let rec apply_one vf arg =
     match vf with
     | Fun (Nolabel, _default, p, e, fenv) ->
-      eval_expr (pattern_bind !fenv p arg) e
+      eval_expr prims (pattern_bind prims !fenv p arg) e
     | Fun (((Labelled s | Optional s) as lab), _default, p, e, fenv) ->
       if has_labelled
       then
@@ -104,8 +113,8 @@ let rec apply vf args =
           apply_one (apply_optional_noarg vf) arg)
       else if lab = Optional s
       then apply_one (apply_optional_noarg vf) arg
-      else eval_expr (pattern_bind !fenv p arg) e
-    | Function (cl, fenv) -> eval_match !fenv cl (Ok arg)
+      else eval_expr prims (pattern_bind prims !fenv p arg) e
+    | Function (cl, fenv) -> eval_match prims !fenv cl (Ok arg)
     | Prim prim -> prim arg
     | v ->
       Format.eprintf "%a@." pp_print_value v;
@@ -135,34 +144,34 @@ let rec apply vf args =
     in
     apply_loop vf)
 
-and eval_expr env expr =
+and eval_expr prims env expr =
   match expr.pexp_desc with
   | Pexp_ident id -> env_get_value env id
   | Pexp_constant c -> value_of_constant c
   | Pexp_let (f, vals, e) ->
     if f = Nonrecursive
     then (
-      let nenv = List.fold_left (bind_value env) env vals in
-      eval_expr nenv e)
+      let nenv = List.fold_left (bind_value prims env) env vals in
+      eval_expr prims nenv e)
     else (
       let er = ref env in
-      let nenv = List.fold_left (bind_value_rec er) env vals in
+      let nenv = List.fold_left (bind_value_rec prims er) env vals in
       er := nenv;
-      eval_expr nenv e)
+      eval_expr prims nenv e)
   | Pexp_function cl -> Function (cl, ref env)
   | Pexp_fun (label, default, p, e) -> Fun (label, default, p, e, ref env)
   | Pexp_apply (f, l) ->
-    (match eval_expr env f with
+    (match eval_expr prims env f with
     | Fexpr fexpr ->
       let loc = expr.pexp_loc in
       (match fexpr loc l with
-       | None ->
-         if debug then
-           Format.eprintf "%a@.F-expr failure.@." Location.print_loc loc;
-         assert false
-       | Some expr -> eval_expr env expr)
+      | None ->
+        if debug
+        then Format.eprintf "%a@.F-expr failure.@." Location.print_loc loc;
+        assert false
+      | Some expr -> eval_expr prims env expr)
     | func_value ->
-      let args = List.map (fun (lab, e) -> (lab, eval_expr env e)) l in
+      let args = List.map (fun (lab, e) -> (lab, eval_expr prims env e)) l in
       if trace
       then (
         match f.pexp_desc with
@@ -181,54 +190,54 @@ and eval_expr env expr =
               args;
           Format.eprintf "@."
         | _ -> ());
-      apply func_value args)
+      apply prims func_value args)
   | Pexp_tuple l ->
-    let args = List.map (eval_expr env) l in
+    let args = List.map (eval_expr prims env) l in
     Tuple args
-  | Pexp_match (e, cl) -> eval_match env cl (eval_expr_exn env e)
-  | Pexp_coerce (e, _, _) -> eval_expr env e
-  | Pexp_constraint (e, _) -> eval_expr env e
+  | Pexp_match (e, cl) -> eval_match prims env cl (eval_expr_exn prims env e)
+  | Pexp_coerce (e, _, _) -> eval_expr prims env e
+  | Pexp_constraint (e, _) -> eval_expr prims env e
   | Pexp_sequence (e1, e2) ->
-    let _ = eval_expr env e1 in
-    eval_expr env e2
+    let _ = eval_expr prims env e1 in
+    eval_expr prims env e2
   | Pexp_while (e1, e2) ->
-    while is_true (eval_expr env e1) do
-      ignore (eval_expr env e2)
+    while is_true (eval_expr prims env e1) do
+      ignore (eval_expr prims env e2)
     done;
     unit
   | Pexp_for (p, e1, e2, flag, e3) ->
     let v1 =
-      match eval_expr env e1 with
+      match eval_expr prims env e1 with
       | Int n -> n
       | _ -> assert false
     in
     let v2 =
-      match eval_expr env e2 with
+      match eval_expr prims env e2 with
       | Int n -> n
       | _ -> assert false
     in
     if flag = Upto
     then
       for x = v1 to v2 do
-        ignore (eval_expr (pattern_bind env p (Int x)) e3)
+        ignore (eval_expr prims (pattern_bind prims env p (Int x)) e3)
       done
     else
       for x = v1 downto v2 do
-        ignore (eval_expr (pattern_bind env p (Int x)) e3)
+        ignore (eval_expr prims (pattern_bind prims env p (Int x)) e3)
       done;
     unit
   | Pexp_ifthenelse (e1, e2, e3) ->
-    if is_true (eval_expr env e1)
-    then eval_expr env e2
+    if is_true (eval_expr prims env e1)
+    then eval_expr prims env e2
     else (
       match e3 with
       | None -> unit
-      | Some e3 -> eval_expr env e3)
+      | Some e3 -> eval_expr prims env e3)
   | Pexp_unreachable -> failwith "reached unreachable"
   | Pexp_try (e, cs) ->
-    (try eval_expr env e
+    (try eval_expr prims env e
      with InternalException v ->
-       (try eval_match env cs (Ok v)
+       (try eval_match prims env cs (Ok v)
         with Match_fail -> raise (InternalException v)))
   | Pexp_construct (c, e) ->
     let cn = lident_name c.txt in
@@ -236,14 +245,14 @@ and eval_expr env expr =
     let ee =
       match e with
       | None -> None
-      | Some e -> Some (eval_expr env e)
+      | Some e -> Some (eval_expr prims env e)
     in
     Constructor (cn, d, ee)
   | Pexp_variant (cn, e) ->
     let ee =
       match e with
       | None -> None
-      | Some e -> Some (eval_expr env e)
+      | Some e -> Some (eval_expr prims env e)
     in
     Constructor (cn, Hashtbl.hash cn, ee)
   | Pexp_record (r, e) ->
@@ -251,29 +260,29 @@ and eval_expr env expr =
       match e with
       | None -> SMap.empty
       | Some e ->
-        (match eval_expr env e with
+        (match eval_expr prims env e with
         | Record r -> r
         | _ -> assert false)
     in
     Record
       (List.fold_left
          (fun rc ({ txt = lident; _ }, ee) ->
-           SMap.add (lident_name lident) (ref (eval_expr env ee)) rc)
+           SMap.add (lident_name lident) (ref (eval_expr prims env ee)) rc)
          base
          r)
   | Pexp_field (e, { txt = lident; _ }) ->
-    (match eval_expr env e with
+    (match eval_expr prims env e with
     | Record r -> !(SMap.find (lident_name lident) r)
     | _ -> assert false)
   | Pexp_setfield (e1, { txt = lident; _ }, e2) ->
-    let v1 = eval_expr env e1 in
-    let v2 = eval_expr env e2 in
+    let v1 = eval_expr prims env e1 in
+    let v2 = eval_expr prims env e2 in
     (match v1 with
     | Record r ->
       SMap.find (lident_name lident) r := v2;
       unit
     | _ -> assert false)
-  | Pexp_array l -> Array (Array.of_list (List.map (eval_expr env) l))
+  | Pexp_array l -> Array (Array.of_list (List.map (eval_expr prims env) l))
   | Pexp_send _ -> assert false
   | Pexp_new _ -> assert false
   | Pexp_setinstvar _ -> assert false
@@ -287,23 +296,25 @@ and eval_expr env expr =
       | Pext_rebind path ->
         env_set_constr name.txt (env_get_constr env path) env
     in
-    eval_expr nenv e
+    eval_expr prims nenv e
   | Pexp_letmodule (name, me, e) ->
-    let m = eval_module_expr env me in
-    eval_expr (env_set_module name.txt m env) e
+    let m = eval_module_expr prims env me in
+    eval_expr prims (env_set_module name.txt m env) e
   | Pexp_assert e ->
-    if is_true (eval_expr env e)
+    if is_true (eval_expr prims env e)
     then unit
-    else
+    else (
       (*failwith "assert failure"*)
       let loc = expr.pexp_loc in
-      let Lexing.{pos_fname; pos_lnum; pos_cnum; _} = loc.Location.loc_start in
+      let Lexing.{ pos_fname; pos_lnum; pos_cnum; _ } =
+        loc.Location.loc_start
+      in
       raise
         (InternalException
-           (Runtime_base.assert_failure_exn pos_fname pos_lnum pos_cnum))
-  | Pexp_lazy e -> Lz (ref (fun () -> eval_expr env e))
+           (Runtime_base.assert_failure_exn pos_fname pos_lnum pos_cnum)))
+  | Pexp_lazy e -> Lz (ref (fun () -> eval_expr prims env e))
   | Pexp_poly _ -> assert false
-  | Pexp_newtype (_, e) -> eval_expr env e
+  | Pexp_newtype (_, e) -> eval_expr prims env e
   | Pexp_open (_, lident, e) ->
     let nenv =
       match env_get_module env lident with
@@ -312,27 +323,27 @@ and eval_expr env expr =
       | exception Not_found -> env
       (* Module might be a .mli only *)
     in
-    eval_expr nenv e
+    eval_expr prims nenv e
   | Pexp_object _ -> assert false
-  | Pexp_pack me -> ModVal (eval_module_expr env me)
+  | Pexp_pack me -> ModVal (eval_module_expr prims env me)
   | Pexp_extension _ -> assert false
 
-and eval_expr_exn env expr =
-  try Ok (eval_expr env expr) with InternalException v -> Error v
+and eval_expr_exn prims env expr =
+  try Ok (eval_expr prims env expr) with InternalException v -> Error v
 
-and bind_value evalenv bindenv vb =
-  let v = eval_expr evalenv vb.pvb_expr in
-  pattern_bind bindenv vb.pvb_pat v
+and bind_value prims evalenv bindenv vb =
+  let v = eval_expr prims evalenv vb.pvb_expr in
+  pattern_bind prims bindenv vb.pvb_pat v
 
-and bind_value_rec evalenvref bindenv vb =
-  let v = eval_fun_or_function evalenvref vb.pvb_expr in
-  pattern_bind bindenv vb.pvb_pat v
+and bind_value_rec prims evalenvref bindenv vb =
+  let v = eval_fun_or_function prims evalenvref vb.pvb_expr in
+  pattern_bind prims bindenv vb.pvb_pat v
 
-and pattern_bind env pat v =
+and pattern_bind prims env pat v =
   match pat.ppat_desc with
   | Ppat_any -> env
   | Ppat_var s -> env_set_value s.txt v env
-  | Ppat_alias (p, s) -> env_set_value s.txt v (pattern_bind env p v)
+  | Ppat_alias (p, s) -> env_set_value s.txt v (pattern_bind prims env p v)
   | Ppat_constant c ->
     if value_equal (value_of_constant c) v then env else raise Match_fail
   | Ppat_interval (c1, c2) ->
@@ -343,7 +354,7 @@ and pattern_bind env pat v =
     (match v with
     | Tuple vl ->
       assert (List.length l = List.length vl);
-      List.fold_left2 pattern_bind env l vl
+      List.fold_left2 (pattern_bind prims) env l vl
     | _ -> assert false)
   | Ppat_construct (c, p) ->
     let cn = lident_name c.txt in
@@ -354,7 +365,7 @@ and pattern_bind env pat v =
       if dn <> ddn then raise Match_fail;
       (match (p, e) with
       | None, None -> env
-      | Some p, Some e -> pattern_bind env p e
+      | Some p, Some e -> pattern_bind prims env p e
       | _ -> assert false)
     | String s ->
       assert (lident_name c.txt = "Format");
@@ -365,15 +376,17 @@ and pattern_bind env pat v =
       in
       let fmt_ebb_of_string =
         let lid =
-          Longident.(Ldot (Lident "CamlinternalFormat", "fmt_ebb_of_string")) in
-        env_get_value env { loc = c.loc; txt = lid } in
-      let fmt = apply fmt_ebb_of_string [ (Nolabel, String s) ] in
+          Longident.(Ldot (Lident "CamlinternalFormat", "fmt_ebb_of_string"))
+        in
+        env_get_value env { loc = c.loc; txt = lid }
+      in
+      let fmt = apply prims fmt_ebb_of_string [ (Nolabel, String s) ] in
       let fmt =
         match fmt with
         | Constructor ("Fmt_EBB", _, Some fmt) -> fmt
         | _ -> assert false
       in
-      pattern_bind env p (Tuple [ fmt; v ])
+      pattern_bind prims env p (Tuple [ fmt; v ])
     | _ ->
       Format.eprintf "cn = %s@.v = %a@." cn pp_print_value v;
       assert false)
@@ -383,7 +396,7 @@ and pattern_bind env pat v =
       if cn <> name then raise Match_fail;
       (match (p, e) with
       | None, None -> env
-      | Some p, Some e -> pattern_bind env p e
+      | Some p, Some e -> pattern_bind prims env p e
       | _ -> assert false)
     | _ -> assert false)
   | Ppat_record (rp, _) ->
@@ -391,14 +404,15 @@ and pattern_bind env pat v =
     | Record r ->
       List.fold_left
         (fun env (lident, p) ->
-          pattern_bind env p !(SMap.find (lident_name lident.txt) r))
+          pattern_bind prims env p !(SMap.find (lident_name lident.txt) r))
         env
         rp
     | _ -> assert false)
   | Ppat_array _ -> assert false
   | Ppat_or (p1, p2) ->
-    (try pattern_bind env p1 v with Match_fail -> pattern_bind env p2 v)
-  | Ppat_constraint (p, _) -> pattern_bind env p v
+    (try pattern_bind prims env p1 v
+     with Match_fail -> pattern_bind prims env p2 v)
+  | Ppat_constraint (p, _) -> pattern_bind prims env p v
   | Ppat_type _ -> assert false
   | Ppat_lazy _ -> assert false
   | Ppat_unpack name ->
@@ -409,70 +423,72 @@ and pattern_bind env pat v =
   | Ppat_extension _ -> assert false
   | Ppat_open _ -> assert false
 
-and pattern_bind_exn env pat v =
+and pattern_bind_exn prims env pat v =
   match pat.ppat_desc with
-  | Ppat_exception p -> pattern_bind env p v
+  | Ppat_exception p -> pattern_bind prims env p v
   | _ -> raise Match_fail
 
-and pattern_bind_checkexn env pat v =
+and pattern_bind_checkexn prims env pat v =
   match v with
-  | Ok v -> pattern_bind env pat v
-  | Error v -> pattern_bind_exn env pat v
+  | Ok v -> pattern_bind prims env pat v
+  | Error v -> pattern_bind_exn prims env pat v
 
-and eval_match env cl arg =
+and eval_match prims env cl arg =
   match cl with
   | [] ->
     (match arg with
     | Ok _ -> raise Match_fail
     | Error v -> raise (InternalException v))
   | c :: cl ->
-    (match pattern_bind_checkexn env c.pc_lhs arg with
-    | exception Match_fail -> eval_match env cl arg
+    (match pattern_bind_checkexn prims env c.pc_lhs arg with
+    | exception Match_fail -> eval_match prims env cl arg
     | nenv ->
       let guard_ok =
         match c.pc_guard with
         | None -> true
-        | Some guard -> is_true (eval_expr nenv guard)
+        | Some guard -> is_true (eval_expr prims nenv guard)
       in
-      if guard_ok then eval_expr nenv c.pc_rhs else eval_match env cl arg)
+      if guard_ok
+      then eval_expr prims nenv c.pc_rhs
+      else eval_match prims env cl arg)
 
-and eval_module_expr env me =
+and eval_module_expr prims env me =
   match me.pmod_desc with
   | Pmod_ident lident -> env_get_module env lident
-  | Pmod_structure str -> make_module (eval_structure None env str)
+  | Pmod_structure str -> make_module (eval_structure None prims env str)
   | Pmod_functor ({ txt = arg_name; _ }, _, e) -> Functor (arg_name, e, env)
-  | Pmod_constraint (me, _) -> eval_module_expr env me
+  | Pmod_constraint (me, _) -> eval_module_expr prims env me
   | Pmod_apply (me1, me2) ->
-    let m1 = eval_module_expr env me1 in
-    let m2 = eval_module_expr env me2 in
+    let m1 = eval_module_expr prims env me1 in
+    let m2 = eval_module_expr prims env me2 in
     (match m1 with
     | Module _ -> assert false
     | Functor (arg_name, body, env) ->
-      eval_module_expr (env_set_module arg_name m2 env) body)
+      eval_module_expr prims (env_set_module arg_name m2 env) body)
   | Pmod_unpack e ->
-    (match eval_expr env e with
+    (match eval_expr prims env e with
     | ModVal m -> m
     | _ -> assert false)
   | Pmod_extension _ -> assert false
 
-and eval_structitem init_ignored env it =
+and eval_structitem init_ignored prims env it =
   match it.pstr_desc with
   | Pstr_eval (e, _) ->
-    let v = eval_expr env e in
+    let v = eval_expr prims env e in
     Format.printf "%a@." pp_print_value v;
     env
   | Pstr_value (f, vals) ->
     if f = Nonrecursive
-    then List.fold_left (bind_value env) env vals
+    then List.fold_left (bind_value prims env) env vals
     else (
       let er = ref env in
-      let nenv = List.fold_left (bind_value_rec er) env vals in
+      let nenv = List.fold_left (bind_value_rec prims er) env vals in
       er := nenv;
       nenv)
   | Pstr_primitive { pval_name = { txt = name; loc }; pval_prim = l; _ } ->
     let prim_name = List.hd l in
     let prim =
-      try SMap.find prim_name Primitives.prims
+      try SMap.find prim_name prims
       with Not_found ->
         Prim
           (fun _ ->
@@ -508,9 +524,9 @@ and eval_structitem init_ignored env it =
     | Pext_rebind path -> env_set_constr name.txt (env_get_constr env path) env)
   | Pstr_module { pmb_name = name; pmb_expr = me; _ } ->
     (match init_ignored with
-    | None -> env_set_module name.txt (eval_module_expr env me) env
+    | None -> env_set_module name.txt (eval_module_expr prims env me) env
     | Some ign ->
-      (try env_set_module name.txt (eval_module_expr env me) env
+      (try env_set_module name.txt (eval_module_expr prims env me) env
        with Not_found ->
          assert (
            match me.pmod_desc with
@@ -527,18 +543,22 @@ and eval_structitem init_ignored env it =
   | Pstr_class _ -> assert false
   | Pstr_class_type _ -> assert false
   | Pstr_include { pincl_mod = me; _ } ->
-    let m = eval_module_expr env me in
+    let m = eval_module_expr prims env me in
     (match m with
     | Module (venv, menv, cenv) -> env_extend true env (venv, menv, cenv)
     | Functor _ -> assert false)
   | Pstr_attribute _ -> env
   | Pstr_extension _ -> assert false
 
-and eval_structure_ init_ignored env str =
+and eval_structure_ init_ignored prims env str =
   match str with
   | [] -> env
   | it :: str ->
-    eval_structure_ init_ignored (eval_structitem init_ignored env it) str
+    eval_structure_
+      init_ignored
+      prims
+      (eval_structitem init_ignored prims env it)
+      str
 
-and eval_structure init_ignored env str =
-  eval_structure_ init_ignored (prevent_export env) str
+and eval_structure init_ignored prims env str =
+  eval_structure_ init_ignored prims (prevent_export env) str
