@@ -405,6 +405,12 @@ let prims =
       end
       in
       prim1 Prim.time_include_children unwrap_bool wrap_float );
+    (* utils/misc.ml *)
+    ("caml_sys_isatty",
+     let module Prim = struct
+       external isatty : out_channel -> bool = "caml_sys_isatty"
+     end in
+     prim1 Prim.isatty unwrap_out_channel wrap_bool);
     (* Digest *)
     ( "caml_md5_string",
       prim3
