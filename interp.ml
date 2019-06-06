@@ -15,23 +15,39 @@ let z x = x
 
 let stdlib_modules =
   [ ("Sys", "sys.ml", z);
+    ("Callback", "callback.ml", z);
+    ("Complex", "complex.ml", z);
+    ("Float", "float.ml", z);
     ("Seq", "seq.ml", z);
     ("List", "list.ml", z);
+    ("ListLabels", "listLabels.ml", z);
     ("Set", "set.ml", z);
     ("Map", "map.ml", z);
     ("Char", "char.ml", z);
+    ("Uchar", "uchar.ml", z);
     ("Bytes", "bytes.ml", z);
+    ("BytesLabels", "bytesLabels.ml", z);
     ("String", "string.ml", z);
+    ("StringLabels", "stringLabels.ml", z);
     ("Buffer", "buffer.ml", z);
+    ("Stream", "stream.ml", z);
+    ("Genlex", "genlex.ml", z);
     ("CamlinternalFormatBasics", "camlinternalFormatBasics.ml", z);
     ("CamlinternalFormat", "camlinternalFormat.ml", z);
     ("Printf", "printf.ml", z);
+    ("Scanf", "scanf.ml", z);
     ("Format", "format.ml", z);
     ("Obj", "obj.ml", z);
     ("Gc", "gc.ml", z);
+    ("CamlinternalOO", "camlinternalOO.ml", z);
+    ("Oo", "oo.ml", z);
     ("CamlinternalLazy", "camlinternalLazy.ml", z);
     ("Lazy", "lazy.ml", z);
+    ("Printexc", "printexc.ml", z);
     ("Array", "array.ml", z);
+    ("ArrayLabels", "arrayLabels.ml", z);
+    ("Sort", "sort.ml", z);
+    ("Queue", "queue.ml", z);
     ("Int64", "int64.ml", z);
     ("Int32", "int32.ml", z);
     ("Nativeint", "nativeint.ml", z);
@@ -41,11 +57,17 @@ let stdlib_modules =
     ("Lexing", "lexing.ml", z);
     ("Parsing", "parsing.ml", z);
     ("Weak", "weak.ml", z);
+    ("Ephemeron", "ephemeron.ml", z);
+    ("Spacetime", "spacetime.ml", z);
     ("Stack", "stack.ml", z);
     ("Arg", "arg.ml", z);
     ("Filename", "filename.ml", z);
     ("CamlinternalOO", "camlinternalOO.ml", z);
-    ("Marshal", "marshal.ml", z)
+    ("Marshal", "marshal.ml", z);
+    ("Bigarray", "bigarray.ml", z);
+    ("MoreLabels", "moreLabels.ml", z);
+    ("StdLabels", "stdLabels.ml", z);
+    ("Stdlib", "stdlib.ml", z);
   ]
 
 let stdlib_modules =
