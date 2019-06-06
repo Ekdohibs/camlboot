@@ -65,14 +65,12 @@ let stdlib_modules =
     ("Bigarray", "bigarray.ml");
     ("MoreLabels", "moreLabels.ml");
     ("StdLabels", "stdLabels.ml");
-    ("Stdlib", "stdlib.ml");
+    ("Stdlib", "stdlib.ml")
   ]
 
 let stdlib_modules =
   let stdlib_path = stdlib_path () in
-  List.map
-    (fun (n, p) -> (n, stdlib_path ^ "/" ^ p))
-    stdlib_modules
+  List.map (fun (n, p) -> (n, stdlib_path ^ "/" ^ p)) stdlib_modules
 
 let load_modules env modules =
   List.fold_left
@@ -113,8 +111,7 @@ let compiler_modules =
     ("Ccomp", "utils/ccomp.ml");
     ("Warnings", "utils/warnings.ml");
     ("Consistbl", "utils/consistbl.ml");
-    ( "Strongly_connected_components",
-      "utils/strongly_connected_components.ml" );
+    ("Strongly_connected_components", "utils/strongly_connected_components.ml");
     ("Build_path_prefix_map", "utils/build_path_prefix_map.ml");
     ("Targetint", "utils/targetint.ml");
     (* Parsing *)
@@ -213,14 +210,12 @@ let compiler_modules =
     ("Errors", "driver/errors.ml");
     ("Compile", "driver/compile.ml");
     (* Bytestart *)
-    ("Main", "driver/main.ml");
+    ("Main", "driver/main.ml")
   ]
 
 let compiler_modules =
   let compiler_source_path = compiler_source_path () in
-  List.map
-    (fun (n, p) -> (n, compiler_source_path ^ "/" ^ p))
-    compiler_modules
+  List.map (fun (n, p) -> (n, compiler_source_path ^ "/" ^ p)) compiler_modules
 
 (* let _ = eval_structure None init_env parsed *)
 let () =

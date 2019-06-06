@@ -396,9 +396,10 @@ let prims =
     (* Spacetime *)
     ( "caml_spacetime_enabled",
       let module Prim = struct
-        external spacetime_enabled : unit -> bool
-          = "caml_spacetime_enabled" [@@noalloc]
-      end in
+        external spacetime_enabled : unit -> bool = "caml_spacetime_enabled"
+          [@@noalloc]
+      end
+      in
       prim1 Prim.spacetime_enabled unwrap_unit wrap_bool );
     (* Gc *)
     ("caml_gc_quick_stat", prim1 Gc.quick_stat unwrap_unit wrap_gc_stat);
@@ -409,14 +410,16 @@ let prims =
           :  bool ->
           float
           = "caml_sys_time_include_children"
-      end in
+      end
+      in
       prim1 Prim.time_include_children unwrap_bool wrap_float );
     (* utils/misc.ml *)
-    ("caml_sys_isatty",
-     let module Prim = struct
-       external isatty : out_channel -> bool = "caml_sys_isatty"
-     end in
-     prim1 Prim.isatty unwrap_out_channel wrap_bool);
+    ( "caml_sys_isatty",
+      let module Prim = struct
+        external isatty : out_channel -> bool = "caml_sys_isatty"
+      end
+      in
+      prim1 Prim.isatty unwrap_out_channel wrap_bool );
     (* Digest *)
     ( "caml_md5_string",
       prim3
