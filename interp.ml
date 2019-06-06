@@ -11,77 +11,75 @@ let parse filename =
   close_in inc;
   parsed
 
-let z x = x
-
 let stdlib_modules =
-  [ ("Sys", "sys.ml", z);
-    ("Callback", "callback.ml", z);
-    ("Complex", "complex.ml", z);
-    ("Float", "float.ml", z);
-    ("Seq", "seq.ml", z);
-    ("List", "list.ml", z);
-    ("ListLabels", "listLabels.ml", z);
-    ("Set", "set.ml", z);
-    ("Map", "map.ml", z);
-    ("Char", "char.ml", z);
-    ("Uchar", "uchar.ml", z);
-    ("Bytes", "bytes.ml", z);
-    ("BytesLabels", "bytesLabels.ml", z);
-    ("String", "string.ml", z);
-    ("StringLabels", "stringLabels.ml", z);
-    ("Buffer", "buffer.ml", z);
-    ("Stream", "stream.ml", z);
-    ("Genlex", "genlex.ml", z);
-    ("CamlinternalFormatBasics", "camlinternalFormatBasics.ml", z);
-    ("CamlinternalFormat", "camlinternalFormat.ml", z);
-    ("Printf", "printf.ml", z);
-    ("Scanf", "scanf.ml", z);
-    ("Format", "format.ml", z);
-    ("Obj", "obj.ml", z);
-    ("Gc", "gc.ml", z);
-    ("CamlinternalOO", "camlinternalOO.ml", z);
-    ("Oo", "oo.ml", z);
-    ("CamlinternalLazy", "camlinternalLazy.ml", z);
-    ("Lazy", "lazy.ml", z);
-    ("Printexc", "printexc.ml", z);
-    ("Array", "array.ml", z);
-    ("ArrayLabels", "arrayLabels.ml", z);
-    ("Sort", "sort.ml", z);
-    ("Queue", "queue.ml", z);
-    ("Int64", "int64.ml", z);
-    ("Int32", "int32.ml", z);
-    ("Nativeint", "nativeint.ml", z);
-    ("Digest", "digest.ml", z);
-    ("Random", "random.ml", z);
-    ("Hashtbl", "hashtbl.ml", z);
-    ("Lexing", "lexing.ml", z);
-    ("Parsing", "parsing.ml", z);
-    ("Weak", "weak.ml", z);
-    ("Ephemeron", "ephemeron.ml", z);
-    ("Spacetime", "spacetime.ml", z);
-    ("Stack", "stack.ml", z);
-    ("Arg", "arg.ml", z);
-    ("Filename", "filename.ml", z);
-    ("CamlinternalOO", "camlinternalOO.ml", z);
-    ("Marshal", "marshal.ml", z);
-    ("Bigarray", "bigarray.ml", z);
-    ("MoreLabels", "moreLabels.ml", z);
-    ("StdLabels", "stdLabels.ml", z);
-    ("Stdlib", "stdlib.ml", z);
+  [ ("Sys", "sys.ml");
+    ("Callback", "callback.ml");
+    ("Complex", "complex.ml");
+    ("Float", "float.ml");
+    ("Seq", "seq.ml");
+    ("List", "list.ml");
+    ("ListLabels", "listLabels.ml");
+    ("Set", "set.ml");
+    ("Map", "map.ml");
+    ("Char", "char.ml");
+    ("Uchar", "uchar.ml");
+    ("Bytes", "bytes.ml");
+    ("BytesLabels", "bytesLabels.ml");
+    ("String", "string.ml");
+    ("StringLabels", "stringLabels.ml");
+    ("Buffer", "buffer.ml");
+    ("Stream", "stream.ml");
+    ("Genlex", "genlex.ml");
+    ("CamlinternalFormatBasics", "camlinternalFormatBasics.ml");
+    ("CamlinternalFormat", "camlinternalFormat.ml");
+    ("Printf", "printf.ml");
+    ("Scanf", "scanf.ml");
+    ("Format", "format.ml");
+    ("Obj", "obj.ml");
+    ("Gc", "gc.ml");
+    ("CamlinternalOO", "camlinternalOO.ml");
+    ("Oo", "oo.ml");
+    ("CamlinternalLazy", "camlinternalLazy.ml");
+    ("Lazy", "lazy.ml");
+    ("Printexc", "printexc.ml");
+    ("Array", "array.ml");
+    ("ArrayLabels", "arrayLabels.ml");
+    ("Sort", "sort.ml");
+    ("Queue", "queue.ml");
+    ("Int64", "int64.ml");
+    ("Int32", "int32.ml");
+    ("Nativeint", "nativeint.ml");
+    ("Digest", "digest.ml");
+    ("Random", "random.ml");
+    ("Hashtbl", "hashtbl.ml");
+    ("Lexing", "lexing.ml");
+    ("Parsing", "parsing.ml");
+    ("Weak", "weak.ml");
+    ("Ephemeron", "ephemeron.ml");
+    ("Spacetime", "spacetime.ml");
+    ("Stack", "stack.ml");
+    ("Arg", "arg.ml");
+    ("Filename", "filename.ml");
+    ("CamlinternalOO", "camlinternalOO.ml");
+    ("Marshal", "marshal.ml");
+    ("Bigarray", "bigarray.ml");
+    ("MoreLabels", "moreLabels.ml");
+    ("StdLabels", "stdLabels.ml");
+    ("Stdlib", "stdlib.ml");
   ]
 
 let stdlib_modules =
   let stdlib_path = stdlib_path () in
   List.map
-    (fun (n, p, modifier) -> (n, stdlib_path ^ "/" ^ p, modifier))
+    (fun (n, p) -> (n, stdlib_path ^ "/" ^ p))
     stdlib_modules
 
 let load_modules env modules =
   List.fold_left
-    (fun env (modname, modpath, modifier) ->
+    (fun env (modname, modpath) ->
       if debug then Format.eprintf "Loading %s from %s@." modname modpath;
       let module_contents =
-        modifier (eval_structure None Primitives.prims env (parse modpath))
+        eval_structure None Primitives.prims env (parse modpath)
       in
       env_set_module modname (make_module module_contents) env)
     env
@@ -103,126 +101,125 @@ let init_env =
 
 let compiler_modules =
   [ (* Utils *)
-    ("Config", "utils/config.ml", z);
-    ("Misc", "utils/misc.ml", z);
-    ("Identifiable", "utils/identifiable.ml", z);
-    ("Numbers", "utils/numbers.ml", z);
-    ("Arg_helper", "utils/arg_helper.ml", z);
-    ("Clflags", "utils/clflags.ml", z);
-    ("Tbl", "utils/tbl.ml", z);
-    ("Profile", "utils/profile.ml", z);
-    ("Terminfo", "utils/terminfo.ml", z);
-    ("Ccomp", "utils/ccomp.ml", z);
-    ("Warnings", "utils/warnings.ml", z);
-    ("Consistbl", "utils/consistbl.ml", z);
+    ("Config", "utils/config.ml");
+    ("Misc", "utils/misc.ml");
+    ("Identifiable", "utils/identifiable.ml");
+    ("Numbers", "utils/numbers.ml");
+    ("Arg_helper", "utils/arg_helper.ml");
+    ("Clflags", "utils/clflags.ml");
+    ("Tbl", "utils/tbl.ml");
+    ("Profile", "utils/profile.ml");
+    ("Terminfo", "utils/terminfo.ml");
+    ("Ccomp", "utils/ccomp.ml");
+    ("Warnings", "utils/warnings.ml");
+    ("Consistbl", "utils/consistbl.ml");
     ( "Strongly_connected_components",
-      "utils/strongly_connected_components.ml",
-      z );
-    ("Build_path_prefix_map", "utils/build_path_prefix_map.ml", z);
-    ("Targetint", "utils/targetint.ml", z);
+      "utils/strongly_connected_components.ml" );
+    ("Build_path_prefix_map", "utils/build_path_prefix_map.ml");
+    ("Targetint", "utils/targetint.ml");
     (* Parsing *)
-    ("Asttypes", "parsing/asttypes.mli", z);
-    ("Location", "parsing/location.ml", z);
-    ("Longident", "parsing/longident.ml", z);
-    ("Parsetree", "parsing/parsetree.mli", z);
-    ("Docstrings", "parsing/docstrings.ml", z);
-    ("Syntaxerr", "parsing/syntaxerr.ml", z);
-    ("Ast_helper", "parsing/ast_helper.ml", z);
-    ("Parser", "parsing/parser.ml", z);
-    ("Lexer", "parsing/lexer.ml", z);
-    ("Parse", "parsing/parse.ml", z);
-    ("Printast", "parsing/printast.ml", z);
-    ("Pprintast", "parsing/pprintast.ml", z);
-    ("Ast_mapper", "parsing/ast_mapper.ml", z);
-    ("Ast_iterator", "parsing/ast_iterator.ml", z);
-    ("Attr_helper", "parsing/attr_helper.ml", z);
-    ("Builtin_attributes", "parsing/builtin_attributes.ml", z);
-    ("Ast_invariants", "parsing/ast_invariants.ml", z);
-    ("Depend", "parsing/depend.ml", z);
+    ("Asttypes", "parsing/asttypes.mli");
+    ("Location", "parsing/location.ml");
+    ("Longident", "parsing/longident.ml");
+    ("Parsetree", "parsing/parsetree.mli");
+    ("Docstrings", "parsing/docstrings.ml");
+    ("Syntaxerr", "parsing/syntaxerr.ml");
+    ("Ast_helper", "parsing/ast_helper.ml");
+    ("Parser", "parsing/parser.ml");
+    ("Lexer", "parsing/lexer.ml");
+    ("Parse", "parsing/parse.ml");
+    ("Printast", "parsing/printast.ml");
+    ("Pprintast", "parsing/pprintast.ml");
+    ("Ast_mapper", "parsing/ast_mapper.ml");
+    ("Ast_iterator", "parsing/ast_iterator.ml");
+    ("Attr_helper", "parsing/attr_helper.ml");
+    ("Builtin_attributes", "parsing/builtin_attributes.ml");
+    ("Ast_invariants", "parsing/ast_invariants.ml");
+    ("Depend", "parsing/depend.ml");
     (* Typing *)
-    ("Ident", "typing/ident.ml", z);
-    ("Outcometree", "typing/outcometree.mli", z);
-    ("Annot", "typing/annot.mli", z);
-    ("Path", "typing/path.ml", z);
-    ("Primitive", "typing/primitive.ml", z);
-    ("Types", "typing/types.ml", z);
-    ("Btype", "typing/btype.ml", z);
-    ("Oprint", "typing/oprint.ml", z);
-    ("Subst", "typing/subst.ml", z);
-    ("Predef", "typing/predef.ml", z);
-    ("Datarepr", "typing/datarepr.ml", z);
-    ("Cmi_format", "typing/cmi_format.ml", z);
-    ("Env", "typing/env.ml", z);
-    ("Typedtree", "typing/typedtree.ml", z);
-    ("Printtyped", "typing/printtyped.ml", z);
-    ("Ctype", "typing/ctype.ml", z);
-    ("Printtyp", "typing/printtyp.ml", z);
-    ("Includeclass", "typing/includeclass.ml", z);
-    ("Mtype", "typing/mtype.ml", z);
-    ("Envaux", "typing/envaux.ml", z);
-    ("Includecore", "typing/includecore.ml", z);
-    ("TypedtreeIter", "typing/typedtreeIter.ml", z);
-    ("TypedtreeMap", "typing/typedtreeMap.ml", z);
-    ("Tast_mapper", "typing/tast_mapper.ml", z);
-    ("Cmt_format", "typing/cmt_format.ml", z);
-    ("Untypeast", "typing/untypeast.ml", z);
-    ("Includemod", "typing/includemod.ml", z);
-    ("Typetexp", "typing/typetexp.ml", z);
-    ("Printpat", "typing/printpat.ml", z);
-    ("Parmatch", "typing/parmatch.ml", z);
-    ("Stypes", "typing/stypes.ml", z);
-    ("Typedecl", "typing/typedecl.ml", z);
+    ("Ident", "typing/ident.ml");
+    ("Outcometree", "typing/outcometree.mli");
+    ("Annot", "typing/annot.mli");
+    ("Path", "typing/path.ml");
+    ("Primitive", "typing/primitive.ml");
+    ("Types", "typing/types.ml");
+    ("Btype", "typing/btype.ml");
+    ("Oprint", "typing/oprint.ml");
+    ("Subst", "typing/subst.ml");
+    ("Predef", "typing/predef.ml");
+    ("Datarepr", "typing/datarepr.ml");
+    ("Cmi_format", "typing/cmi_format.ml");
+    ("Env", "typing/env.ml");
+    ("Typedtree", "typing/typedtree.ml");
+    ("Printtyped", "typing/printtyped.ml");
+    ("Ctype", "typing/ctype.ml");
+    ("Printtyp", "typing/printtyp.ml");
+    ("Includeclass", "typing/includeclass.ml");
+    ("Mtype", "typing/mtype.ml");
+    ("Envaux", "typing/envaux.ml");
+    ("Includecore", "typing/includecore.ml");
+    ("TypedtreeIter", "typing/typedtreeIter.ml");
+    ("TypedtreeMap", "typing/typedtreeMap.ml");
+    ("Tast_mapper", "typing/tast_mapper.ml");
+    ("Cmt_format", "typing/cmt_format.ml");
+    ("Untypeast", "typing/untypeast.ml");
+    ("Includemod", "typing/includemod.ml");
+    ("Typetexp", "typing/typetexp.ml");
+    ("Printpat", "typing/printpat.ml");
+    ("Parmatch", "typing/parmatch.ml");
+    ("Stypes", "typing/stypes.ml");
+    ("Typedecl", "typing/typedecl.ml");
     (* Comp *)
-    ("Lambda", "bytecomp/lambda.ml", z);
+    ("Lambda", "bytecomp/lambda.ml");
     (* Typing *)
-    ("Typeopt", "typing/typeopt.ml", z);
-    ("Typecore", "typing/typecore.ml", z);
-    ("Typeclass", "typing/typeclass.ml", z);
-    ("Typemod", "typing/typemod.ml", z);
+    ("Typeopt", "typing/typeopt.ml");
+    ("Typecore", "typing/typecore.ml");
+    ("Typeclass", "typing/typeclass.ml");
+    ("Typemod", "typing/typemod.ml");
     (* Comp *)
-    ("Cmo_format", "bytecomp/cmo_format.mli", z);
-    ("Printlambda", "bytecomp/printlambda.ml", z);
-    ("Semantics_of_primitives", "bytecomp/semantics_of_primitives.ml", z);
-    ("Switch", "bytecomp/switch.ml", z);
-    ("Matching", "bytecomp/matching.ml", z);
-    ("Translobj", "bytecomp/translobj.ml", z);
-    ("Translattribute", "bytecomp/translattribute.ml", z);
-    ("Translprim", "bytecomp/translprim.ml", z);
-    ("Translcore", "bytecomp/translcore.ml", z);
-    ("Translclass", "bytecomp/translclass.ml", z);
-    ("Translmod", "bytecomp/translmod.ml", z);
-    ("Simplif", "bytecomp/simplif.ml", z);
-    ("Runtimedef", "bytecomp/runtimedef.ml", z);
-    ("Meta", "bytecomp/meta.ml", z);
-    ("Opcodes", "bytecomp/opcodes.ml", z);
-    ("Bytesections", "bytecomp/bytesections.ml", z);
-    ("Dll", "bytecomp/dll.ml", z);
-    ("Symtable", "bytecomp/symtable.ml", z);
-    ("Pparse", "driver/pparse.ml", z);
-    ("Main_args", "driver/main_args.ml", z);
-    ("Compenv", "driver/compenv.ml", z);
-    ("Compmisc", "driver/compmisc.ml", z);
-    ("Compdynlink", "driver/compdynlink.mlno", z);
-    ("Compplugin", "driver/compplugin.ml", z);
-    ("Makedepend", "driver/makedepend.ml", z);
+    ("Cmo_format", "bytecomp/cmo_format.mli");
+    ("Printlambda", "bytecomp/printlambda.ml");
+    ("Semantics_of_primitives", "bytecomp/semantics_of_primitives.ml");
+    ("Switch", "bytecomp/switch.ml");
+    ("Matching", "bytecomp/matching.ml");
+    ("Translobj", "bytecomp/translobj.ml");
+    ("Translattribute", "bytecomp/translattribute.ml");
+    ("Translprim", "bytecomp/translprim.ml");
+    ("Translcore", "bytecomp/translcore.ml");
+    ("Translclass", "bytecomp/translclass.ml");
+    ("Translmod", "bytecomp/translmod.ml");
+    ("Simplif", "bytecomp/simplif.ml");
+    ("Runtimedef", "bytecomp/runtimedef.ml");
+    ("Meta", "bytecomp/meta.ml");
+    ("Opcodes", "bytecomp/opcodes.ml");
+    ("Bytesections", "bytecomp/bytesections.ml");
+    ("Dll", "bytecomp/dll.ml");
+    ("Symtable", "bytecomp/symtable.ml");
+    ("Pparse", "driver/pparse.ml");
+    ("Main_args", "driver/main_args.ml");
+    ("Compenv", "driver/compenv.ml");
+    ("Compmisc", "driver/compmisc.ml");
+    ("Compdynlink", "driver/compdynlink.mlno");
+    ("Compplugin", "driver/compplugin.ml");
+    ("Makedepend", "driver/makedepend.ml");
     (* Bytecomp *)
-    ("Instruct", "bytecomp/instruct.ml", z);
-    ("Bytegen", "bytecomp/bytegen.ml", z);
-    ("Printinstr", "bytecomp/printinstr.ml", z);
-    ("Emitcode", "bytecomp/emitcode.ml", z);
-    ("Bytelink", "bytecomp/bytelink.ml", z);
-    ("Bytelibrarian", "bytecomp/bytelibrarian.ml", z);
-    ("Bytepackager", "bytecomp/bytepackager.ml", z);
-    ("Errors", "driver/errors.ml", z);
-    ("Compile", "driver/compile.ml", z);
+    ("Instruct", "bytecomp/instruct.ml");
+    ("Bytegen", "bytecomp/bytegen.ml");
+    ("Printinstr", "bytecomp/printinstr.ml");
+    ("Emitcode", "bytecomp/emitcode.ml");
+    ("Bytelink", "bytecomp/bytelink.ml");
+    ("Bytelibrarian", "bytecomp/bytelibrarian.ml");
+    ("Bytepackager", "bytecomp/bytepackager.ml");
+    ("Errors", "driver/errors.ml");
+    ("Compile", "driver/compile.ml");
     (* Bytestart *)
-    ("Main", "driver/main.ml", z)
+    ("Main", "driver/main.ml");
   ]
 
 let compiler_modules =
   let compiler_source_path = compiler_source_path () in
   List.map
-    (fun (n, p, modifier) -> (n, compiler_source_path ^ "/" ^ p, modifier))
+    (fun (n, p) -> (n, compiler_source_path ^ "/" ^ p))
     compiler_modules
 
 (* let _ = eval_structure None init_env parsed *)
