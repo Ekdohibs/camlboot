@@ -31,7 +31,15 @@ configure-ocaml: $(OCAMLSRC)
 	make -C $(OCAMLSRC) bytecomp/runtimedef.ml
 	make -C $(OCAMLSRC) CAMLLEX=ocamllex CAMLRUN=ocamlrun CAMLC=ocamlc bytecomp/opcodes.ml
 
-$(BOOT)/driver: $(OCAMLSRC)/driver configure-ocaml
+$(BOOT)/driver: $(OCAMLSRC)/driver $(OCAMLSRC)/otherlibs/dynlink configure-ocaml
+	mkdir -p $(BOOT)
+	rm -rf $@
+	cp -r $< $@
+	cp $(OCAMLSRC)/otherlibs/dynlink.mli $@/compdynlink.mli
+	grep -v 'REMOVE_ME for ../../debugger/dynlink.ml' \
+	     $(OCAMLSRC)/otherlibs/dynlink/dynlink.ml > $@/compdynlink.mlbyte
+
+$(BOOT)/byterun: $(OCAMLSRC)/byterun configure-ocaml
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
@@ -71,4 +79,5 @@ copy: $(BOOT)/driver $(BOOT)/bytecomp $(BOOT)/typing $(BOOT)/parsing $(BOOT)/uti
 
 $(BOOT)/ocamlc: copy
 	cd $(BOOT)/stdlib && ../../compile_stdlib.sh
+	mkdir -p $(BOOT)/compilerlibs
 	cd $(BOOT) && ../compile_ocamlc.sh
