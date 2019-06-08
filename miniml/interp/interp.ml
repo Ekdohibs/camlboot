@@ -1368,7 +1368,7 @@ let stdlib_modules = [
   ("Marshal", "marshal.ml");
 ]
 
-let stdlib_path = "/home/nathanael/.opam/4.07.0/lib/ocaml"
+let stdlib_path = "/home/nathanael/Projects/camlboot/_boot/stdlib" (* "/home/nathanael/.opam/4.07.0/lib/stdlib/ocaml" *)
 let stdlib_modules = List.map (fun np -> let (n, p) = np in (n, stdlib_path ^ "/" ^ p)) stdlib_modules
 
 let load_modules env modules =
@@ -1511,7 +1511,7 @@ let compiler_modules = [
   ("Main", "driver/main.ml");
 ]
 
-let compiler_path = (*"/home/nathanael/.opam/4.07.0/lib/ocaml/compiler-libs"*) "/home/nathanael/Projects/ocaml"
+let compiler_path = "/home/nathanael/Projects/camlboot/_boot" (* "/home/nathanael/Projects/ocaml" *)
 let compiler_modules = List.map (fun np -> let (n, p) = np in (n, compiler_path ^ "/" ^ p)) compiler_modules
 
 let _ =

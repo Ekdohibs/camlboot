@@ -1,0 +1,4 @@
+99c99
+< 
+---
+> let record_call ?(accumulate = false) name f = f ()

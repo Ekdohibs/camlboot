@@ -10,7 +10,7 @@ interp.c: out.ml
 out.ml: buffer.ml lexing.ml parsing.ml misc.ml clflags.ml location.ml asttypes.mli warnings.ml syntaxerr.ml docstrings.ml longident.ml parsetree.mli ast_helper.ml parser.ml lexer.ml interp.ml
 	./genfile.sh
 
-lexing.ml: lexing.mll
+lexer.ml: lexer.mll
 	$(OCAMLLEX) $<
 	sed -i "s/lexbuf.Lexing.refill_buff/Lexing.refill_buff/" $@
 
