@@ -9,99 +9,6 @@ let set_env env = function
   | Fun (_, _, _, _, ev) | Function (_, ev) -> ev := env
   | _ -> assert false
 
-let rec env_get_module env { txt = lident; loc } =
-  let module_env = env.modules in
-  match lident with
-  | Longident.Lident str ->
-    (try snd (SMap.find str module_env)
-     with Not_found ->
-       if debug
-       then
-         Format.eprintf
-           "%a@.Module not found in env: %s@."
-           Location.print_loc
-           loc
-           str;
-       raise Not_found)
-  | Longident.Ldot (ld, str) ->
-    let md = env_get_module env { txt = ld; loc } in
-    (match md with
-    | Functor _ -> failwith "Ldot tried to access functor"
-    | Module (_, md, _) ->
-      (try SMap.find str md
-       with Not_found ->
-         if debug
-         then
-           Format.eprintf
-             "%a@.Module not found in submodule: %s@."
-             Location.print_loc
-             loc
-             (String.concat "." (Longident.flatten lident));
-         raise Not_found))
-  | Longident.Lapply _ -> failwith "Lapply lookups not supported"
-
-let env_get_value env { txt = lident; loc } =
-  let value_env = env.values in
-  match lident with
-  | Longident.Lident str ->
-    (try snd (SMap.find str value_env)
-     with Not_found ->
-       if debug
-       then
-         Format.eprintf
-           "%a@.Variable not found in env: %s@."
-           Location.print_loc
-           loc
-           str;
-       raise Not_found)
-  | Longident.Ldot (ld, str) ->
-    let md = env_get_module env { txt = ld; loc } in
-    (match md with
-    | Functor _ -> failwith "Ldot tried to access functor"
-    | Module (md, _, _) ->
-      (try SMap.find str md
-       with Not_found ->
-         if debug
-         then
-           Format.eprintf
-             "%a@.Value not found in submodule: %s@."
-             Location.print_loc
-             loc
-             (String.concat "." (Longident.flatten lident));
-         raise Not_found))
-  | Longident.Lapply _ -> failwith "Lapply lookups not supported"
-
-let env_get_constr env { txt = lident; loc } =
-  let constr_env = env.constructors in
-  match lident with
-  | Longident.Lident str ->
-    (try snd (SMap.find str constr_env)
-     with Not_found ->
-       if debug
-       then
-         Format.eprintf
-           "%a@.Constructor not found in env: %s@."
-           Location.print_loc
-           loc
-           str;
-       raise Not_found)
-  | Longident.Ldot (ld, str) ->
-    let md = env_get_module env { txt = ld; loc } in
-    (match md with
-    | Functor _ -> failwith "Ldot tried to access functor"
-    | Module (_, _, md) ->
-      (try SMap.find str md
-       with Not_found ->
-         if debug
-         then
-           Format.eprintf
-             "%a@.Constructor not found in submodule: %s@."
-             Location.print_loc
-             loc
-             (String.concat "." (Longident.flatten lident));
-         raise Not_found))
-  | Longident.Lapply _ -> failwith "Lapply lookups not supported"
-
 let env_set_value key v env =
   { env with values = SMap.add key (true, v) env.values }
 
@@ -120,11 +27,15 @@ let env_extend exported env1 (ve, me, ce) =
     constructors = merge env1.constructors ce
   }
 
-let make_module env =
+let env_of_module_data mod_data = env_extend true empty_env mod_data
+
+let make_module_data env =
   let exported env_map =
     env_map |> SMap.filter (fun _ (b, _) -> b) |> SMap.map snd
   in
-  Module (exported env.values, exported env.modules, exported env.constructors)
+  (exported env.values, exported env.modules, exported env.constructors)
+
+let make_module env = Module (make_module_data env)
 
 let prevent_export env =
   let prevent env_map = SMap.map (fun (_, x) -> (false, x)) env_map in
@@ -132,3 +43,40 @@ let prevent_export env =
     modules = prevent env.modules;
     constructors = prevent env.constructors
   }
+
+let decompose env_get_module_data env { txt = lident; loc } =
+  match lident with
+  | Longident.Lapply _ -> failwith "Lapply lookups not supported"
+  | Longident.Lident str -> ("env", env, str)
+  | Longident.Ldot (ld, str) ->
+    let md = env_get_module_data env { txt = ld; loc } in
+    ("module", env_of_module_data md, str)
+
+let lookup object_name ~env_name object_env { txt = str; loc } =
+  try snd (SMap.find str object_env)
+  with Not_found ->
+    if debug
+    then
+      Format.eprintf
+        "%a@.%s not found in %s: %s@."
+        Location.print_loc
+        loc
+        (String.capitalize_ascii object_name)
+        env_name
+        str;
+    raise Not_found
+
+let rec env_get_module env ({ loc; _ } as lid) =
+  let env_name, env, id = decompose env_get_module_data env lid in
+  lookup "module" ~env_name env.modules { txt = id; loc }
+
+and env_get_value env ({ loc; _ } as lid) =
+  let env_name, env, id = decompose env_get_module_data env lid in
+  lookup "value" ~env_name env.values { txt = id; loc }
+
+and env_get_constr env ({ loc; _ } as lid) =
+  let env_name, env, id = decompose env_get_module_data env lid in
+  lookup "constructor" ~env_name env.constructors { txt = id; loc }
+
+and env_get_module_data env ({ loc; _ } as id) =
+  get_module_data loc (env_get_module env id)

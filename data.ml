@@ -35,8 +35,10 @@ and env =
     constructors : int env_map
     }
 
+and mdl_data = value SMap.t * mdl SMap.t * int SMap.t
+
 and mdl =
-  | Module of value SMap.t * mdl SMap.t * int SMap.t
+  | Module of mdl_data
   | Functor of string * module_expr * env
 
 (* TODO: include arg restriction *)
@@ -243,3 +245,12 @@ let next_exn_id =
   fun () ->
     incr last_exn_id;
     !last_exn_id
+
+exception No_module_data
+
+let get_module_data loc = function
+  | Module data -> data
+  | Functor _ ->
+     Format.eprintf "%a@.Tried to access the components of a functor"
+       Location.print_loc loc;
+     raise No_module_data
