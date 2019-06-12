@@ -35,7 +35,7 @@ $(BOOT)/driver: $(OCAMLSRC)/driver $(OCAMLSRC)/otherlibs/dynlink configure-ocaml
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
-	cp $(OCAMLSRC)/otherlibs/dynlink.mli $@/compdynlink.mli
+	cp $(OCAMLSRC)/otherlibs/dynlink/dynlink.mli $@/compdynlink.mli
 	grep -v 'REMOVE_ME for ../../debugger/dynlink.ml' \
 	     $(OCAMLSRC)/otherlibs/dynlink/dynlink.ml > $@/compdynlink.mlbyte
 
