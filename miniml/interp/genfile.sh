@@ -12,4 +12,6 @@ for i in "${!files[@]}"; do
   echo "# $(($(wc -l < $out) + 2)) \"$out\"" >> $out
   echo "end" >> $out
   echo >> $out
+  camlboot_path_esc=$(realpath $(dirname $0)/../.. | sed 's_/_\\/_g')
+  sed -i "s#%CAMLBOOT_PATH%#$camlboot_path_esc#" $out
 done
