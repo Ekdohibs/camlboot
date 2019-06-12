@@ -78,6 +78,10 @@ $(BOOT)/stdlib: $(OCAMLSRC)/stdlib configure-ocaml patches/compflags.patch
 copy: $(BOOT)/driver $(BOOT)/bytecomp $(BOOT)/typing $(BOOT)/parsing $(BOOT)/utils $(BOOT)/stdlib
 
 $(BOOT)/ocamlc: copy
+	make -C $(OCAMLSRC)/yacc all
+	make -C $(OCAMLSRC)/byterun all
+	make -C miniml/compiler miniml
+	make -C miniml/interp interp
 	cd $(BOOT)/stdlib && ../../compile_stdlib.sh
 	mkdir -p $(BOOT)/compilerlibs
 	cd $(BOOT) && ../compile_ocamlc.sh

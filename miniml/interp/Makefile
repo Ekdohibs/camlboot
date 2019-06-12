@@ -1,5 +1,5 @@
-OCAMLLEX=../../../ocaml/byterun/ocamlrun ../../../ocaml/boot/ocamllex
-OCAMLYACC=../../../ocaml/boot/ocamlyacc
+OCAMLLEX=../../ocaml-src/byterun/ocamlrun ../../ocaml-src/boot/ocamllex
+OCAMLYACC=../../ocaml-src/yacc/ocamlyacc
 
 interp: interp.c main.c std.h
 	gcc -g -O2 -I ~/Projects/ocaml/byterun/ interp.c ~/Projects/ocaml/byterun/libcamlrun.a -o interp -lm -ldl
