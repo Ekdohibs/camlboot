@@ -2,7 +2,7 @@ OCAMLLEX=../../ocaml-src/byterun/ocamlrun ../../ocaml-src/boot/ocamllex
 OCAMLYACC=../../ocaml-src/yacc/ocamlyacc
 
 interp: interp.c main.c std.h
-	gcc -g -O2 -I ~/Projects/ocaml/byterun/ interp.c ~/Projects/ocaml/byterun/libcamlrun.a -o interp -lm -ldl
+	gcc -g -O2 -I ../../ocaml-src/byterun/ interp.c ../../ocaml-src/byterun/libcamlrun.a -o interp -lm -ldl
 
 interp.c: out.ml
 	../compiler/miniml out.ml > interp.c
