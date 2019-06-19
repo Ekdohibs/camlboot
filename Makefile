@@ -40,6 +40,7 @@ $(BOOT)/driver: $(OCAMLSRC)/driver $(OCAMLSRC)/otherlibs/dynlink configure-ocaml
 	     $(OCAMLSRC)/otherlibs/dynlink/dynlink.ml > $@/compdynlink.mlbyte
 
 $(BOOT)/byterun: $(OCAMLSRC)/byterun configure-ocaml
+	make -C $(OCAMLSRC)/byterun all
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
@@ -75,11 +76,10 @@ $(BOOT)/stdlib: $(OCAMLSRC)/stdlib configure-ocaml patches/compflags.patch
 	awk -f $(BOOT)/stdlib/expand_module_aliases.awk < $(BOOT)/stdlib/stdlib.mli > $(BOOT)/stdlib/stdlib.pp.mli
 	awk -f $(BOOT)/stdlib/expand_module_aliases.awk < $(BOOT)/stdlib/stdlib.ml > $(BOOT)/stdlib/stdlib.pp.ml
 
-copy: $(BOOT)/driver $(BOOT)/bytecomp $(BOOT)/typing $(BOOT)/parsing $(BOOT)/utils $(BOOT)/stdlib
+copy: $(BOOT)/driver $(BOOT)/bytecomp $(BOOT)/byterun $(BOOT)/typing $(BOOT)/parsing $(BOOT)/utils $(BOOT)/stdlib
 
 $(BOOT)/ocamlc: copy
 	make -C $(OCAMLSRC)/yacc all
-	make -C $(OCAMLSRC)/byterun all
 	make -C miniml/compiler miniml
 	make -C miniml/interp interp
 	cd $(BOOT)/stdlib && ../../compile_stdlib.sh
