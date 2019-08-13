@@ -101,127 +101,158 @@ let stdlib_env =
   let env = load_rec_units env stdlib_units in
   env
 
-let compiler_units =
+module Compiler_files = struct
+  let utils = List.map (Filename.concat "utils") [
+    "config.ml";
+    "misc.ml";
+    "identifiable.ml";
+    "numbers.ml";
+    "arg_helper.ml";
+    "clflags.ml";
+    "tbl.ml";
+    "profile.ml";
+    "terminfo.ml";
+    "ccomp.ml";
+    "warnings.ml";
+    "consistbl.ml";
+    "strongly_connected_components.ml";
+    "build_path_prefix_map.ml";
+    "targetint.ml";
+  ]
+
+  let parsing = List.map (Filename.concat "parsing") [
+    "asttypes.mli";
+    "location.ml";
+    "longident.ml";
+    "parsetree.mli";
+    "docstrings.ml";
+    "syntaxerr.ml";
+    "ast_helper.ml";
+    "parser.ml";
+    "lexer.ml";
+    "parse.ml";
+    "printast.ml";
+    "pprintast.ml";
+    "ast_mapper.ml";
+    "ast_iterator.ml";
+    "attr_helper.ml";
+    "builtin_attributes.ml";
+    "ast_invariants.ml";
+    "depend.ml";
+  ]
+
+  let pure_typing = List.map (Filename.concat "typing") [
+    "ident.ml";
+    "outcometree.mli";
+    "annot.mli";
+    "path.ml";
+    "primitive.ml";
+    "types.ml";
+    "btype.ml";
+    "oprint.ml";
+    "subst.ml";
+    "predef.ml";
+    "datarepr.ml";
+    "cmi_format.ml";
+    "env.ml";
+    "typedtree.ml";
+    "printtyped.ml";
+    "ctype.ml";
+    "printtyp.ml";
+    "includeclass.ml";
+    "mtype.ml";
+    "envaux.ml";
+    "includecore.ml";
+    "typedtreeIter.ml";
+    "typedtreeMap.ml";
+    "tast_mapper.ml";
+    "cmt_format.ml";
+    "untypeast.ml";
+    "includemod.ml";
+    "typetexp.ml";
+    "printpat.ml";
+    "parmatch.ml";
+    "stypes.ml";
+    "typedecl.ml";
+  ]
+
+  let lambda = List.map (Filename.concat "bytecomp") [
+    "lambda.ml";
+  ]
+
+  let more_typing = List.map (Filename.concat "typing") [
+    "typeopt.ml";
+    "typecore.ml";
+    "typeclass.ml";
+    "typemod.ml";
+  ]
+
+  let bytecomp = List.map (Filename.concat "bytecomp") [
+    "cmo_format.mli";
+    "printlambda.ml";
+    "semantics_of_primitives.ml";
+    "switch.ml";
+    "matching.ml";
+    "translobj.ml";
+    "translattribute.ml";
+    "translprim.ml";
+    "translcore.ml";
+    "translclass.ml";
+    "translmod.ml";
+    "simplif.ml";
+    "runtimedef.ml";
+    "meta.ml";
+    "opcodes.ml";
+    "bytesections.ml";
+    "dll.ml";
+    "symtable.ml";
+  ]
+
+  let driver = List.map (Filename.concat "driver") [
+    "pparse.ml";
+    "main_args.ml";
+    "compenv.ml";
+    "compmisc.ml";
+    "compdynlink.mlno";
+    "compplugin.ml";
+    "makedepend.ml";
+  ]
+
+
+  let bytegen = List.map (Filename.concat "bytecomp") [
+    "instruct.ml";
+    "bytegen.ml";
+    "printinstr.ml";
+    "emitcode.ml";
+    "bytelink.ml";
+    "bytelibrarian.ml";
+    "bytepackager.ml";
+  ]
+
+  let bytecode_main = List.map (Filename.concat "driver") [
+    "errors.ml";
+    "compile.ml";
+    "main.ml";
+  ]
+end
+
+let bytecode_compiler_units =
   let compiler_source_path = compiler_source_path () in
   let fullpath file = Filename.concat compiler_source_path file in
   List.map (fun modfile -> stdlib_flag, fullpath modfile)
-  [ (* Utils *)
-    "utils/config.ml";
-    "utils/misc.ml";
-    "utils/identifiable.ml";
-    "utils/numbers.ml";
-    "utils/arg_helper.ml";
-    "utils/clflags.ml";
-    "utils/tbl.ml";
-    "utils/profile.ml";
-    "utils/terminfo.ml";
-    "utils/ccomp.ml";
-    "utils/warnings.ml";
-    "utils/consistbl.ml";
-    "utils/strongly_connected_components.ml";
-    "utils/build_path_prefix_map.ml";
-    "utils/targetint.ml";
-    (* Parsing *)
-    "parsing/asttypes.mli";
-    "parsing/location.ml";
-    "parsing/longident.ml";
-    "parsing/parsetree.mli";
-    "parsing/docstrings.ml";
-    "parsing/syntaxerr.ml";
-    "parsing/ast_helper.ml";
-    "parsing/parser.ml";
-    "parsing/lexer.ml";
-    "parsing/parse.ml";
-    "parsing/printast.ml";
-    "parsing/pprintast.ml";
-    "parsing/ast_mapper.ml";
-    "parsing/ast_iterator.ml";
-    "parsing/attr_helper.ml";
-    "parsing/builtin_attributes.ml";
-    "parsing/ast_invariants.ml";
-    "parsing/depend.ml";
-    (* Typing *)
-    "typing/ident.ml";
-    "typing/outcometree.mli";
-    "typing/annot.mli";
-    "typing/path.ml";
-    "typing/primitive.ml";
-    "typing/types.ml";
-    "typing/btype.ml";
-    "typing/oprint.ml";
-    "typing/subst.ml";
-    "typing/predef.ml";
-    "typing/datarepr.ml";
-    "typing/cmi_format.ml";
-    "typing/env.ml";
-    "typing/typedtree.ml";
-    "typing/printtyped.ml";
-    "typing/ctype.ml";
-    "typing/printtyp.ml";
-    "typing/includeclass.ml";
-    "typing/mtype.ml";
-    "typing/envaux.ml";
-    "typing/includecore.ml";
-    "typing/typedtreeIter.ml";
-    "typing/typedtreeMap.ml";
-    "typing/tast_mapper.ml";
-    "typing/cmt_format.ml";
-    "typing/untypeast.ml";
-    "typing/includemod.ml";
-    "typing/typetexp.ml";
-    "typing/printpat.ml";
-    "typing/parmatch.ml";
-    "typing/stypes.ml";
-    "typing/typedecl.ml";
-    (* Comp *)
-    "bytecomp/lambda.ml";
-    (* Typing *)
-    "typing/typeopt.ml";
-    "typing/typecore.ml";
-    "typing/typeclass.ml";
-    "typing/typemod.ml";
-    (* Comp *)
-    "bytecomp/cmo_format.mli";
-    "bytecomp/printlambda.ml";
-    "bytecomp/semantics_of_primitives.ml";
-    "bytecomp/switch.ml";
-    "bytecomp/matching.ml";
-    "bytecomp/translobj.ml";
-    "bytecomp/translattribute.ml";
-    "bytecomp/translprim.ml";
-    "bytecomp/translcore.ml";
-    "bytecomp/translclass.ml";
-    "bytecomp/translmod.ml";
-    "bytecomp/simplif.ml";
-    "bytecomp/runtimedef.ml";
-    "bytecomp/meta.ml";
-    "bytecomp/opcodes.ml";
-    "bytecomp/bytesections.ml";
-    "bytecomp/dll.ml";
-    "bytecomp/symtable.ml";
-    "driver/pparse.ml";
-    "driver/main_args.ml";
-    "driver/compenv.ml";
-    "driver/compmisc.ml";
-    "driver/compdynlink.mlno";
-    "driver/compplugin.ml";
-    "driver/makedepend.ml";
-    (* Bytecomp *)
-    "bytecomp/instruct.ml";
-    "bytecomp/bytegen.ml";
-    "bytecomp/printinstr.ml";
-    "bytecomp/emitcode.ml";
-    "bytecomp/bytelink.ml";
-    "bytecomp/bytelibrarian.ml";
-    "bytecomp/bytepackager.ml";
-    "driver/errors.ml";
-    "driver/compile.ml";
-    (* Bytestart *)
-    "driver/main.ml"
-  ]
+  ( Compiler_files.utils
+  @ Compiler_files.parsing
+  @ Compiler_files.pure_typing
+  @ Compiler_files.lambda
+  @ Compiler_files.more_typing
+  @ Compiler_files.bytecomp
+  @ Compiler_files.driver
+  @ Compiler_files.bytegen
+  @ Compiler_files.bytecode_main
+  )
 
 (* let _ = load_rec_units stdlib_env [stdlib_flag, "test.ml"] *)
 let () =
-  try ignore (load_rec_units stdlib_env compiler_units)
+  try ignore (load_rec_units stdlib_env bytecode_compiler_units)
   with InternalException e ->
     Format.eprintf "Code raised exception: %a@." pp_print_value e
