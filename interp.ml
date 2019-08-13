@@ -17,8 +17,17 @@ let module_name_of_path filename =
   |> Filename.remove_extension
   |> String.capitalize_ascii
 
+
+let stdlib_flag = [`Open (Longident.Lident "Stdlib")]
+let no_stdlib_flag = []
+
 let stdlib_modules =
-  [ "sys.ml";
+  let stdlib_path = stdlib_path () in
+  let fullpath file = Filename.concat stdlib_path file in
+  (no_stdlib_flag, fullpath "stdlib.ml")
+  ::
+  List.map (fun file -> stdlib_flag, fullpath file) [
+    "sys.ml";
     "callback.ml";
     "complex.ml";
     "float.ml";
@@ -66,45 +75,47 @@ let stdlib_modules =
     "stack.ml";
     "arg.ml";
     "filename.ml";
-    "camlinternalOO.ml";
     "marshal.ml";
     "bigarray.ml";
     "moreLabels.ml";
     "stdLabels.ml";
-    "stdlib.ml"
   ]
 
-let stdlib_modules =
-  let stdlib_path = stdlib_path () in
-  List.map (fun p -> stdlib_path ^ "/" ^ p) stdlib_modules
+let eval_env_flag ~loc env flag =
+  match flag with
+  | `Open module_ident ->
+     let module_ident = Location.mkloc module_ident loc in
+     env_extend false env (env_get_module_data env module_ident)
 
-let load_modules env modules =
+let load_rec_modules env flags_and_modules =
   List.fold_left
-    (fun env modpath ->
+    (fun global_env (flags, modpath) ->
       let modname = module_name_of_path modpath in
       if debug then Format.eprintf "Loading %s from %s@." modname modpath;
       let module_contents =
-        eval_structure None Primitives.prims env (parse modpath)
+        let loc = Location.in_file modpath in
+        let local_env = List.fold_left (eval_env_flag ~loc) global_env flags in
+        let ign =
+          (* 'ignore' is a temporary hack to handle our lack of support
+             for -no-alias-deps in wrapper modules, this should go away soon. *)
+          if modname <> "Stdlib" then None else Some (ref SSet.empty)
+        in
+        eval_structure ign
+          Primitives.prims local_env (parse modpath)
       in
-      env_set_module modname (make_module module_contents) env)
+      env_set_module modname (make_module module_contents) global_env)
     env
-    modules
+    flags_and_modules
 
-let init_env =
-  let stdlib_path = stdlib_path () in
-  let stdlib_main = parse (stdlib_path ^ "/stdlib.ml") in
-  let ign = ref SSet.empty in
-  let env =
-    eval_structure
-      (Some ign)
-      Primitives.prims
-      Runtime_base.initial_env
-      stdlib_main
-  in
-  let env = load_modules env stdlib_modules in
-  env_set_module "Stdlib" (make_module env) env
+let stdlib_env =
+  let env = Runtime_base.initial_env in
+  let env = load_rec_modules env stdlib_modules in
+  env
 
 let compiler_modules =
+  let compiler_source_path = compiler_source_path () in
+  let fullpath file = Filename.concat compiler_source_path file in
+  List.map (fun modfile -> stdlib_flag, fullpath modfile)
   [ (* Utils *)
     "utils/config.ml";
     "utils/misc.ml";
@@ -220,12 +231,8 @@ let compiler_modules =
     "driver/main.ml"
   ]
 
-let compiler_modules =
-  let compiler_source_path = compiler_source_path () in
-  List.map (fun p -> compiler_source_path ^ "/" ^ p) compiler_modules
-
-(* let _ = eval_structure None init_env parsed *)
+(* let _ = load_rec_modules stdlib_env [stdlib_flag, "test.ml"] *)
 let () =
-  try ignore (load_modules init_env compiler_modules)
+  try ignore (load_rec_modules stdlib_env compiler_modules)
   with InternalException e ->
     Format.eprintf "Code raised exception: %a@." pp_print_value e
