@@ -116,6 +116,6 @@ run: interpopt
 	env \
 	  OCAMLRUNPARAM=b \
 	  OCAMLINTERP_DEBUG=true \
-	  OCAMLINTERP_STDLIB_PATH=$(shell ocamlc -where) \
+	  OCAMLINTERP_STDLIB_PATH=./ocaml-src/stdlib \
 	  OCAMLINTERP_SRC_PATH=./ocaml-src \
 	  ./interpopt $(RUNARGS)
