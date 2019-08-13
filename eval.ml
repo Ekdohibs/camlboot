@@ -25,6 +25,10 @@ let fun_label_shape = function
   | Prim _ -> [ (Nolabel, None) ]
   | _ -> []
 
+let unsupported loc =
+  Format.eprintf "%a: unsupported@."
+    Location.print_loc loc
+
 let rec apply prims vf args =
   let vf, extral, extram =
     match Ptr.get vf with
@@ -261,10 +265,10 @@ and eval_expr prims env expr =
       unit
     | _ -> assert false)
   | Pexp_array l -> ptr @@ Array (Array.of_list (List.map (eval_expr prims env) l))
-  | Pexp_send _ -> assert false
-  | Pexp_new _ -> assert false
-  | Pexp_setinstvar _ -> assert false
-  | Pexp_override _ -> assert false
+  | Pexp_send _ -> unsupported expr.pexp_loc; assert false
+  | Pexp_new _ -> unsupported expr.pexp_loc; assert false
+  | Pexp_setinstvar _ -> unsupported expr.pexp_loc; assert false
+  | Pexp_override _ -> unsupported expr.pexp_loc; assert false
   | Pexp_letexception ({ pext_name = name; pext_kind = k; _ }, e) ->
     let nenv =
       match k with
@@ -302,9 +306,9 @@ and eval_expr prims env expr =
       | module_data -> env_extend false env module_data
     in
     eval_expr prims nenv e
-  | Pexp_object _ -> assert false
+  | Pexp_object _ -> unsupported expr.pexp_loc; assert false
   | Pexp_pack me -> ptr @@ ModVal (eval_module_expr prims env me)
-  | Pexp_extension _ -> assert false
+  | Pexp_extension _ -> unsupported expr.pexp_loc; assert false
 
 and eval_expr_exn prims env expr =
   try Ok (eval_expr prims env expr) with InternalException v -> Error v
@@ -397,20 +401,20 @@ and pattern_bind prims env pat v =
         env
         rp
     | _ -> assert false)
-  | Ppat_array _ -> assert false
+  | Ppat_array _ -> unsupported pat.ppat_loc; assert false
   | Ppat_or (p1, p2) ->
     (try pattern_bind prims env p1 v
      with Match_fail -> pattern_bind prims env p2 v)
   | Ppat_constraint (p, _) -> pattern_bind prims env p v
-  | Ppat_type _ -> assert false
-  | Ppat_lazy _ -> assert false
+  | Ppat_type _ -> unsupported pat.ppat_loc; assert false
+  | Ppat_lazy _ -> unsupported pat.ppat_loc; assert false
   | Ppat_unpack name ->
     (match Ptr.get v with
     | ModVal m -> env_set_module name.txt m env
     | _ -> assert false)
   | Ppat_exception _ -> raise Match_fail
-  | Ppat_extension _ -> assert false
-  | Ppat_open _ -> assert false
+  | Ppat_extension _ -> unsupported pat.ppat_loc; assert false
+  | Ppat_open _ -> unsupported pat.ppat_loc; assert false
 
 and pattern_bind_exn prims env pat v =
   match pat.ppat_desc with
@@ -456,7 +460,7 @@ and eval_module_expr prims env me =
     (match Ptr.get @@ eval_expr prims env e with
     | ModVal m -> m
     | _ -> assert false)
-  | Pmod_extension _ -> assert false
+  | Pmod_extension _ -> unsupported me.pmod_loc; assert false
 
 and eval_functor_data env loc = function
   | Module _ -> failwith "tried to apply a simple module"
@@ -509,17 +513,17 @@ and eval_structitem prims env it =
     | Pext_rebind path -> env_set_constr name.txt (env_get_constr env path) env)
   | Pstr_module { pmb_name = name; pmb_expr = me; _ } ->
      env_set_module name.txt (eval_module_expr prims env me) env
-  | Pstr_recmodule _ -> assert false
+  | Pstr_recmodule _ -> unsupported it.pstr_loc; assert false
   | Pstr_modtype _ -> env
   | Pstr_open { popen_lid = lident; _ } ->
     env_extend false env (env_get_module_data env lident)
-  | Pstr_class _ -> assert false
-  | Pstr_class_type _ -> assert false
+  | Pstr_class _ -> unsupported it.pstr_loc; assert false
+  | Pstr_class_type _ -> unsupported it.pstr_loc; assert false
   | Pstr_include { pincl_mod = me; pincl_loc = loc; _ } ->
     let m = eval_module_expr prims env me in
     env_extend true env (get_module_data env loc m)
   | Pstr_attribute _ -> env
-  | Pstr_extension _ -> assert false
+  | Pstr_extension _ -> unsupported it.pstr_loc; assert false
 
 and eval_structure_ prims env str =
   match str with
