@@ -53,13 +53,13 @@ let prims =
   let prim3 f = prim3 f Runtime_base.wrap_exn in
   let prim4 f = prim4 f Runtime_base.wrap_exn in
   let prim5 f = prim5 f Runtime_base.wrap_exn in
-  [ ("%apply", Fexpr apply);
-    ("%revapply", Fexpr rev_apply);
-    ("%raise", Prim (fun v -> raise (InternalException v)));
-    ("%reraise", Prim (fun v -> reraise (InternalException v)));
-    ("%raise_notrace", Prim (fun v -> raise_notrace (InternalException v)));
-    ("%sequand", Fexpr seq_and);
-    ("%sequor", Fexpr seq_or);
+  [ ("%apply", ptr @@ Fexpr apply);
+    ("%revapply", ptr @@ Fexpr rev_apply);
+    ("%raise", ptr @@ Prim (fun v -> raise (InternalException v)));
+    ("%reraise", ptr @@ Prim (fun v -> reraise (InternalException v)));
+    ("%raise_notrace", ptr @@ Prim (fun v -> raise_notrace (InternalException v)));
+    ("%sequand", ptr @@ Fexpr seq_and);
+    ("%sequor", ptr @@ Fexpr seq_or);
     ("%boolnot", prim1 not unwrap_bool wrap_bool);
     ("%negint", prim1 ( ~- ) unwrap_int wrap_int);
     ("%succint", prim1 succ unwrap_int wrap_int);
@@ -90,8 +90,9 @@ let prims =
     ("%notequal", prim2 value_equal id id (fun x -> wrap_bool (not x)));
     ("%eq", prim2 ( == ) id id wrap_bool);
     ("%noteq", prim2 ( != ) id id wrap_bool);
-    ("%identity", Prim (fun x -> x));
-    ("caml_register_named_value", Prim (fun _ -> Prim (fun _ -> unit)));
+    ("%identity", ptr @@ Prim (fun x -> x));
+    ("caml_register_named_value",
+     ptr @@ Prim (fun _ -> ptr @@ Prim (fun _ -> unit)));
     ( "caml_int64_float_of_bits",
       prim1 Int64.float_of_bits unwrap_int64 wrap_float );
     ( "caml_ml_open_descriptor_out",
@@ -108,7 +109,7 @@ let prims =
     ( "caml_ml_set_channel_name",
       prim2
         (fun v s ->
-          match v with
+          match Ptr.get v with
           | InChannel ic -> set_in_channel_name ic s
           | OutChannel oc -> set_out_channel_name oc s
           | _ -> assert false)
@@ -117,7 +118,7 @@ let prims =
         wrap_unit );
     ( "caml_ml_close_channel",
       prim1
-        (function
+        (onptr @@ function
           | InChannel ic -> close_in ic
           | OutChannel oc -> close_out oc
           | _ -> assert false)
@@ -162,44 +163,45 @@ let prims =
     ("caml_ml_pos_out", prim1 pos_out unwrap_out_channel wrap_int);
     ("caml_ml_pos_in", prim1 pos_in unwrap_in_channel wrap_int);
     ("caml_ml_seek_out", prim2 seek_out unwrap_out_channel unwrap_int wrap_unit);
-    ("%makemutable", Prim (fun v -> Record (SMap.singleton "contents" (ref v))));
+    ("%makemutable",
+     ptr @@ Prim (fun v -> ptr @@ Record (SMap.singleton "contents" (ref v))));
     ( "%field0",
-      Prim
-        (function
+      ptr @@ Prim
+        (onptr @@ function
         | Record r -> !(SMap.find "contents" r)
         | Tuple l -> List.hd l
         | _ -> assert false) );
     ( "%field1",
-      Prim
-        (function
+      ptr @@ Prim
+        (onptr @@ function
         | Tuple l -> List.hd (List.tl l)
         | _ -> assert false) );
     ( "%setfield0",
-      Prim
-        (function
+      ptr @@ Prim
+        (onptr @@ function
         | Record r ->
-          Prim
+          ptr @@ Prim
             (fun v ->
               SMap.find "contents" r := v;
               unit)
         | _ -> assert false) );
     ( "%incr",
-      Prim
-        (function
+      ptr @@ Prim
+        (onptr @@ function
         | Record r ->
           let z = SMap.find "contents" r in
           z := wrap_int (unwrap_int !z + 1);
           unit
         | _ -> assert false) );
     ( "%decr",
-      Prim
-        (function
+      ptr @@ Prim
+        (onptr @@ function
         | Record r ->
           let z = SMap.find "contents" r in
           z := wrap_int (unwrap_int !z - 1);
           unit
         | _ -> assert false) );
-    ("%ignore", Prim (fun _ -> unit));
+    ("%ignore", ptr @@ Prim (fun _ -> unit));
     ("caml_format_int", prim2 format_int unwrap_string unwrap_int wrap_string);
     ( "caml_format_float",
       prim2 format_float unwrap_string unwrap_float wrap_string );
@@ -227,20 +229,23 @@ let prims =
     ("caml_new_lex_engine", new_lex_engine_prim);
     (* Sys *)
     ( "caml_sys_get_argv",
-      Prim
-        (fun _ ->
-          Tuple [ wrap_string ""; Array (Array.map wrap_string Sys.argv) ]) );
+      ptr @@ Prim
+        (fun _ -> ptr @@
+          Tuple [ wrap_string "";
+                  ptr @@ Array (Array.map wrap_string Sys.argv) ]) );
     ( "caml_sys_get_config",
-      Prim (fun _ -> Tuple [ wrap_string "Unix"; Int 0; wrap_bool true ]) );
-    ("%big_endian", Prim (fun _ -> wrap_bool Sys.big_endian));
-    ("%word_size", Prim (fun _ -> Int 64));
-    ("%int_size", Prim (fun _ -> Int 64));
-    ("%max_wosize", Prim (fun _ -> Int 1000000));
-    ("%ostype_unix", Prim (fun _ -> wrap_bool false));
-    ("%ostype_win32", Prim (fun _ -> wrap_bool false));
-    ("%ostype_cygwin", Prim (fun _ -> wrap_bool false));
-    ( "%backend_type",
-      Prim (fun _ -> Constructor ("Other", 0, Some (wrap_string "Interpreter")))
+      ptr @@ Prim
+      (fun _ -> ptr @@ Tuple [ wrap_string "Unix"; wrap_int 0; wrap_bool true ]) );
+    ("%big_endian", ptr @@ Prim (fun _ -> wrap_bool Sys.big_endian));
+    ("%word_size", ptr @@ Prim (fun _ -> ptr @@ Int 64));
+    ("%int_size", ptr @@ Prim (fun _ -> ptr @@ Int 64));
+    ("%max_wosize", ptr @@ Prim (fun _ -> ptr @@ Int 1000000));
+    ("%ostype_unix", ptr @@ Prim (fun _ -> wrap_bool false));
+    ("%ostype_win32", ptr @@ Prim (fun _ -> wrap_bool false));
+    ("%ostype_cygwin", ptr @@ Prim (fun _ -> wrap_bool false));
+    ( "%backend_type", ptr @@
+      Prim (fun _ ->
+          ptr @@ Constructor ("Other", 0, Some (wrap_string "Interpreter")))
     );
     ("caml_sys_getenv", prim1 Sys.getenv unwrap_string wrap_string);
     ("caml_sys_file_exists", prim1 Sys.file_exists unwrap_string wrap_bool);
@@ -257,8 +262,8 @@ let prims =
         unwrap_int
         unwrap_char
         wrap_unit );
-    ("%bytes_to_string", Prim (fun v -> v));
-    ("%bytes_of_string", Prim (fun v -> v));
+    ("%bytes_to_string", ptr @@ Prim (fun v -> v));
+    ("%bytes_of_string", ptr @@ Prim (fun v -> v));
     ("%string_length", prim1 Bytes.length unwrap_bytes wrap_int);
     ("%bytes_length", prim1 Bytes.length unwrap_bytes wrap_int);
     ("%string_safe_get", prim2 Bytes.get unwrap_bytes unwrap_int wrap_char);
@@ -291,8 +296,8 @@ let prims =
         wrap_unit );
     (* Lazy *)
     ( "%lazy_force",
-      Prim
-        (function
+      ptr @@ Prim
+        (onptr @@ function
         | Lz f ->
           let v = !f () in
           (f := fun () -> v);
@@ -366,7 +371,7 @@ let prims =
     (* Weak *)
     ( "caml_weak_create",
       prim1
-        (fun n -> Array.make n (Constructor ("None", 0, None)))
+        (fun n -> Array.make n (ptr @@ Constructor ("None", 0, None)))
         unwrap_int
         wrap_array_id );
     ("caml_weak_get", prim2 (fun a n -> a.(n)) unwrap_array_id unwrap_int id);
@@ -377,7 +382,7 @@ let prims =
     );
     ( "caml_weak_check",
       prim2
-        (fun a n -> a.(n) <> Constructor ("None", 0, None))
+        (fun a n -> Ptr.get a.(n) <> Constructor ("None", 0, None))
         unwrap_array_id
         unwrap_int
         wrap_bool );
@@ -433,7 +438,7 @@ let prims =
     (* Ugly *)
     ( "%obj_size",
       prim1
-        (function
+        (onptr @@ function
           | Array a -> Array.length a + 2
           | _ -> 4)
         id
@@ -441,23 +446,26 @@ let prims =
     ( "caml_obj_block",
       prim2
         (fun tag size ->
-          let block = Array (Array.init size (fun _ -> Int 0)) in
-          Constructor ("", tag, Some block))
+          let block = ptr @@ Array (Array.init size (fun _ -> ptr @@ Int 0)) in
+          ptr @@ Constructor ("", tag, Some block))
         unwrap_int
         unwrap_int
         id );
     ( "%obj_set_field",
       prim3 (fun data idx v ->
-          match data with
-            | Array arr
-            | Constructor(_, _, Some (Array arr)) ->
-                arr.(idx) <- v
-            | _ ->
-               Format.eprintf "obj_set_field (%a).(%d) <- (%a)@."
-                 pp_print_value data
-                 idx
-                 pp_print_value v;
-               assert false
+          let err () =
+            Format.eprintf "obj_set_field (%a).(%d) <- (%a)@."
+              pp_print_value data
+              idx
+              pp_print_value v in
+          match Ptr.get data with
+            | Array arr -> arr.(idx) <- v
+            | Constructor(_, _, Some arg) ->
+               begin match Ptr.get arg with
+                 | Array arr -> arr.(idx) <- v
+                 | _ -> err (); assert false
+               end
+            | _ -> err (); assert false
         )
         id
         unwrap_int

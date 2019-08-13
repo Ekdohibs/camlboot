@@ -8,10 +8,6 @@ let empty_env =
     modules = SMap.empty;
     constructors = SMap.empty }
 
-let set_env env = function
-  | Fun (_, _, _, _, ev) | Function (_, ev) -> ev := env
-  | _ -> assert false
-
 let env_set_value key v env =
   { env with values = SMap.add key (true, v) env.values }
 

@@ -1,68 +1,66 @@
 open Data
 
-let wrap_int n = Int n
+let wrap_int n = ptr @@ Int n
 
-let unwrap_int v =
-  match v with
+let unwrap_int  = onptr @@ function
   | Int n -> n
   | _ -> assert false
 
-let wrap_int64 n = Int64 n
+let wrap_int64 n = ptr @@ Int64 n
 
-let unwrap_int64 v =
-  match v with
+let unwrap_int64 =  onptr @@ function
   | Int64 n -> n
   | _ -> assert false
 
-let wrap_float f = Float f
+let wrap_float f = ptr @@ Float f
 
-let unwrap_float v =
-  match v with
+let unwrap_float = onptr @@ function
   | Float f -> f
   | _ -> assert false
 
 let unwrap_bool = is_true
 
-let wrap_bool b =
+let wrap_bool b = ptr @@
   if b then Constructor ("true", 1, None) else Constructor ("false", 0, None)
 
 let wrap_unit () = unit
 
-let unwrap_unit = function
+let unwrap_unit = onptr @@ function
   | Constructor ("()", _, None) -> ()
   | _ -> assert false
 
-let wrap_bytes s = String s
+let wrap_bytes s = ptr @@ String s
 
-let unwrap_bytes = function
+let unwrap_bytes = onptr @@ function
   | String s -> s
   | _ -> assert false
 
-let wrap_string s = String (Bytes.of_string s)
+let wrap_string s = ptr @@ String (Bytes.of_string s)
 
-let unwrap_string = function
+let unwrap_string = onptr @@ function
   | String s -> Bytes.to_string s
   | _ -> assert false
 
-let wrap_string_unsafe s = String (Bytes.unsafe_of_string s)
+let wrap_string_unsafe s = ptr @@ String (Bytes.unsafe_of_string s)
 
-let unwrap_string_unsafe = function
+let unwrap_string_unsafe = onptr @@ function
   | String s -> Bytes.unsafe_to_string s
   | _ -> assert false
 
-let wrap_char c = Int (int_of_char c)
+let wrap_char c = ptr @@ Int (int_of_char c)
 
-let unwrap_char = function
+let unwrap_char = onptr @@ function
   | Int n -> char_of_int (n land 255)
   | _ -> assert false
 
-let wrap_array wrapf a = Array (Array.map wrapf a)
+let wrap_array wrapf a = ptr @@ Array (Array.map wrapf a)
 
-let unwrap_array unwrapf = function
+let unwrap_array unwrapf = onptr @@ function
   | Array a -> Array.map unwrapf a
   | _ -> assert false
 
-let declare_builtin_constructor name d env = Envir.env_set_constr name d env
+let declare_builtin_constructor name d env =
+  Envir.env_set_constr name d env
 
 let declare_exn name env =
   let d = next_exn_id () in
