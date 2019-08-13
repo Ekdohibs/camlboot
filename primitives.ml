@@ -441,11 +441,28 @@ let prims =
     ( "caml_obj_block",
       prim2
         (fun tag size ->
-          let block = Tuple (List.init size (fun _ -> Int 0)) in
+          let block = Array (Array.init size (fun _ -> Int 0)) in
           Constructor ("", tag, Some block))
         unwrap_int
         unwrap_int
-        id )
+        id );
+    ( "%obj_set_field",
+      prim3 (fun data idx v ->
+          match data with
+            | Array arr
+            | Constructor(_, _, Some (Array arr)) ->
+                arr.(idx) <- v
+            | _ ->
+               Format.eprintf "obj_set_field (%a).(%d) <- (%a)@."
+                 pp_print_value data
+                 idx
+                 pp_print_value v;
+               assert false
+        )
+        id
+        unwrap_int
+        id
+        wrap_unit );
   ]
 
 let prims =
