@@ -218,6 +218,41 @@ module Compiler_files = struct
     "makedepend.ml";
   ]
 
+  let middle_end = List.map (Filename.concat "middle_end") [
+    "base_types/id_types.ml";
+    "base_types/compilation_unit.ml";
+    "base_types/set_of_closures_id.ml";
+    "base_types/symbol.ml";
+    "base_types/variable.ml";
+    "base_types/closure_element.ml";
+    "base_types/closure_id.ml";
+    "base_types/var_within_closure.ml";
+    "base_types/linkage_name.ml";
+    "flambda_utils.ml";
+    "simple_value_approx.ml";
+    "debuginfo.ml";
+  ]
+
+  let asmcomp = List.map (Filename.concat "asmcomp") [
+    "cmx_format.mli";
+    "clambda.ml";
+    "cmm.ml";
+    "export_info.ml";
+    "compilenv.ml";
+    "import_approx.ml";
+
+    "debug/reg_with_debug_info.ml";
+    "debug/reg_availability_set.ml";
+
+    "x86_ast.mli";
+    "x86_proc.ml";
+
+    (* backend-specific files *)
+    "arch.ml";
+    "reg.ml";
+    "mach.ml";
+    "proc.ml";
+  ]
 
   let bytegen = List.map (Filename.concat "bytecomp") [
     "instruct.ml";
@@ -233,6 +268,12 @@ module Compiler_files = struct
     "errors.ml";
     "compile.ml";
     "main.ml";
+  ]
+
+  let native_main = List.map (Filename.concat "driver") [
+    "opterrors.ml";
+    "optcompile.ml";
+    "optmain.ml";
   ]
 end
 
@@ -251,8 +292,24 @@ let bytecode_compiler_units =
   @ Compiler_files.bytecode_main
   )
 
+let native_compiler_units =
+  let compiler_source_path = compiler_source_path () in
+  let fullpath file = Filename.concat compiler_source_path file in
+  List.map (fun modfile -> stdlib_flag, fullpath modfile)
+  ( Compiler_files.utils
+  @ Compiler_files.parsing
+  @ Compiler_files.pure_typing
+  @ Compiler_files.lambda
+  @ Compiler_files.more_typing
+  @ Compiler_files.bytecomp
+  @ Compiler_files.driver
+  @ Compiler_files.middle_end
+  @ Compiler_files.asmcomp
+  @ Compiler_files.native_main
+  )
+
 (* let _ = load_rec_units stdlib_env [stdlib_flag, "test.ml"] *)
 let () =
-  try ignore (load_rec_units stdlib_env bytecode_compiler_units)
+  try ignore (load_rec_units stdlib_env native_compiler_units)
   with InternalException e ->
     Format.eprintf "Code raised exception: %a@." pp_print_value e
