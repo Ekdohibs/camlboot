@@ -109,6 +109,7 @@ $(BOOT)/ocamlc: copy
 
 .PHONY: run
 
+RUNARGS ?=
 run: interpopt
 # we defined a symbolic link ./ocaml-src to point to the compiler sources,
 # at a version copmatible with the OCAMLINTERP_STDLIB_PATH version.
@@ -117,4 +118,4 @@ run: interpopt
 	  OCAMLINTERP_DEBUG=true \
 	  OCAMLINTERP_STDLIB_PATH=$(shell ocamlc -where) \
 	  OCAMLINTERP_SRC_PATH=./ocaml-src \
-	  ./interpopt
+	  ./interpopt $(RUNARGS)
