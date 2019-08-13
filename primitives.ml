@@ -347,6 +347,8 @@ let prims =
     ("%array_length", prim1 Array.length unwrap_array_id wrap_int);
     ( "caml_array_sub",
       prim3 Array.sub unwrap_array_id unwrap_int unwrap_int wrap_array_id );
+    ( "caml_array_concat",
+      prim1 Array.concat (unwrap_list unwrap_array_id) wrap_array_id );
     ("%array_safe_get", prim2 Array.get unwrap_array_id unwrap_int id);
     ("%array_unsafe_get", prim2 Array.unsafe_get unwrap_array_id unwrap_int id);
     ("%array_safe_set", prim3 Array.set unwrap_array_id unwrap_int id wrap_unit);
