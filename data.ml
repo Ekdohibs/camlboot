@@ -45,7 +45,9 @@ let onptr f = fun v -> f (Ptr.get v)
 type value = value_ Ptr.t
 and value_ =
   | Int of int
+  | Int32 of int32
   | Int64 of int64
+  | Nativeint of nativeint
   | Fun of arg_label * expression option * pattern * expression * env
   | Function of case list * env
   | String of bytes
@@ -138,7 +140,9 @@ let rec is_true = onptr @@ function
 
 let rec pp_print_value ff = onptr @@ function
   | Int n -> Format.fprintf ff "%d" n
-  | Int64 n -> Format.fprintf ff "%Ld" n
+  | Int32 n -> Format.fprintf ff "%ldl" n
+  | Int64 n -> Format.fprintf ff "%LdL" n
+  | Nativeint n -> Format.fprintf ff "%ndn" n
   | Fexpr _ -> Format.fprintf ff "<fexpr>"
   | Fun _ | Function _ | Prim _ | Lz _ | Fun_with_extra_args _ ->
     Format.fprintf ff "<function>"
@@ -212,7 +216,8 @@ let read_caml_int s =
 let value_of_constant const = ptr @@ match const with
   | Pconst_integer (s, (None | Some 'l')) ->
     Int (Int64.to_int (read_caml_int s))
-  | Pconst_integer (s, Some ('L' | 'n')) -> Int64 (read_caml_int s)
+  | Pconst_integer (s, Some 'L') -> Int64 (read_caml_int s)
+  | Pconst_integer (s, Some 'n') -> Nativeint (Int64.to_nativeint (read_caml_int s))
   | Pconst_integer (_s, Some c) ->
     Format.eprintf "Unsupported suffix %c@." c;
     assert false

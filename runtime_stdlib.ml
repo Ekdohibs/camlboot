@@ -65,6 +65,7 @@ external open_descriptor_out
 
 external open_descriptor_in : int -> in_channel = "caml_ml_open_descriptor_in"
 external open_desc : string -> open_flag list -> int -> int = "caml_sys_open"
+external close_desc: int -> unit = "caml_sys_close"
 
 external set_out_channel_name
   :  out_channel ->
@@ -113,7 +114,9 @@ external random_seed : unit -> int array = "caml_sys_random_seed"
 
 let rec seeded_hash_param meaningful total seed = onptr @@ function
   | Int n -> Hashtbl.seeded_hash_param meaningful total seed n
+  | Int32 n -> Hashtbl.seeded_hash_param meaningful total seed n
   | Int64 n -> Hashtbl.seeded_hash_param meaningful total seed n
+  | Nativeint n -> Hashtbl.seeded_hash_param meaningful total seed n
   | Float f -> Hashtbl.seeded_hash_param meaningful total seed f
   | Tuple _l -> 0
   | String s ->

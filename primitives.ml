@@ -106,6 +106,11 @@ let prims =
         (unwrap_list unwrap_open_flag)
         unwrap_int
         wrap_int );
+    ( "caml_sys_close",
+      prim1
+        close_desc
+        unwrap_int
+        wrap_unit );
     ( "caml_ml_set_channel_name",
       prim2
         (fun v s ->
@@ -319,29 +324,30 @@ let prims =
     ("%int64_asr", prim2 Int64.shift_right unwrap_int64 unwrap_int wrap_int64);
     ("%int64_of_int", prim1 Int64.of_int unwrap_int wrap_int64);
     ("%int64_to_int", prim1 Int64.to_int unwrap_int64 wrap_int);
+    ("%int64_of_nativeint", prim1 Int64.of_nativeint unwrap_nativeint wrap_int64);
     ("caml_int64_of_string", prim1 Int64.of_string unwrap_string wrap_int64);
     (* Int32 *)
     ("caml_int32_of_string", prim1 int_of_string unwrap_string wrap_int);
     ("%int32_neg", prim1 ( ~- ) unwrap_int wrap_int);
     (* Nativeint *)
-    ("%nativeint_neg", prim1 Int64.neg unwrap_int64 wrap_int64);
-    ("%nativeint_add", prim2 Int64.add unwrap_int64 unwrap_int64 wrap_int64);
-    ("%nativeint_sub", prim2 Int64.sub unwrap_int64 unwrap_int64 wrap_int64);
-    ("%nativeint_mul", prim2 Int64.mul unwrap_int64 unwrap_int64 wrap_int64);
-    ("%nativeint_div", prim2 Int64.div unwrap_int64 unwrap_int64 wrap_int64);
-    ("%nativeint_mod", prim2 Int64.rem unwrap_int64 unwrap_int64 wrap_int64);
-    ("%nativeint_and", prim2 Int64.logand unwrap_int64 unwrap_int64 wrap_int64);
-    ("%nativeint_or", prim2 Int64.logor unwrap_int64 unwrap_int64 wrap_int64);
-    ("%nativeint_xor", prim2 Int64.logxor unwrap_int64 unwrap_int64 wrap_int64);
+    ("%nativeint_neg", prim1 Nativeint.neg unwrap_nativeint wrap_nativeint);
+    ("%nativeint_add", prim2 Nativeint.add unwrap_nativeint unwrap_nativeint wrap_nativeint);
+    ("%nativeint_sub", prim2 Nativeint.sub unwrap_nativeint unwrap_nativeint wrap_nativeint);
+    ("%nativeint_mul", prim2 Nativeint.mul unwrap_nativeint unwrap_nativeint wrap_nativeint);
+    ("%nativeint_div", prim2 Nativeint.div unwrap_nativeint unwrap_nativeint wrap_nativeint);
+    ("%nativeint_mod", prim2 Nativeint.rem unwrap_nativeint unwrap_nativeint wrap_nativeint);
+    ("%nativeint_and", prim2 Nativeint.logand unwrap_nativeint unwrap_nativeint wrap_nativeint);
+    ("%nativeint_or", prim2 Nativeint.logor unwrap_nativeint unwrap_nativeint wrap_nativeint);
+    ("%nativeint_xor", prim2 Nativeint.logxor unwrap_nativeint unwrap_nativeint wrap_nativeint);
     ( "%nativeint_lsl",
-      prim2 Int64.shift_left unwrap_int64 unwrap_int wrap_int64 );
+      prim2 Nativeint.shift_left unwrap_nativeint unwrap_int wrap_nativeint );
     ( "%nativeint_lsr",
-      prim2 Int64.shift_right_logical unwrap_int64 unwrap_int wrap_int64 );
+      prim2 Nativeint.shift_right_logical unwrap_nativeint unwrap_int wrap_nativeint );
     ( "%nativeint_asr",
-      prim2 Int64.shift_right unwrap_int64 unwrap_int wrap_int64 );
-    ("%nativeint_of_int", prim1 Int64.of_int unwrap_int wrap_int64);
-    ("%nativeint_to_int", prim1 Int64.to_int unwrap_int64 wrap_int);
-    ("caml_nativeint_of_string", prim1 Int64.of_string unwrap_string wrap_int64);
+      prim2 Nativeint.shift_right unwrap_nativeint unwrap_int wrap_nativeint );
+    ("%nativeint_of_int", prim1 Nativeint.of_int unwrap_int wrap_nativeint);
+    ("%nativeint_to_int", prim1 Nativeint.to_int unwrap_nativeint wrap_int);
+    ("caml_nativeint_of_string", prim1 Nativeint.of_string unwrap_string wrap_nativeint);
     (* Array *)
     ("caml_make_vect", prim2 Array.make unwrap_int id wrap_array_id);
     ("%array_length", prim1 Array.length unwrap_array_id wrap_int);

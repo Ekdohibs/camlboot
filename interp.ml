@@ -246,12 +246,23 @@ module Compiler_files = struct
 
     "x86_ast.mli";
     "x86_proc.ml";
+    "x86_dsl.ml";
 
     (* backend-specific files *)
     "arch.ml";
     "reg.ml";
     "mach.ml";
     "proc.ml";
+    "selection.ml";
+
+    "closure.ml";
+    "strmatch.ml";
+    "cmmgen.ml";
+    "linearize.ml";
+    "branch_relaxation.ml";
+    "emitaux.ml";
+    "emit.ml";
+    "asmgen.ml";
   ]
 
   let bytegen = List.map (Filename.concat "bytecomp") [

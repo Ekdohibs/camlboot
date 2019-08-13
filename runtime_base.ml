@@ -1,19 +1,29 @@
 open Data
 
 let wrap_int n = ptr @@ Int n
-
 let unwrap_int  = onptr @@ function
   | Int n -> n
   | _ -> assert false
 
-let wrap_int64 n = ptr @@ Int64 n
+let wrap_int32 n = ptr @@ Int32 n
+let unwrap_int32 = onptr @@ function
+  | Int32 n -> n
+  | _ -> assert false
 
-let unwrap_int64 =  onptr @@ function
+let wrap_int64 n = ptr @@ Int64 n
+let unwrap_int64 = onptr @@ function
   | Int64 n -> n
   | _ -> assert false
 
-let wrap_float f = ptr @@ Float f
+let wrap_nativeint n = ptr @@ Nativeint n
+let unwrap_nativeint = onptr @@ function
+  | Nativeint n -> n
+  | v ->
+     Format.eprintf "unwrap_nativeint %a@."
+       pp_print_value (Ptr.create v);
+     assert false
 
+let wrap_float f = ptr @@ Float f
 let unwrap_float = onptr @@ function
   | Float f -> f
   | _ -> assert false
