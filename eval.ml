@@ -317,11 +317,11 @@ and eval_expr prims env expr =
   | Pexp_newtype (_, e) -> eval_expr prims env e
   | Pexp_open (_, lident, e) ->
     let nenv =
-      match env_get_module env lident with
-      | Module (venv, menv, cenv) -> env_extend false env (venv, menv, cenv)
-      | Functor _ -> assert false
-      | exception Not_found -> env
-      (* Module might be a .mli only *)
+      match env_get_module_data env lident with
+      | exception Not_found ->
+        (* Module might be a .mli only *)
+        env
+      | module_data -> env_extend false env module_data
     in
     eval_expr prims nenv e
   | Pexp_object _ -> assert false
@@ -455,23 +455,26 @@ and eval_match prims env cl arg =
 and eval_module_expr prims env me =
   match me.pmod_desc with
   | Pmod_ident lident -> env_get_module env lident
-  | Pmod_structure str -> make_module (eval_structure None prims env str)
+  | Pmod_structure str -> Module (make_module_data (eval_structure prims env str))
   | Pmod_functor ({ txt = arg_name; _ }, _, e) -> Functor (arg_name, e, env)
   | Pmod_constraint (me, _) -> eval_module_expr prims env me
   | Pmod_apply (me1, me2) ->
     let m1 = eval_module_expr prims env me1 in
     let m2 = eval_module_expr prims env me2 in
-    (match m1 with
-    | Module _ -> assert false
-    | Functor (arg_name, body, env) ->
-      eval_module_expr prims (env_set_module arg_name m2 env) body)
+    let arg_name, body, env = eval_functor_data env me.pmod_loc m1 in
+    eval_module_expr prims (env_set_module arg_name m2 env) body
   | Pmod_unpack e ->
     (match eval_expr prims env e with
     | ModVal m -> m
     | _ -> assert false)
   | Pmod_extension _ -> assert false
 
-and eval_structitem init_ignored prims env it =
+and eval_functor_data env loc = function
+  | Module _ -> failwith "tried to apply a simple module"
+  | Unit _ -> failwith "tried to apply a simple module unit"
+  | Functor (arg_name, body, env) -> (arg_name, body, env)
+
+and eval_structitem prims env it =
   match it.pstr_desc with
   | Pstr_eval (e, _) ->
     let v = eval_expr prims env e in
@@ -523,42 +526,27 @@ and eval_structitem init_ignored prims env it =
       env_set_constr name.txt d env
     | Pext_rebind path -> env_set_constr name.txt (env_get_constr env path) env)
   | Pstr_module { pmb_name = name; pmb_expr = me; _ } ->
-    (match init_ignored with
-    | None -> env_set_module name.txt (eval_module_expr prims env me) env
-    | Some ign ->
-      (try env_set_module name.txt (eval_module_expr prims env me) env
-       with Not_found ->
-         assert (
-           match me.pmod_desc with
-           | Pmod_ident { txt = Longident.Lident s; _ } -> s = name.txt
-           | _ -> false);
-         ign := SSet.add name.txt !ign;
-         env))
+     env_set_module name.txt (eval_module_expr prims env me) env
   | Pstr_recmodule _ -> assert false
   | Pstr_modtype _ -> env
   | Pstr_open { popen_lid = lident; _ } ->
-    (match env_get_module env lident with
-    | Module (venv, menv, cenv) -> env_extend false env (venv, menv, cenv)
-    | Functor _ -> assert false)
+    env_extend false env (env_get_module_data env lident)
   | Pstr_class _ -> assert false
   | Pstr_class_type _ -> assert false
-  | Pstr_include { pincl_mod = me; _ } ->
+  | Pstr_include { pincl_mod = me; pincl_loc = loc; _ } ->
     let m = eval_module_expr prims env me in
-    (match m with
-    | Module (venv, menv, cenv) -> env_extend true env (venv, menv, cenv)
-    | Functor _ -> assert false)
+    env_extend true env (get_module_data env loc m)
   | Pstr_attribute _ -> env
   | Pstr_extension _ -> assert false
 
-and eval_structure_ init_ignored prims env str =
+and eval_structure_ prims env str =
   match str with
   | [] -> env
   | it :: str ->
     eval_structure_
-      init_ignored
       prims
-      (eval_structitem init_ignored prims env it)
+      (eval_structitem prims env it)
       str
 
-and eval_structure init_ignored prims env str =
-  eval_structure_ init_ignored prims (prevent_export env) str
+and eval_structure prims env str =
+  eval_structure_ prims (prevent_export env) str

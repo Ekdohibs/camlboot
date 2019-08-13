@@ -11,17 +11,10 @@ let parse filename =
   close_in inc;
   parsed
 
-let module_name_of_path filename =
-  filename
-  |> Filename.basename
-  |> Filename.remove_extension
-  |> String.capitalize_ascii
-
-
 let stdlib_flag = [`Open (Longident.Lident "Stdlib")]
 let no_stdlib_flag = []
 
-let stdlib_modules =
+let stdlib_units =
   let stdlib_path = stdlib_path () in
   let fullpath file = Filename.concat stdlib_path file in
   (no_stdlib_flag, fullpath "stdlib.ml")
@@ -87,32 +80,28 @@ let eval_env_flag ~loc env flag =
      let module_ident = Location.mkloc module_ident loc in
      env_extend false env (env_get_module_data env module_ident)
 
-let load_rec_modules env flags_and_modules =
+let load_rec_units env flags_and_units =
+  let unit_paths = List.map snd flags_and_units in
+  let env = List.fold_left declare_unit env unit_paths in
   List.fold_left
-    (fun global_env (flags, modpath) ->
-      let modname = module_name_of_path modpath in
-      if debug then Format.eprintf "Loading %s from %s@." modname modpath;
+    (fun global_env (flags, unit_path) ->
+      let module_name = module_name_of_unit_path unit_path in
+      if debug then Format.eprintf "Loading %s from %s@." module_name unit_path;
       let module_contents =
-        let loc = Location.in_file modpath in
+        let loc = Location.in_file unit_path in
         let local_env = List.fold_left (eval_env_flag ~loc) global_env flags in
-        let ign =
-          (* 'ignore' is a temporary hack to handle our lack of support
-             for -no-alias-deps in wrapper modules, this should go away soon. *)
-          if modname <> "Stdlib" then None else Some (ref SSet.empty)
-        in
-        eval_structure ign
-          Primitives.prims local_env (parse modpath)
+        eval_structure Primitives.prims local_env (parse unit_path)
       in
-      env_set_module modname (make_module module_contents) global_env)
+      define_unit global_env unit_path (make_module_data module_contents))
     env
-    flags_and_modules
+    flags_and_units
 
 let stdlib_env =
   let env = Runtime_base.initial_env in
-  let env = load_rec_modules env stdlib_modules in
+  let env = load_rec_units env stdlib_units in
   env
 
-let compiler_modules =
+let compiler_units =
   let compiler_source_path = compiler_source_path () in
   let fullpath file = Filename.concat compiler_source_path file in
   List.map (fun modfile -> stdlib_flag, fullpath modfile)
@@ -231,8 +220,8 @@ let compiler_modules =
     "driver/main.ml"
   ]
 
-(* let _ = load_rec_modules stdlib_env [stdlib_flag, "test.ml"] *)
+(* let _ = load_rec_units stdlib_env [stdlib_flag, "test.ml"] *)
 let () =
-  try ignore (load_rec_modules stdlib_env compiler_modules)
+  try ignore (load_rec_units stdlib_env compiler_units)
   with InternalException e ->
     Format.eprintf "Code raised exception: %a@." pp_print_value e

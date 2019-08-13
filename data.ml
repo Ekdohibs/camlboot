@@ -4,6 +4,12 @@ open Parsetree
 module SMap = Map.Make (String)
 module SSet = Set.Make (String)
 
+type module_unit_id = Path of string
+module UStore = Map.Make(struct
+  type t = module_unit_id
+  let compare (Path a) (Path b) = String.compare a b
+end)
+
 type value =
   | Int of int
   | Int64 of int64
@@ -26,20 +32,67 @@ type value =
 and fexpr = Location.t -> (arg_label * expression) list -> expression option
 
 and 'a env_map = (bool * 'a) SMap.t
-
 (* the boolean tracks whether the value should be exported in the
    output environment *)
+
 and env =
   { values : value env_map;
+    units : module_unit_state UStore.t;
     modules : mdl env_map;
     constructors : int env_map
     }
 
-and mdl_data = value SMap.t * mdl SMap.t * int SMap.t
-
 and mdl =
-  | Module of mdl_data
+  | Unit of module_unit_id
+  | Module of mdl_val
   | Functor of string * module_expr * env
+
+and mdl_val = value SMap.t * mdl SMap.t * int SMap.t
+
+and module_unit_state =
+  | Not_initialized_yet
+  | Initialized of mdl_val
+(* OCaml calls a "compilation unit" the language object corresponding
+   to a group of files of the same name with different extensions
+   (foo.ml, foo.mli in source form, foo.cm* in compiled form). From
+   the language those are also visible implicitly as modules (Foo),
+   but they are not exactly identical to modules as well -- in what
+   sort of dependencies are allowed between units, in particular.
+
+   Instead of "compilation units" which sounds strange in an
+   interpreter, we just call these "module units" or "units".
+
+   In our value representation, some of the modules in the environment
+   may in fact be units (a unit is a category of module), and
+   initialized units contain module data, like a normal module.
+
+   The -no-alias-deps flag allows an OCaml source fragment to create
+   an alias to a unit that has not been evaluated yet -- allowing
+   cyclic dependencies where each cycle contains a "weak" edge that is
+   just a module-alias occurrence
+
+   From an operational point of view, this corresponds to allowing
+   implicit recursive definition of units, where all units can
+   alias/reference each other (even units evaluated later), but a unit
+   may only dereference (access the module data of) a unit evaluated
+   earlier.
+
+   To support these recursive definitions, we give backpatching
+   semantics to unit definitions: all the units that are to be
+   evaluated are loaded at once in the environment as "non
+   initialized" units, and after each unit is evaluated to some module
+   data we mutate its slot in the environment, which makes
+   non-aliasing uses possible for further units.
+
+   We implement this by having a special store of units indexed by
+   "unit identifiers", behaving like a mutable store with
+   a single-write semantics in each location: first a unit is
+   "declared" (it is given a valid unit id, which can be used to
+   reference the corresponding module, but its definition in the store
+   is [Not_yet_initialized]), then the module is "defined" exactly
+   one, and its definition in the unit store is replaced by a module
+   value.
+*)
 
 (* TODO: include arg restriction *)
 
@@ -86,6 +139,9 @@ let rec pp_print_value ff = function
          ~pp_sep:(fun ff () -> Format.fprintf ff "; ")
          pp_print_value)
       (Array.to_list a)
+
+let pp_print_unit_id ppf (Path s) =
+  Format.fprintf ppf "%S" s
 
 let read_caml_int s =
   let c = ref 0L in
@@ -247,10 +303,29 @@ let next_exn_id =
     !last_exn_id
 
 exception No_module_data
-
-let get_module_data loc = function
+let get_module_data env loc = function
   | Module data -> data
   | Functor _ ->
-     Format.eprintf "%a@.Tried to access the components of a functor"
+     Format.eprintf "%a@.Tried to access the components of a functor@."
        Location.print_loc loc;
      raise No_module_data
+  | Unit id ->
+     begin match UStore.find id env.units with
+       | Initialized data -> data
+       | exception Not_found ->
+          Format.eprintf "%a@.Tried to access the undeclared unit %a@."
+           Location.print_loc loc
+           pp_print_unit_id id;
+          raise No_module_data
+       | Not_initialized_yet ->
+          Format.eprintf "%a@.unit %a is not yet initialized@."
+            Location.print_loc loc
+            pp_print_unit_id id;
+          raise No_module_data
+     end
+
+let module_name_of_unit_path path =
+  path
+  |> Filename.basename
+  |> Filename.remove_extension
+  |> String.capitalize_ascii
