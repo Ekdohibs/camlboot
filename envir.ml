@@ -6,7 +6,8 @@ let empty_env =
   { values = SMap.empty;
     units = UStore.empty;
     modules = SMap.empty;
-    constructors = SMap.empty }
+    constructors = SMap.empty;
+  }
 
 let env_set_value key v env =
   { env with values = SMap.add key (true, v) env.values }
@@ -17,14 +18,14 @@ let env_set_module key m env =
 let env_set_constr key c env =
   { env with constructors = SMap.add key (true, c) env.constructors }
 
-let env_extend exported env1 (ve, me, ce) =
+let env_extend exported env1 data =
   let merge s1 s2 =
     SMap.fold (fun k v env -> SMap.add k (exported, v) env) s2 s1
   in
-  { values = merge env1.values ve;
-    units = env1.units;
-    modules = merge env1.modules me;
-    constructors = merge env1.constructors ce
+  { units = env1.units;
+    values = merge env1.values data.mod_values;
+    modules = merge env1.modules data.mod_modules;
+    constructors = merge env1.constructors data.mod_constructors;
   }
 
 let declare_unit env unit_path =
@@ -62,14 +63,18 @@ let make_module_data env =
   let exported env_map =
     env_map |> SMap.filter (fun _ (b, _) -> b) |> SMap.map snd
   in
-  (exported env.values, exported env.modules, exported env.constructors)
+  {
+    mod_values = exported env.values;
+    mod_modules = exported env.modules;
+    mod_constructors = exported env.constructors;
+  }
 
 let prevent_export env =
   let prevent env_map = SMap.map (fun (_, x) -> (false, x)) env_map in
   { values = prevent env.values;
     units = env.units;
     modules = prevent env.modules;
-    constructors = prevent env.constructors
+    constructors = prevent env.constructors;
   }
 
 let decompose get_module_data env { txt = lident; loc } =

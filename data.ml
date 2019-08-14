@@ -71,18 +71,22 @@ and 'a env_map = (bool * 'a) SMap.t
    output environment *)
 
 and env =
-  { values : value env_map;
-    units : module_unit_state UStore.t;
+  { units : module_unit_state UStore.t;
+    values : value env_map;
     modules : mdl env_map;
-    constructors : int env_map
-    }
+    constructors : int env_map;
+  }
 
 and mdl =
   | Unit of module_unit_id
   | Module of mdl_val
   | Functor of string * module_expr * env
 
-and mdl_val = value SMap.t * mdl SMap.t * int SMap.t
+and mdl_val = {
+    mod_values : value SMap.t;
+    mod_modules : mdl SMap.t;
+    mod_constructors : int SMap.t;
+  }
 
 and module_unit_state =
   | Not_initialized_yet
