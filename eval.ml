@@ -25,6 +25,10 @@ let fun_label_shape = function
   | Prim _ -> [ (Nolabel, None) ]
   | _ -> []
 
+let mismatch loc =
+  Format.eprintf "%a: mismatch@."
+    Location.print_loc loc
+
 let unsupported loc =
   Format.eprintf "%a: unsupported@."
     Location.print_loc loc
@@ -244,7 +248,7 @@ and eval_expr prims env expr =
       | Some e ->
         (match Ptr.get @@ eval_expr prims env e with
         | Record r -> r
-        | _ -> assert false)
+        | _ -> mismatch expr.pexp_loc; assert false)
     in
     ptr @@ Record
       (List.fold_left
@@ -255,7 +259,7 @@ and eval_expr prims env expr =
   | Pexp_field (e, { txt = lident; _ }) ->
     (match Ptr.get @@ eval_expr prims env e with
     | Record r -> !(SMap.find (lident_name lident) r)
-    | _ -> assert false)
+    | _ -> mismatch expr.pexp_loc; assert false)
   | Pexp_setfield (e1, { txt = lident; _ }, e2) ->
     let v1 = eval_expr prims env e1 in
     let v2 = eval_expr prims env e2 in
@@ -263,7 +267,7 @@ and eval_expr prims env expr =
     | Record r ->
       SMap.find (lident_name lident) r := v2;
       unit
-    | _ -> assert false)
+    | _ -> mismatch expr.pexp_loc; assert false)
   | Pexp_array l -> ptr @@ Array (Array.of_list (List.map (eval_expr prims env) l))
   | Pexp_send _ -> unsupported expr.pexp_loc; assert false
   | Pexp_new _ -> unsupported expr.pexp_loc; assert false
@@ -348,7 +352,7 @@ and pattern_bind prims env pat v =
     | Tuple vl ->
       assert (List.length l = List.length vl);
       List.fold_left2 (pattern_bind prims) env l vl
-    | _ -> assert false)
+    | _ -> mismatch pat.ppat_loc; assert false)
   | Ppat_construct (c, p) ->
     let cn = lident_name c.txt in
     let dn = env_get_constr env c in
@@ -359,12 +363,12 @@ and pattern_bind prims env pat v =
       (match (p, e) with
       | None, None -> env
       | Some p, Some e -> pattern_bind prims env p e
-      | _ -> assert false)
+      | _ -> mismatch pat.ppat_loc; assert false)
     | String s ->
       assert (lident_name c.txt = "Format");
       let p =
         match p with
-        | None -> assert false
+        | None -> mismatch pat.ppat_loc; assert false
         | Some p -> p
       in
       let fmt_ebb_of_string =
@@ -377,7 +381,7 @@ and pattern_bind prims env pat v =
       let fmt =
         match Ptr.get fmt with
         | Constructor ("Fmt_EBB", _, Some fmt) -> fmt
-        | _ -> assert false
+        | _ -> mismatch pat.ppat_loc; assert false
       in
       pattern_bind prims env p (ptr @@ Tuple [ fmt; v ])
     | _ ->
@@ -390,8 +394,8 @@ and pattern_bind prims env pat v =
       (match (p, e) with
       | None, None -> env
       | Some p, Some e -> pattern_bind prims env p e
-      | _ -> assert false)
-    | _ -> assert false)
+      | _ -> mismatch pat.ppat_loc; assert false)
+    | _ -> mismatch pat.ppat_loc; assert false)
   | Ppat_record (rp, _) ->
     (match Ptr.get v with
     | Record r ->
@@ -400,7 +404,7 @@ and pattern_bind prims env pat v =
           pattern_bind prims env p !(SMap.find (lident_name lident.txt) r))
         env
         rp
-    | _ -> assert false)
+    | _ -> mismatch pat.ppat_loc; assert false)
   | Ppat_array _ -> unsupported pat.ppat_loc; assert false
   | Ppat_or (p1, p2) ->
     (try pattern_bind prims env p1 v
@@ -411,7 +415,7 @@ and pattern_bind prims env pat v =
   | Ppat_unpack name ->
     (match Ptr.get v with
     | ModVal m -> env_set_module name.txt m env
-    | _ -> assert false)
+    | _ -> mismatch pat.ppat_loc; assert false)
   | Ppat_exception _ -> raise Match_fail
   | Ppat_extension _ -> unsupported pat.ppat_loc; assert false
   | Ppat_open _ -> unsupported pat.ppat_loc; assert false
@@ -459,7 +463,7 @@ and eval_module_expr prims env me =
   | Pmod_unpack e ->
     (match Ptr.get @@ eval_expr prims env e with
     | ModVal m -> m
-    | _ -> assert false)
+    | _ -> mismatch me.pmod_loc; assert false)
   | Pmod_extension _ -> unsupported me.pmod_loc; assert false
 
 and eval_functor_data env loc = function
