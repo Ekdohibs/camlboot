@@ -122,9 +122,11 @@ let rec seeded_hash_param meaningful total seed = onptr @@ function
   | String s ->
     Hashtbl.seeded_hash_param meaningful total seed (Bytes.to_string s)
   | Constructor (c, _, _v) -> Hashtbl.seeded_hash_param meaningful total seed c
+  | Object _ -> 0
   | Array _a -> 0
   | Record _r -> 0
-  | Fexpr _ | Fun _ | Function _ | InChannel _ | OutChannel _ | Prim _ | Lz _
+  | Fexpr _ | Fun _ | Function _
+  | InChannel _ | OutChannel _ | Prim _ | Lz _
   | ModVal _ | Fun_with_extra_args _ ->
     assert false
 

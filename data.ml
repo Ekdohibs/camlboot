@@ -63,6 +63,7 @@ and value_ =
   | Lz of (unit -> value) ref
   | Array of value array
   | Fun_with_extra_args of value * value list * (arg_label * value) SMap.t
+  | Object of object_value
 
 and fexpr = Location.t -> (arg_label * expression) list -> expression option
 
@@ -72,10 +73,18 @@ and 'a env_map = (bool * 'a) SMap.t
 
 and env =
   { units : module_unit_state UStore.t;
-    values : value env_map;
+    values : value_or_lvar env_map;
     modules : mdl env_map;
     constructors : int env_map;
-  }
+    classes : class_def env_map;
+    current_object : object_value option;
+    }
+
+and value_or_lvar =
+  | Value of value
+  | Instance_variable of object_value * string
+
+and class_def = class_expr * env ref
 
 and mdl =
   | Unit of module_unit_id
@@ -86,6 +95,7 @@ and mdl_val = {
     mod_values : value SMap.t;
     mod_modules : mdl SMap.t;
     mod_constructors : int SMap.t;
+    mod_classes : class_def SMap.t;
   }
 
 and module_unit_state =
@@ -133,6 +143,54 @@ and module_unit_state =
    value.
 *)
 
+and object_value = {
+  env: env;
+  self: pattern;
+  initializers: expr_in_object list;
+  named_parents: object_value SMap.t;
+  variables: value ref SMap.t;
+  methods: expr_in_object SMap.t;
+
+  parent_view: string list;
+  (* When evaluating a call super#foo, it would be wrong to just
+     resolve the call in a parent object bound to the 'super'
+     identifier in the current environment. Indeed, when then
+     executing the code of super#foo, self-calls of the form self#bar
+     would be resolved in the parent object 'super', instead of in the
+     current object 'self', which is the intended late-binding
+     semantics.
+
+     To solve this issue, we bind 'super' not to the parent object,
+     but to the *current* object "viewed as its parent 'super'"; the
+     'parent_view' field stores that view (in general there may be
+     several levels of super-calls nesting, so it's a list). The view
+     affects how methods are resolved -- their code is looked up
+     in the right parent object.
+   *)
+}
+and source_object =
+  | Current_object
+  | Parent of object_value
+and expr_in_object = {
+  source : source_object;
+
+  instance_variable_scope : SSet.t;
+  (** The scoping of instance variables within object declarations
+      makes them in the scope of only some of the expressions in methods
+      and initializers; an "instance variable scope" remembers the set
+      of instance variables that are in scope of a given expression). *)
+
+  named_parents_scope : SSet.t;
+  (** Similarly, it may be that only some of the 'inherit foo as x' fields
+      scope over the current piece of code, so we keep a set of visible parents.
+
+      Remark: the self-pattern is always at the beginning of a class
+      or object declaration, so it is in the scope of all
+      expressions. *)
+
+  expr : expression;
+}
+
 exception InternalException of value
 
 let unit = ptr @@ Constructor ("()", 0, None)
@@ -178,6 +236,7 @@ let rec pp_print_value ff = onptr @@ function
          ~pp_sep:(fun ff () -> Format.fprintf ff "; ")
          pp_print_value)
       (Array.to_list a)
+  | Object _ -> Format.fprintf ff "<object>"
 
 let pp_print_unit_id ppf (Path s) =
   Format.fprintf ppf "%S" s
@@ -244,6 +303,7 @@ let rec value_compare v1 v2 = match Ptr.get v1, Ptr.get v2 with
     failwith "tried to compare channel"
   | Fexpr _, _ | _, Fexpr _ -> failwith "tried to compare fexpr"
   | Prim _, _ | _, Prim _ -> failwith "tried to compare prim"
+  | Object _, _ | _, Object _ -> failwith "tried to compare object"
 
   | Int n1, Int n2 -> compare n1 n2
   | Int _, _ -> assert false

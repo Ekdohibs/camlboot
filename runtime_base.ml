@@ -36,7 +36,7 @@ let wrap_bool b = ptr @@
 let wrap_unit () = unit
 
 let unwrap_unit = onptr @@ function
-  | Constructor ("()", _, None) -> ()
+  | Constructor ("()", 0, None) -> ()
   | _ -> assert false
 
 let wrap_bytes s = ptr @@ String s

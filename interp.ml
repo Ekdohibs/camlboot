@@ -236,23 +236,27 @@ module Compiler_files = struct
   let asmcomp = List.map (Filename.concat "asmcomp") [
     "cmx_format.mli";
     "clambda.ml";
-    "cmm.ml";
     "export_info.ml";
     "compilenv.ml";
     "import_approx.ml";
 
     "debug/reg_with_debug_info.ml";
     "debug/reg_availability_set.ml";
+    "debug/available_regs.ml";
 
     "x86_ast.mli";
     "x86_proc.ml";
     "x86_dsl.ml";
+    "x86_gas.ml";
 
-    (* backend-specific files *)
     "arch.ml";
+    "cmm.ml";
     "reg.ml";
     "mach.ml";
     "proc.ml";
+
+    "selectgen.ml";
+    "spacetime_profiling.ml";
     "selection.ml";
 
     "closure.ml";
@@ -262,6 +266,19 @@ module Compiler_files = struct
     "branch_relaxation.ml";
     "emitaux.ml";
     "emit.ml";
+    "comballoc.ml";
+    "CSEgen.ml";
+    "CSE.ml";
+    "liveness.ml";
+    "deadcode.ml";
+    "split.ml";
+    "spill.ml";
+    "interf.ml";
+    "coloring.ml";
+    "reloadgen.ml";
+    "reload.ml";
+    "schedgen.ml";
+    "scheduling.ml";
     "asmgen.ml";
   ]
 

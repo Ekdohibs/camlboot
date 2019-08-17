@@ -7,10 +7,19 @@ let empty_env =
     units = UStore.empty;
     modules = SMap.empty;
     constructors = SMap.empty;
+    classes = SMap.empty;
+    current_object = None;
   }
 
 let env_set_value key v env =
-  { env with values = SMap.add key (true, v) env.values }
+  { env with values = SMap.add key (true, Value v) env.values }
+
+let env_set_lvar lvar obj env =
+  { env with values =
+               SMap.add lvar (false, Instance_variable (obj, lvar)) env.values }
+
+let env_set_instance_variable key obj v env =
+  { env with values = SMap.add key (true, Instance_variable (obj, v)) env.values }
 
 let env_set_module key m env =
   { env with modules = SMap.add key (true, m) env.modules }
@@ -18,14 +27,20 @@ let env_set_module key m env =
 let env_set_constr key c env =
   { env with constructors = SMap.add key (true, c) env.constructors }
 
+let env_set_class key cl env =
+  { env with classes = SMap.add key (true, cl) env.classes }
+
 let env_extend exported env1 data =
   let merge s1 s2 =
     SMap.fold (fun k v env -> SMap.add k (exported, v) env) s2 s1
   in
+  let values s = SMap.map (fun v -> Value v) s in
   { units = env1.units;
-    values = merge env1.values data.mod_values;
+    values = merge env1.values (values data.mod_values);
     modules = merge env1.modules data.mod_modules;
     constructors = merge env1.constructors data.mod_constructors;
+    classes = merge env1.classes data.mod_classes;
+    current_object = env1.current_object;
   }
 
 let declare_unit env unit_path =
@@ -63,10 +78,19 @@ let make_module_data env =
   let exported env_map =
     env_map |> SMap.filter (fun _ (b, _) -> b) |> SMap.map snd
   in
+  let values env_map =
+    env_map
+    |> SMap.filter (fun _ -> function
+          | Value v -> true
+          | Instance_variable _ -> false)
+    |> SMap.map (function
+           | Value v -> v
+           | Instance_variable _ -> assert false) in
   {
-    mod_values = exported env.values;
+    mod_values = values (exported env.values);
     mod_modules = exported env.modules;
     mod_constructors = exported env.constructors;
+    mod_classes = exported env.classes;
   }
 
 let prevent_export env =
@@ -75,6 +99,8 @@ let prevent_export env =
     units = env.units;
     modules = prevent env.modules;
     constructors = prevent env.constructors;
+    classes = prevent env.classes;
+    current_object = env.current_object;
   }
 
 let decompose get_module_data env { txt = lident; loc } =
@@ -103,13 +129,17 @@ let rec env_get_module env ({ loc; _ } as lid) =
   let env_name, env, id = decompose env_get_module_data env lid in
   lookup "module" ~env_name env.modules { txt = id; loc }
 
-and env_get_value env ({ loc; _ } as lid) =
+and env_get_value_or_lvar env ({ loc; _ } as lid) =
   let env_name, env, id = decompose env_get_module_data env lid in
   lookup "value" ~env_name env.values { txt = id; loc }
 
 and env_get_constr env ({ loc; _ } as lid) =
   let env_name, env, id = decompose env_get_module_data env lid in
   lookup "constructor" ~env_name env.constructors { txt = id; loc }
+
+and env_get_class env ({ loc; _ } as lid) =
+  let env_name, env, id = decompose env_get_module_data env lid in
+  lookup "class" ~env_name env.classes { txt = id; loc }
 
 and env_get_module_data env ({ loc; _ } as id) =
   get_module_data env loc (env_get_module env id)
