@@ -229,54 +229,6 @@ let value_of_constant const = ptr @@ match const with
   | Pconst_float (f, _) -> Float (float_of_string f)
   | Pconst_string (s, _) -> String (Bytes.of_string s)
 
-let rec value_equal v1 v2 = match Ptr.get v1, Ptr.get v2 with
-  | Fun _, _
-  | Function _, _
-  | _, Fun _
-  | _, Function _
-  | Lz _, _
-  | _, Lz _
-  | Fun_with_extra_args _, _
-  | _, Fun_with_extra_args _ ->
-    failwith "tried to compare function"
-  | ModVal _, _ | _, ModVal _ -> failwith "tried to compare module"
-  | InChannel _, _ | OutChannel _, _ | _, InChannel _ | _, OutChannel _ ->
-    failwith "tried to compare channel"
-  | Fexpr _, _ | _, Fexpr _ -> failwith "tried to compare fexpr"
-  | Int n1, Int n2 -> n1 = n2
-  | Int64 n1, Int64 n2 -> n1 = n2
-  | Float f1, Float f2 -> f1 = f2
-  | String s1, String s2 -> s1 = s2
-  | Constructor (c1, d1, None), Constructor (c2, d2, None) ->
-    d1 = d2 && c1 = c2
-  | Constructor (c1, d1, Some v1), Constructor (c2, d2, Some v2) ->
-    d1 = d2 && c1 = c2 && value_equal v1 v2
-  | Constructor _, Constructor _ -> false
-  | Tuple l1, Tuple l2 ->
-    assert (List.length l1 = List.length l2);
-    List.for_all2 value_equal l1 l2
-  | Record r1, Record r2 ->
-    SMap.for_all
-      (fun _ b -> b)
-      (SMap.merge
-         (fun _ u v ->
-           match (u, v) with
-           | None, None -> None
-           | None, Some _ | Some _, None -> Some false
-           | Some u, Some v -> Some (value_equal !u !v))
-         r1
-         r2)
-  | Array a1, Array a2 ->
-    if Array.length a1 <> Array.length a2
-    then false
-    else (
-      let ok = ref true in
-      for i = 0 to Array.length a1 - 1 do
-        ok := !ok && value_equal a1.(i) a2.(i)
-      done;
-      !ok)
-  | _ -> false
-
 let rec value_compare v1 v2 = match Ptr.get v1, Ptr.get v2 with
   | Fun _, _
   | Function _, _
@@ -290,10 +242,27 @@ let rec value_compare v1 v2 = match Ptr.get v1, Ptr.get v2 with
   | ModVal _, _ | _, ModVal _ -> failwith "tried to compare module"
   | InChannel _, _ | OutChannel _, _ | _, InChannel _ | _, OutChannel _ ->
     failwith "tried to compare channel"
+  | Fexpr _, _ | _, Fexpr _ -> failwith "tried to compare fexpr"
+  | Prim _, _ | _, Prim _ -> failwith "tried to compare prim"
+
   | Int n1, Int n2 -> compare n1 n2
+  | Int _, _ -> assert false
+
+  | Int32 n1, Int32 n2 -> compare n1 n2
+  | Int32 _, _ -> assert false
+
   | Int64 n1, Int64 n2 -> compare n1 n2
+  | Int64 _, _ -> assert false
+
+  | Nativeint n1, Nativeint n2 -> compare n1 n2
+  | Nativeint _, _ -> assert false
+
   | Float f1, Float f2 -> compare f1 f2
+  | Float _, _ -> assert false
+
   | String s1, String s2 -> compare s1 s2
+  | String _, _ -> assert false
+
   | Constructor (_, _, None), Constructor (_, _, Some _) -> -1
   | Constructor (_, _, Some _), Constructor (_, _, None) -> 1
   | Constructor (c1, d1, vv1), Constructor (c2, d2, vv2) ->
@@ -305,6 +274,8 @@ let rec value_compare v1 v2 = match Ptr.get v1, Ptr.get v2 with
       | None, None -> 0
       | Some v1, Some v2 -> value_compare v1 v2
       | _ -> assert false)
+  | Constructor _, _ -> assert false
+
   | Tuple l1, Tuple l2 ->
     assert (List.length l1 = List.length l2);
     List.fold_left2
@@ -312,6 +283,8 @@ let rec value_compare v1 v2 = match Ptr.get v1, Ptr.get v2 with
       0
       l1
       l2
+  | Tuple _, _ -> assert false
+
   | Record r1, Record r2 ->
     let map1 =
       SMap.merge
@@ -327,7 +300,23 @@ let rec value_compare v1 v2 = match Ptr.get v1, Ptr.get v2 with
       (fun _ (u, v) cur -> if cur = 0 then value_compare u v else cur)
       map1
       0
-  | _ -> assert false
+  | Record _, _ -> assert false
+
+  | Array a1, Array a2 ->
+    let comp_len = compare (Array.length a1) (Array.length a2) in
+    if comp_len <> 0 then comp_len
+    else (
+      let cmp = ref 0 in
+      let count = ref 0 in
+      while !cmp = 0 && !count < Array.length a1 do
+        cmp := value_compare a1.(!count) a2.(!count);
+        incr count
+      done;
+      !cmp
+    )
+  | Array _, _ -> assert false
+
+let value_equal v1 v2 = value_compare v1 v2 = 0
 
 let value_lt v1 v2 = value_compare v1 v2 < 0
 let value_le v1 v2 = value_compare v1 v2 <= 0
