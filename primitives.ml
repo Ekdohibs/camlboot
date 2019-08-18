@@ -111,6 +111,8 @@ let prims =
         close_desc
         unwrap_int
         wrap_unit );
+    ( "caml_sys_system_command",
+      prim1 caml_sys_system_command unwrap_string wrap_int  );
     ( "caml_ml_set_channel_name",
       prim2
         (fun v s ->
@@ -210,6 +212,12 @@ let prims =
     ("caml_format_int", prim2 format_int unwrap_string unwrap_int wrap_string);
     ( "caml_format_float",
       prim2 format_float unwrap_string unwrap_float wrap_string );
+    ("caml_int32_format",
+     prim2 caml_int32_format unwrap_string unwrap_int32 wrap_string);
+    ("caml_int64_format",
+     prim2 caml_int64_format unwrap_string unwrap_int64 wrap_string);
+    ("caml_nativeint_format",
+     prim2 caml_nativeint_format unwrap_string unwrap_nativeint wrap_string);
     ("caml_int_of_string", prim1 int_of_string unwrap_string wrap_int);
     ( "caml_output_value",
       prim3
@@ -227,6 +235,12 @@ let prims =
         id
         (unwrap_list unwrap_marshal_flag)
         wrap_int );
+    ( "caml_output_value_to_string",
+      prim2
+        caml_output_value_to_string
+        id
+        (unwrap_list unwrap_marshal_flag)
+        wrap_string );
     ("caml_input_value", prim1 input_value unwrap_in_channel id);
     ("caml_sys_exit", prim1 exit unwrap_int wrap_unit);
     ("caml_parse_engine", parse_engine_prim);

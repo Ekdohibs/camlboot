@@ -24,17 +24,17 @@ let stdlib_units =
     "callback.ml";
     "complex.ml";
     "float.ml";
+    "char.ml";
+    "bytes.ml";
+    "string.ml";
+    "bytesLabels.ml";
+    "stringLabels.ml";
     "seq.ml";
     "list.ml";
     "listLabels.ml";
     "set.ml";
     "map.ml";
-    "char.ml";
     "uchar.ml";
-    "bytes.ml";
-    "bytesLabels.ml";
-    "string.ml";
-    "stringLabels.ml";
     "buffer.ml";
     "stream.ml";
     "genlex.ml";
@@ -280,6 +280,8 @@ module Compiler_files = struct
     "schedgen.ml";
     "scheduling.ml";
     "asmgen.ml";
+
+    "asmlink.ml";
   ]
 
   let bytegen = List.map (Filename.concat "bytecomp") [

@@ -144,5 +144,14 @@ external marshal_to_channel
   unit
   = "caml_output_value"
 
+external caml_output_value_to_string : 'a -> Marshal.extern_flags list -> string
+  = "caml_output_value_to_string"
+
 external append_prim : 'a array -> 'a array -> 'a array = "caml_array_append"
 external input_scan_line : in_channel -> int = "caml_ml_input_scan_line"
+
+external caml_int32_format : string -> int32 -> string = "caml_int32_format"
+external caml_int64_format : string -> int64 -> string = "caml_int64_format"
+external caml_nativeint_format : string -> nativeint -> string = "caml_nativeint_format"
+
+external caml_sys_system_command: string -> int = "caml_sys_system_command"
