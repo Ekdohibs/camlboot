@@ -338,8 +338,28 @@ let native_compiler_units =
   @ Compiler_files.native_main
   )
 
+let run_ocamlc () =
+  ignore (load_rec_units stdlib_env bytecode_compiler_units)
+
+let run_ocamlopt () =
+  ignore (load_rec_units stdlib_env native_compiler_units)
+
+let run_files () =
+  let rev_files = ref [] in
+  let anon_fun file = rev_files := file :: !rev_files in
+  Arg.parse [] anon_fun "";
+  let files = List.rev !rev_files in
+  files
+  |> List.map (fun file -> stdlib_flag, file)
+  |> load_rec_units stdlib_env
+  |> ignore
+
 (* let _ = load_rec_units stdlib_env [stdlib_flag, "test.ml"] *)
 let () =
-  try ignore (load_rec_units stdlib_env native_compiler_units)
+  try match Conf.command () with
+        | Some Conf.Ocamlc -> run_ocamlc ()
+        | Some Conf.Ocamlopt -> run_ocamlopt ()
+        | Some Conf.Files -> run_files ()
+        | None -> run_ocamlc ()
   with InternalException e ->
     Format.eprintf "Code raised exception: %a@." pp_print_value e

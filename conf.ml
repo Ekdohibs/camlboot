@@ -35,3 +35,19 @@ let compiler_source_path () =
     failwith
       "Error: please set an OCAMLINTERP_SRC_PATH variable pointing to a \
        checkout of the OCaml compiler distribution sources"
+
+type command =
+| Ocamlc
+| Ocamlopt
+| Files
+
+let command () =
+  match Sys.getenv_opt "OCAMLINTERP_COMMAND" with
+    | Some "ocamlc" -> Some Ocamlc
+    | Some "ocamlopt" -> Some Ocamlopt
+    | Some "files" -> Some Files
+    | Some cmd ->
+       Format.eprintf "Unexpected OCAMLINTERP_COMMAND command %S, \
+                       expected ocamlc|ocamlopt|files.@."
+        cmd; exit 1
+    | None -> None
