@@ -169,8 +169,7 @@ and eval_expr prims env expr =
       let loc = expr.pexp_loc in
       (match fexpr loc l with
       | None ->
-        if debug
-        then Format.eprintf "%a@.F-expr failure.@." Location.print_loc loc;
+        Format.eprintf "%a@.F-expr failure.@." Location.print_loc loc;
         assert false
       | Some expr -> eval_expr prims env expr)
     | func_value ->
@@ -761,7 +760,7 @@ and eval_structitem prims env it =
       with Not_found ->
         ptr @@ Prim
           (fun _ ->
-            if debug then Format.eprintf "%a@." Location.print_loc loc;
+            Format.eprintf "%a@." Location.print_loc loc;
             failwith ("Unimplemented primitive " ^ prim_name))
     in
     env_set_value name prim env

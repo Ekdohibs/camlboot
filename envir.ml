@@ -114,15 +114,13 @@ let decompose get_module_data env { txt = lident; loc } =
 let lookup object_name ~env_name object_env { txt = str; loc } =
   try snd (SMap.find str object_env)
   with Not_found ->
-    if debug
-    then
-      Format.eprintf
-        "%a@.%s not found in %s: %s@."
-        Location.print_loc
-        loc
-        (String.capitalize_ascii object_name)
-        env_name
-        str;
+    Format.eprintf
+      "%a@.%s not found in %s: %s@."
+      Location.print_loc
+      loc
+      (String.capitalize_ascii object_name)
+      env_name
+      str;
     raise Not_found
 
 let rec env_get_module env ({ loc; _ } as lid) =
