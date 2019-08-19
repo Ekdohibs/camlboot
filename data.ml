@@ -71,14 +71,13 @@ and 'a env_map = (bool * 'a) SMap.t
 (* the boolean tracks whether the value should be exported in the
    output environment *)
 
-and env =
-  { units : module_unit_state UStore.t;
-    values : value_or_lvar env_map;
-    modules : mdl env_map;
-    constructors : int env_map;
-    classes : class_def env_map;
-    current_object : object_value option;
-    }
+and env = {
+  values : value_or_lvar env_map;
+  modules : mdl env_map;
+  constructors : int env_map;
+  classes : class_def env_map;
+  current_object : object_value option;
+}
 
 and value_or_lvar =
   | Value of value
@@ -87,7 +86,7 @@ and value_or_lvar =
 and class_def = class_expr * env ref
 
 and mdl =
-  | Unit of module_unit_id
+  | Unit of module_unit_id * module_unit_state ref
   | Module of mdl_val
   | Functor of string * module_expr * env
 
@@ -128,19 +127,10 @@ and module_unit_state =
 
    To support these recursive definitions, we give backpatching
    semantics to unit definitions: all the units that are to be
-   evaluated are loaded at once in the environment as "non
-   initialized" units, and after each unit is evaluated to some module
-   data we mutate its slot in the environment, which makes
+   evaluated are loaded at once in the environment as (references to)
+   "non initialized" units, and after each unit is evaluated to some
+   module data we mutate its state in the environment, which makes
    non-aliasing uses possible for further units.
-
-   We implement this by having a special store of units indexed by
-   "unit identifiers", behaving like a mutable store with
-   a single-write semantics in each location: first a unit is
-   "declared" (it is given a valid unit id, which can be used to
-   reference the corresponding module, but its definition in the store
-   is [Not_yet_initialized]), then the module is "defined" exactly
-   one, and its definition in the unit store is replaced by a module
-   value.
 *)
 
 and object_value = {
@@ -396,18 +386,18 @@ let get_module_data env loc = function
      Format.eprintf "%a@.Tried to access the components of a functor@."
        Location.print_loc loc;
      raise No_module_data
-  | Unit id ->
-     begin match UStore.find id env.units with
+  | Unit (unit_id, unit_state) ->
+     begin match !unit_state with
        | Initialized data -> data
        | exception Not_found ->
           Format.eprintf "%a@.Tried to access the undeclared unit %a@."
            Location.print_loc loc
-           pp_print_unit_id id;
+           pp_print_unit_id unit_id;
           raise No_module_data
        | Not_initialized_yet ->
           Format.eprintf "%a@.unit %a is not yet initialized@."
             Location.print_loc loc
-            pp_print_unit_id id;
+            pp_print_unit_id unit_id;
           raise No_module_data
      end
 

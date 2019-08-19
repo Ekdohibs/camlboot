@@ -4,7 +4,6 @@ open Data
 
 let empty_env =
   { values = SMap.empty;
-    units = UStore.empty;
     modules = SMap.empty;
     constructors = SMap.empty;
     classes = SMap.empty;
@@ -35,8 +34,7 @@ let env_extend exported env1 data =
     SMap.fold (fun k v env -> SMap.add k (exported, v) env) s2 s1
   in
   let values s = SMap.map (fun v -> Value v) s in
-  { units = env1.units;
-    values = merge env1.values (values data.mod_values);
+  { values = merge env1.values (values data.mod_values);
     modules = merge env1.modules data.mod_modules;
     constructors = merge env1.constructors data.mod_constructors;
     classes = merge env1.classes data.mod_classes;
@@ -44,32 +42,33 @@ let env_extend exported env1 data =
   }
 
 let declare_unit env unit_path =
-  let unit_id = Path unit_path in
-  if UStore.mem unit_id env.units then
-    Format.kasprintf invalid_arg
-      "declare_unit: The module unit %a is already declared"
-      pp_print_unit_id unit_id;
-  let unit_state = Not_initialized_yet in
-  let units = UStore.add unit_id unit_state env.units in
   let module_name = module_name_of_unit_path unit_path in
-  let modules = SMap.add module_name (true, Unit unit_id) env.modules in
-  { env with units; modules; }
+  let unit_id = Path unit_path in
+  let unit_mod = Unit (unit_id, ref Not_initialized_yet) in
+  let modules = SMap.add module_name (true, unit_mod) env.modules in
+  { env with modules; }
 
 let define_unit env unit_path mdl =
-  let unit_id = Path unit_path in
-  match UStore.find unit_id env.units with
+  let module_name = module_name_of_unit_path unit_path in
+  match SMap.find module_name env.modules with
     | exception Not_found ->
        Format.kasprintf invalid_arg
-         "define_unit: The module unit %a is not yet declared"
-         pp_print_unit_id unit_id
-    | Initialized _ ->
+         "define_unit: The module unit %s is not yet declared"
+         module_name
+    | (_, (Module _ | Functor _)) ->
        Format.kasprintf invalid_arg
-         "define_unit: The module unit %a is already defined"
-         pp_print_unit_id unit_id
-    | Not_initialized_yet ->
-       let unit_state = Initialized mdl in
-       let units = UStore.add unit_id unit_state env.units in
-       { env with units }
+         "define_unit: The module %s is not a unit"
+         module_name
+    | (_, Unit (unit_id, unit_state)) ->
+       begin match !unit_state with
+         | Initialized _ ->
+            Format.kasprintf invalid_arg
+              "define_unit: The module unit %a is already defined"
+              pp_print_unit_id unit_id
+         | Not_initialized_yet ->
+            unit_state := Initialized mdl;
+            env
+       end
 
 let env_of_module_data mod_data =
   env_extend true empty_env mod_data
@@ -96,7 +95,6 @@ let make_module_data env =
 let prevent_export env =
   let prevent env_map = SMap.map (fun (_, x) -> (false, x)) env_map in
   { values = prevent env.values;
-    units = env.units;
     modules = prevent env.modules;
     constructors = prevent env.constructors;
     classes = prevent env.classes;
