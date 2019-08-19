@@ -1,0 +1,15 @@
+Test cases are written by creating a new directory, containing a list
+of files to be interpreted, and a file called `files` that lists those
+file, in the order in which they should be interpreted/linked.
+
+runtests.sh runs the tests -- if passed a directory name as argument,
+it runs only that test, otherwise it tests everything.
+
+checktests.sh checks that the tests are correct by running them using
+the official OCaml implementation rather than the interpreted. If your
+test fails this check, the test is quite probably wrong.
+
+There is no explicit support for reporting success/failure of a test;
+you should write your tests so that success is doing nothing, and
+failure fails visibly -- for example, using `assert` to check for the
+expected result or fail loudly.
