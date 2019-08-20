@@ -219,6 +219,7 @@ let prims =
     ("caml_nativeint_format",
      prim2 caml_nativeint_format unwrap_string unwrap_nativeint wrap_string);
     ("caml_int_of_string", prim1 int_of_string unwrap_string wrap_int);
+    ("caml_float_of_string", prim1 float_of_string unwrap_string wrap_float);
     ( "caml_output_value",
       prim3
         marshal_to_channel
