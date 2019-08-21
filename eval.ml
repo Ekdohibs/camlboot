@@ -438,7 +438,13 @@ and pattern_bind prims env pat v =
         env
         rp
     | _ -> mismatch pat.ppat_loc; assert false)
-  | Ppat_array _ -> unsupported pat.ppat_loc; assert false
+  | Ppat_array ps ->
+     (match Ptr.get v with
+        | Array vs ->
+           let vs = Array.to_list vs in
+           if List.length ps <> List.length vs then raise Match_fail;
+           List.fold_left2 (fun env p v -> pattern_bind prims env p v) env ps vs
+        | _ -> mismatch pat.ppat_loc; assert false)
   | Ppat_or (p1, p2) ->
     (try pattern_bind prims env p1 v
      with Match_fail -> pattern_bind prims env p2 v)
