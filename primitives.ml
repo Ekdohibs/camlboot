@@ -339,7 +339,10 @@ let prims =
     ("%int64_asr", prim2 Int64.shift_right unwrap_int64 unwrap_int wrap_int64);
     ("%int64_of_int", prim1 Int64.of_int unwrap_int wrap_int64);
     ("%int64_to_int", prim1 Int64.to_int unwrap_int64 wrap_int);
+    ("%int64_to_int32", prim1 Int64.to_int32 unwrap_int64 wrap_int32);
+    ("%int64_of_int32", prim1 Int64.of_int32 unwrap_int32 wrap_int64);
     ("%int64_of_nativeint", prim1 Int64.of_nativeint unwrap_nativeint wrap_int64);
+    ("%int64_to_nativeint", prim1 Int64.to_nativeint unwrap_int64 wrap_nativeint);
     ("caml_int64_of_string", prim1 Int64.of_string unwrap_string wrap_int64);
     (* Int32 *)
     ("caml_int32_of_string", prim1 int_of_string unwrap_string wrap_int);
