@@ -499,6 +499,32 @@
     (put-u8 port (logand #xff (ash c -8)))
     (put-u8 port (logand #xff c))
     ))
+(define (put-u16-le port c)
+  (begin
+    (put-u8 port (logand #xff c))
+    (put-u8 port (logand #xff (ash c -8)))
+    ))
+(define (put-u32-le port c)
+  (begin
+    (put-u8 port (logand #xff c))
+    (put-u8 port (logand #xff (ash c -8)))
+    (put-u8 port (logand #xff (ash c -16)))
+    (put-u8 port (logand #xff (ash c -24)))
+    ))
+(define (put-u64-le port c)
+  (begin
+    (put-u8 port (logand #xff c))
+    (put-u8 port (logand #xff (ash c -8)))
+    (put-u8 port (logand #xff (ash c -16)))
+    (put-u8 port (logand #xff (ash c -24)))
+    (put-u8 port (logand #xff (ash c -32)))
+    (put-u8 port (logand #xff (ash c -40)))
+    (put-u8 port (logand #xff (ash c -48)))
+    (put-u8 port (logand #xff (ash c -56)))
+    ))
+
+(define (put-string port s)
+  (string-for-each (lambda (c) (put-u8 port (char->integer c))) s))
 
 (define (bytecode-put-u8 c)
   (begin
@@ -524,6 +550,31 @@
     (put-u64 bytecode-output-port c)
     (set-cdr! bytecode-current-section (+ 8 (cdr bytecode-current-section)))
     ))
+(define (bytecode-put-u16-le c)
+  (begin
+    (if (null? bytecode-current-section) (errorp "bytecode-write-char called before bytecode-begin-section"))
+    (put-u16-le bytecode-output-port c)
+    (set-cdr! bytecode-current-section (+ 2 (cdr bytecode-current-section)))
+    ))
+(define (bytecode-put-u32-le c)
+  (begin
+    (if (null? bytecode-current-section) (errorp "bytecode-write-char called before bytecode-begin-section"))
+    (put-u32-le bytecode-output-port c)
+    (set-cdr! bytecode-current-section (+ 4 (cdr bytecode-current-section)))
+    ))
+(define (bytecode-put-u64-le c)
+  (begin
+    (if (null? bytecode-current-section) (errorp "bytecode-write-char called before bytecode-begin-section"))
+    (put-u64-le bytecode-output-port c)
+    (set-cdr! bytecode-current-section (+ 8 (cdr bytecode-current-section)))
+    ))
+(define (bytecode-put-string s)
+  (begin
+    (if (null? bytecode-current-section) (errorp "bytecode-write-char called before bytecode-begin-section"))
+    (put-string bytecode-output-port s)
+    (set-cdr! bytecode-current-section (+ (string-length s) (cdr bytecode-current-section)))
+    ))
+
 
 (define (bytecode-reserve len)
   (begin
@@ -557,12 +608,12 @@
     (for-each (lambda (section) (begin
         (assert (string? (car section)))
         (assert (= (string-length (car section)) 4))
-        (display (car section) bytecode-output-port)
         (assert (number? (cdr section)))
+        (put-string bytecode-output-port (car section))
         (put-u32 bytecode-output-port (cdr section))
      )) (reverse bytecode-sections))
     (put-u32 bytecode-output-port (length bytecode-sections))
-    (display "Caml1999X025" bytecode-output-port)
+    (put-string bytecode-output-port "Caml1999X025")
     (close-output-port bytecode-output-port)
     (set! bytecode-output-port #nil)
     ))
@@ -584,7 +635,7 @@
                     ((string? obj) (begin
                                      (bytecode-put-u8 #x15)
                                      (bytecode-put-u64 (string-length obj))
-                                     (string-for-each (lambda (c) (bytecode-put-u8 (char->integer c))) obj)
+                                     (bytecode-put-string obj)
                                      (set! len (+ len (+ 9 (string-length obj))))
                                      (set! size64 (+ size64 (+ 1 (ash (+ (string-length obj) 8) -3))))
                                      ))
@@ -615,8 +666,24 @@
 (display (ml-parser (lambda () (token errorp)) errorp))
 (bytecode-open-output "testbyte")
 (bytecode-begin-section "CODE")
-(bytecode-put-u32 143) ; STOP
+(bytecode-put-u32-le 103) (bytecode-put-u32-le 1) ; CONSTINT(1)
+(bytecode-put-u32-le 93) (bytecode-put-u32-le 0) ; C_CALL1(0)
+(bytecode-put-u32-le 9) ; PUSH
+(bytecode-put-u32-le 103) (bytecode-put-u32-le 13) ; CONSTINT(13)
+(bytecode-put-u32-le 9) ; PUSH
+(bytecode-put-u32-le 103) (bytecode-put-u32-le 0) ; CONSTINT(0)
+(bytecode-put-u32-le 9) ; PUSH
+(bytecode-put-u32-le 53) (bytecode-put-u32-le 0) ; GETGLOBAL(0)
+(bytecode-put-u32-le 9) ; PUSH
+(bytecode-put-u32-le 8) (bytecode-put-u32-le 3) ; ACC(3)
+(bytecode-put-u32-le 96) (bytecode-put-u32-le 1) ; C_CALL4(1)
+(bytecode-put-u32-le 8) (bytecode-put-u32-le 0) ; ACC(0)
+(bytecode-put-u32-le 93) (bytecode-put-u32-le 2) ; C_CALL1(2)
+(bytecode-put-u32-le 143) ; STOP
 (bytecode-begin-section "PRIM")
+(bytecode-put-string "caml_ml_open_descriptor_out") (bytecode-put-u8 0)
+(bytecode-put-string "caml_ml_output") (bytecode-put-u8 0)
+(bytecode-put-string "caml_ml_flush") (bytecode-put-u8 0)
 (bytecode-begin-section "DATA")
 (bytecode-write-globals (list "Hello, world!"))
 (bytecode-close-output)
