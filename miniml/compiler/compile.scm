@@ -1,4 +1,4 @@
-(use-modules (system base lalr) (srfi srfi-1) (rnrs base) (ice-9 binary-ports))
+(use-modules (system base lalr) (srfi srfi-1) (rnrs base) (ice-9 binary-ports) (ice-9 vlist))
 
 (define ml-parser
   (lalr-parser
@@ -54,7 +54,7 @@
      (EXCEPTION constr_decl) : (list 'MException (car $2) (cdr $2))
      (OPEN longident_uident) : (list 'MOpen $2)
      (MODULE UIDENT EQ STRUCT list_semidefinition END) : (list 'MStruct $2 $5)
-     (EXTERNAL LIDENT COLON type_ignore EQ STRING) : (list 'MExternal $2 $6))
+     (EXTERNAL LIDENT COLON type_count_arrows EQ STRING) : (list 'MExternal $2 $4 $6))
 
    (type_ands
     ( ) : #nil
@@ -66,6 +66,7 @@
     (LPAREN type_ignore RPAREN LIDENT) : $4)
 
    (typedef
+    (type_name_with_args) : (cons $1 (list 'IRebind))
     (type_name_with_args EQ separated_nonempty_list_bar_constr_decl) : (cons $1 (list 'ISum $3))
     (type_name_with_args EQ BAR separated_nonempty_list_bar_constr_decl) : (cons $1 (list 'ISum $4))
     (type_name_with_args EQ LBRACE separated_semi_opt_field_decl RBRACE) : (cons $1 (list 'IRecord $4))
@@ -126,6 +127,13 @@
     (longident_lident type_count_stars) : $2
     (QUOTE type_count_stars) : $2
     (LPAREN type_ignore RPAREN type_count_stars) : $4)
+
+   (type_count_arrows
+    ( ) : 0
+    (MINUSGT type_count_arrows) : (+ 1 $2)
+    (longident_lident type_count_arrows) : $2
+    (QUOTE type_count_arrows) : $2
+    (LPAREN type_ignore RPAREN type_count_arrows) : $4)
 
    (constant
     (STRING) : (list 'CString $1)
@@ -192,10 +200,10 @@
     (LBRACKBAR RBRACKBAR) : (list 'EVar (list 'Ldot (list 'Lident "Array") "empty_array"))
     (BANG simple_expr) : (list 'EApply (list 'Lident "ref_get") (cons (cons $2 (list 'Nolabel)) #nil))
     (simple_expr DOT LPAREN expr RPAREN) :
-        (list 'Eapply (list 'Lident "array_get")
+        (list 'EApply (list 'Lident "array_get")
               (cons (cons $1 (list 'Nolabel)) (cons (cons $4 (list 'Nolabel)) #nil)))
     (simple_expr DOT LBRACK expr RBRACK) :
-        (list 'Eapply (list 'Lident "string_get")
+        (list 'EApply (list 'Lident "string_get")
               (cons (cons $1 (list 'Nolabel)) (cons (cons $4 (list 'Nolabel)) #nil))))
 
    (labelled_simple_expr
@@ -224,34 +232,34 @@
     (IF expr THEN expr) : (list 'EIf $1 $3 (list 'EConstant (list 'CUnit)))
     (expr SEMICOLON expr) : (list 'EChain $1 $3)
     (expr EQ expr) :
-      (list 'Eapply (list 'Lident "eq")
+      (list 'EApply (list 'Lident "eq")
             (cons (cons $1 (list 'Nolabel)) (cons (cons $3 (list 'Nolabel)) #nil)))
     (expr LTGT expr) :
-      (list 'Eapply (list 'Lident "neq")
+      (list 'EApply (list 'Lident "neq")
             (cons (cons $1 (list 'Nolabel)) (cons (cons $3 (list 'Nolabel)) #nil)))
     (expr LT expr) :
-      (list 'Eapply (list 'Lident "lessthan")
+      (list 'EApply (list 'Lident "lessthan")
             (cons (cons $1 (list 'Nolabel)) (cons (cons $3 (list 'Nolabel)) #nil)))
     (expr GT expr) :
-      (list 'Eapply (list 'Lident "lessthan")
+      (list 'EApply (list 'Lident "lessthan")
             (cons (cons $3 (list 'Nolabel)) (cons (cons $1 (list 'Nolabel)) #nil)))
     (expr LTEQ expr) :
-      (list 'Eapply (list 'Lident "lessequal")
+      (list 'EApply (list 'Lident "lessequal")
             (cons (cons $1 (list 'Nolabel)) (cons (cons $3 (list 'Nolabel)) #nil)))
     (expr GTEQ expr) :
-      (list 'Eapply (list 'Lident "lessequal")
+      (list 'EApply (list 'Lident "lessequal")
             (cons (cons $3 (list 'Nolabel)) (cons (cons $1 (list 'Nolabel)) #nil)))
     (expr PLUS expr) :
-      (list 'Eapply (list 'Lident "plus")
+      (list 'EApply (list 'Lident "plus")
             (cons (cons $1 (list 'Nolabel)) (cons (cons $3 (list 'Nolabel)) #nil)))
     (expr MINUS expr) :
-      (list 'Eapply (list 'Lident "minus")
+      (list 'EApply (list 'Lident "minus")
             (cons (cons $1 (list 'Nolabel)) (cons (cons $3 (list 'Nolabel)) #nil)))
     (expr STAR expr) :
-      (list 'Eapply (list 'Lident "times")
+      (list 'EApply (list 'Lident "times")
             (cons (cons $1 (list 'Nolabel)) (cons (cons $3 (list 'Nolabel)) #nil)))
     (expr COLONEQ expr) :
-      (list 'Eapply (list 'Lident "ref_set")
+      (list 'EApply (list 'Lident "ref_set")
             (cons (cons $1 (list 'Nolabel)) (cons (cons $3 (list 'Nolabel)) #nil)))
     (expr AMPERAMPER expr) : (list 'EIf $1 $3 (list 'EConstant (list 'CInt 0)))
     (expr BARBAR expr) : (list 'EIf $1 (list 'EConstant (list 'CInt 1)) $3)
@@ -262,16 +270,16 @@
     (LET llet llet_ands IN expr (prec: LET)) : (list 'ELet (cons $2 $3) $5)
     (expr COLONCOLON expr) : (list 'EConstr (list 'Lident "Cons") (cons $1 (cons $3 #nil)))
     (expr CARET expr) :
-      (list 'Eapply (list 'Lident "string_concat")
+      (list 'EApply (list 'Lident "string_concat")
             (cons (cons $1 (list 'Nolabel)) (cons (cons $3 (list 'Nolabel)) #nil)))
     (expr AT expr) :
-      (list 'Eapply (list 'Lident "list_concat")
+      (list 'EApply (list 'Lident "list_concat")
             (cons (cons $1 (list 'Nolabel)) (cons (cons $3 (list 'Nolabel)) #nil)))
     (simple_expr DOT LPAREN expr RPAREN LTMINUS expr) :
-      (list 'Eapply (list 'Lident "array_set")
+      (list 'EApply (list 'Lident "array_set")
             (cons (cons $1 (list 'Nolabel)) (cons (cons $4 (list 'Nolabel)) (cons (cons $7 (list 'Nolabel)) #nil))))
     (simple_expr DOT LBRACK expr RBRACK LTMINUS expr) :
-      (list 'Eapply (list 'Lident "string_set")
+      (list 'EApply (list 'Lident "string_set")
             (cons (cons $1 (list 'Nolabel)) (cons (cons $4 (list 'Nolabel)) (cons (cons $7 (list 'Nolabel)) #nil))))
     )
 
@@ -594,6 +602,42 @@
 (define (bytecode-backpatch-u16 pos c) (bytecode-backpatch pos (lambda () (put-u16 bytecode-output-port c))))
 (define (bytecode-backpatch-u32 pos c) (bytecode-backpatch pos (lambda () (put-u32 bytecode-output-port c))))
 (define (bytecode-backpatch-u64 pos c) (bytecode-backpatch pos (lambda () (put-u64 bytecode-output-port c))))
+(define (bytecode-backpatch-u16-le pos c) (bytecode-backpatch pos (lambda () (put-u16-le bytecode-output-port c))))
+(define (bytecode-backpatch-u32-le pos c) (bytecode-backpatch pos (lambda () (put-u32-le bytecode-output-port c))))
+(define (bytecode-backpatch-u64-le pos c) (bytecode-backpatch pos (lambda () (put-u64-le bytecode-output-port c))))
+
+(define label-patches vlist-null)
+(define label-length 0)
+(define (label-get-ref i) (vlist-ref label-patches (- (- label-length 1) i)))
+(define (newlabel)
+  (begin
+    (set! label-patches (vlist-cons (cons 'NotEmitted #nil) label-patches))
+    (set! label-length (+ 1 label-length))
+    (- label-length 1)))
+(define (bytecode-emit-label lab)
+  (let ((l (label-get-ref lab))
+        (pos (ftell bytecode-output-port)))
+    (assert (equal? (car l) 'NotEmitted))
+    (for-each (lambda (pos2) (begin
+                               (assert (= (logand 3 (- pos pos2)) 0))
+                               (bytecode-backpatch-u32-le pos2 (ash (- pos pos2) -2))
+                              )) (cdr l))
+    (set-car! l 'Emitted)
+    (set-cdr! l pos)
+    ))
+
+(define (bytecode-emit-labref lab)
+  (let ((l (label-get-ref lab))
+        (pos (ftell bytecode-output-port)))
+    (cond ((equal? (car l) 'NotEmitted)
+           (begin
+             (set-cdr! l (cons pos (cdr l)))
+             (bytecode-reserve 4)))
+          ((equal? (car l) 'Emitted)
+           (begin
+             (assert (= (logand 3 (- (cdr l) pos)) 0))
+             (bytecode-put-u32-le (ash (- (cdr l) pos) -2))))
+          (else (assert #f)))))
 
 (define (bytecode-begin-section name)
   (begin
@@ -660,30 +704,301 @@
       (bytecode-backpatch-u64 size64pos size64)
       )))
 
-(define (bytecode-write-globals globs)
-  (bytecode-marshal (cons 0 globs)))
+(define globs #nil)
+(define nglobs 0)
+(define (newglob value)
+  (begin
+    (set! globs (cons value globs))
+    (set! nglobs (+ 1 nglobs))
+    (- nglobs 1)))
+(define (slot-for-global) (newglob 0))
+(define (bytecode-write-globals)
+  (bytecode-marshal (cons 0 (reverse globs))))
+(define prims #nil)
+(define nprims 0)
+(define (prim name)
+  (begin
+    (set! prims (cons name prims))
+    (set! nprims (+ 1 nprims))
+    (- nprims 1)))
+(define (bytecode-write-prims)
+  (for-each (lambda (name) (begin (bytecode-put-string name) (bytecode-put-u8 0))) (reverse prims)))
 
-(display (ml-parser (lambda () (token errorp)) errorp))
+
+(define ACC 8)
+(define PUSH 9)
+(define ENVACC 25)
+(define PUSH_RETADDR 31)
+(define APPLY 32)
+(define APPTERM 36)
+(define RETURN 40)
+(define RESTART 41)
+(define GRAB 42)
+(define CLOSURE 43)
+(define GETGLOBAL 53)
+(define SETGLOBAL 57)
+(define GETFIELD 71)
+(define SETFIELD 77)
+(define BRANCH 84)
+(define BRANCHIFNOT 86)
+(define C_CALL1 93)
+(define C_CALL2 94)
+(define C_CALL3 95)
+(define C_CALL4 96)
+(define C_CALL5 97)
+(define C_CALLN 98)
+(define CONSTINT 103)
+(define STOP 143)
+
+(define empty-env (cons (cons vlist-null vlist-null) (cons vlist-null vlist-null)))
+(define (env-get-vars env) (car (car env)))
+(define (env-get-constrs env) (cdr (car env)))
+(define (env-get-fields env) (car (cdr env)))
+(define (env-get-modules env) (cdr (cdr env)))
+(define (env-with-vars env nvars) (cons (cons nvars (cdr (car env))) (cdr env)))
+(define (env-with-constrs env nconstrs) (cons (cons (car (car env)) nconstrs) (cdr env)))
+(define (env-with-fields env nfields) (cons (car env) (cons nfields (cdr (cdr env)))))
+(define (env-with-modules env nmodules) (cons (car env) (cons (car (cdr env)) nmodules)))
+
+(define (env-get-module env ld)
+  (cond ((= (car ld) 'Lident) (cdr (cdr (vhash-assoc (car (cdr ld)) (env-get-modules env)))))
+        ((= (car ld) 'Ldot) (cdr (cdr (vhash-assoc (car (cdr (cdr ld))) (env-get-modules (env-get-module env (car (cdr ld))))))))
+        (else (assert #f))))
+(define (env-get-env-li env ld)
+  (cond ((equal? (car ld) 'Lident) (cons env (car (cdr ld))))
+        ((equal? (car ld) 'Ldot) (cons (env-get-modules (env-get-module env (car (cdr ld)))) (car (cdr (cdr ld)))))
+        (else (assert #f))))
+(define (env-get-var env ld)
+  (let ((envs (env-get-env-li env ld)))
+    (cdr (cdr (vhash-assoc (cdr envs) (env-get-vars (car envs)))))))
+(define (env-get-constr env ld)
+  (let ((envs (env-get-env-li env ld)))
+    (cdr (cdr (vhash-assoc (cdr envs) (env-get-constrs (car envs)))))))
+(define (env-get-field env ld)
+  (let ((envs (env-get-env-li env ld)))
+    (cdr (cdr (vhash-assoc (cdr envs) (env-get-fields (car envs)))))))
+
+
+(define (mkvar location funshape) (cons location funshape))
+(define (get-var-location v) (car v))
+(define (get-var-funshape v) (cdr v))
+
+(define (align-args funshape args) (map car args)) ; TODO
+
+(define (access-var location stacksize)
+  (cond ((equal? (car location) 'VarStack)
+         (begin
+           (bytecode-put-u32-le ACC)
+           (bytecode-put-u32-le (- stacksize (car (cdr location))))))
+        ((equal? (car location) 'VarEnv)
+         (begin
+           (bytecode-put-u32-le ENVACC)
+           (bytecode-put-u32-le (car (cdr location)))))
+        ((equal? (car location) 'VarGlobal)
+         (begin
+           (bytecode-put-u32-le GETGLOBAL)
+           (bytecode-put-u32-le (car (cdr location)))))
+        (else (assert #f))))
+
+(define (compile-expr env stacksize istail expr)
+  (cond ((equal? (car expr) 'EVar) (access-var (get-var-location (env-get-var env (car (cdr expr)))) stacksize))
+        ((equal? (car expr) 'EConstant)
+         (let ((c (car (cdr expr))))
+           (cond ((equal? (car c) 'CInt)
+                  (let ((n (car (cdr c))))
+                    (if (and (<= -1073741824 n) (< n 1073741823))
+                        (begin
+                          (bytecode-put-u32-le CONSTINT)
+                          (bytecode-put-u32-le n))
+                        (begin
+                          (bytecode-put-u32-le GETGLOBAL)
+                          (bytecode-put-u32-le (newglob n))))))
+                 ((equal? (car c) 'CUnit)
+                  (begin
+                    (bytecode-put-u32-le CONSTINT)
+                    (bytecode-put-u32-le 0)))
+                 ((equal? (car c) 'CString)
+                  (begin
+                    (bytecode-put-u32-le GETGLOBAL)
+                    (bytecode-put-u32-le (newglob (car (cdr c)))
+                    )))
+                 (else (assert #f)))))
+        ((equal? (car expr) 'EConstr) (todo))
+        ((equal? (car expr) 'EGetfield)
+         (let ((e (car (cdr expr)))
+               (f (car (cdr (cdr expr)))))
+           (compile-expr env stacksize #f e)
+           (bytecode-put-u32-le GETFIELD)
+           (bytecode-put-u32-le (env-get-field env f))))
+        ((equal? (car expr) 'ESetfield)
+         (let ((e1 (car (cdr expr)))
+               (f  (car (cdr (cdr expr))))
+               (e2 (car (cdr (cdr (cdr expr))))))
+           (compile-expr env stacksize #f e2)
+           (compile-expr env (+ 1 stacksize) #f e1)
+           (bytecode-put-u32-le SETFIELD)
+           (bytecode-put-u32-le (env-get-field env f))))
+        ((equal? (car expr) 'ERecord) (todo))
+        ((equal? (car expr) 'ERecordwith) (todo))
+        ((equal? (car expr) 'EApply)
+         (let* ((f (car (cdr expr)))
+                (args1 (car (cdr (cdr expr))))
+                (vf (env-get-var env f))
+                (f-location (get-var-location vf))
+                (f-shape (get-var-funshape vf))
+                (args (align-args f-shape args1))
+                (nargs (length args)))
+           (assert (> nargs 0))
+           (if istail
+               (begin
+                 (compile-args env stacksize args)
+                 (bytecode-put-u32-le PUSH)
+                 (access-var f-location (+ stacksize nargs))
+                 (bytecode-put-u32-le APPTERM)
+                 (bytecode-put-u32-le nargs)
+                 (bytecode-put-u32-le (+ stacksize nargs)))
+               (let ((lab (newlabel)))
+                 (bytecode-put-u32-le PUSH_RETADDR)
+                 (bytecode-emit-labref lab)
+                 (compile-args env (+ stacksize 3) args)
+                 (bytecode-put-u32-le PUSH)
+                 (access-var f-location (+ stacksize (+ 3 nargs)))
+                 (bytecode-put-u32-le APPLY)
+                 (bytecode-put-u32-le nargs)
+                 (bytecode-emit-label lab)))
+           ))
+        ((equal? (car expr) 'EIf)
+         (let* ((lab1 (newlabel))
+                (lab2 (newlabel))
+                (e1 (car (cdr expr)))
+                (e2 (car (cdr (cdr expr))))
+                (e3 (car (cdr (cdr (cdr expr))))))
+           (compile-expr env stacksize #f e1)
+           (bytecode-put-u32-le BRANCHIFNOT)
+           (bytecode-emit-labref lab1)
+           (compile-expr env stacksize istail e2)
+           (bytecode-put-u32-le BRANCH)
+           (bytecode-emit-labref lab2)
+           (bytecode-emit-label lab1)
+           (compile-expr env stacksize istail e3)
+           (bytecode-emit-label lab2)))
+        ((equal? (car expr) 'EChain)
+         (let ((e1 (car (cdr expr)))
+               (e2 (car (cdr (cdr expr)))))
+           (compile-expr env stacksize #f e1)
+           (compile-expr env stacksize istail e2)))
+        ((equal? (car expr) 'EMatch) (todo))
+        ((equal? (car expr) 'ETry) (todo))
+        ((equal? (car expr) 'ELet) (todo))
+        ((equal? (car expr) 'ELambda) (todo))
+        (else (assert #f))))
+
+(define (compile-expr-list env stacksize l)
+  (if (not (null? l))
+      (begin
+        (compile-expr env stacksize #f (car l))
+        (if (not (null? (cdr l)))
+            (begin
+              (bytecode-put-u32-le PUSH)
+              (compile-expr-list env (+ stacksize 1) (cdr l))))
+        )))
+
+(define (compile-args env stacksize l) (compile-expr-list env stacksize (reverse l)))
+
+(define (get-def-name d) (car d))
+(define (get-def-args d) (car (cdr d)))
+(define (get-def-body d) (cdr (cdr d)))
+(define (get-arg-name a) (car a))
+(define (get-arg-label a) (car (cdr a)))
+(define (get-arg-default a) (cdr (cdr a)))
+
+(define (compile-fundef env args body) (todo))
+
+(define (compile-def env d)
+  (cond ((equal? (car d) 'MOpen) (todo))
+        ((equal? (car d) 'MException) (todo))
+        ((equal? (car d) 'MLet)
+         (let* ((rec-flag (car (cdr d)))
+                (bindings (car (cdr (cdr d))))
+                (locations (map (lambda (def) (if (equal? (get-def-name def) "_") #nil (slot-for-global))) bindings))
+                (nenv-vars (fold (lambda (def loc e)
+                                   (if (equal? (get-def-name def) "_") e
+                                       (vhash-cons (get-def-name def)
+                                                   (cons #t (mkvar (list 'VarGlobal loc) (map get-arg-label (get-def-args def)))) e)))
+                                 (env-get-vars env) bindings locations))
+                (nenv (env-with-vars env nenv-vars))
+                (tenv (if rec-flag nenv env)))
+           (for-each (lambda (def loc)
+                       (begin
+                         (if (null? (get-def-args def))
+                             (compile-expr tenv 0 #f (get-def-body def))
+                             (compile-fundef tenv (get-def-args def) (get-def-body def)))
+                         (if (not (null? loc)) (begin (bytecode-put-u32-le SETGLOBAL) (bytecode-put-u32-le loc)))
+                       )) bindings locations)
+           nenv
+           ))
+        ((equal? (car d) 'MTypedef) (todo))
+        ((equal? (car d) 'MStruct) (todo))
+        ((equal? (car d) 'MExternal)
+         (let* ((name (car (cdr d)))
+                (arity (car (cdr (cdr d))))
+                (primname (car (cdr (cdr (cdr d)))))
+                (shape (make-list arity (list 'Nolabel)))
+                (primnum (prim primname))
+                (lab1 (newlabel))
+                (lab2 (newlabel))
+                (pos (slot-for-global)))
+           (assert (> arity 0))
+           (bytecode-put-u32-le BRANCH)
+           (bytecode-emit-labref lab1)
+           (bytecode-put-u32-le RESTART)
+           (bytecode-emit-label lab2)
+           (bytecode-put-u32-le GRAB)
+           (bytecode-put-u32-le (- arity 1))
+           (do ((i 0 (1+ i))) ((>= i (- arity 1)))
+             (begin
+               (bytecode-put-u32-le ACC)
+               (bytecode-put-u32-le (- arity 1))
+               (bytecode-put-u32-le PUSH)))
+           (bytecode-put-u32-le ACC)
+           (bytecode-put-u32-le (- arity 1))
+           (cond ((= arity 1) (bytecode-put-u32-le C_CALL1))
+                 ((= arity 2) (bytecode-put-u32-le C_CALL2))
+                 ((= arity 3) (bytecode-put-u32-le C_CALL3))
+                 ((= arity 4) (bytecode-put-u32-le C_CALL4))
+                 ((= arity 5) (bytecode-put-u32-le C_CALL5))
+                 (else (begin
+                         (bytecode-put-u32-le C_CALLN)
+                         (bytecode-put-u32-le arity))))
+           (bytecode-put-u32-le primnum)
+           (bytecode-put-u32-le RETURN)
+           (bytecode-put-u32-le arity)
+           (bytecode-emit-label lab1)
+           (bytecode-put-u32-le CLOSURE)
+           (bytecode-put-u32-le 0)
+           (bytecode-emit-labref lab2)
+           (bytecode-put-u32-le SETGLOBAL)
+           (bytecode-put-u32-le pos)
+           (env-with-vars env (vhash-cons name (cons #t (mkvar (list 'VarGlobal pos) shape)) (env-get-vars env)))
+           ))
+        (else (assert #f))))
+
+(define (compile-defs env defs)
+  (if (null? defs)
+      env
+      (compile-defs (compile-def env (car defs)) (cdr defs))))
+
+(define prog (ml-parser (lambda () (token errorp)) errorp))
+(display prog)
+
 (bytecode-open-output "testbyte")
 (bytecode-begin-section "CODE")
-(bytecode-put-u32-le 103) (bytecode-put-u32-le 1) ; CONSTINT(1)
-(bytecode-put-u32-le 93) (bytecode-put-u32-le 0) ; C_CALL1(0)
-(bytecode-put-u32-le 9) ; PUSH
-(bytecode-put-u32-le 103) (bytecode-put-u32-le 13) ; CONSTINT(13)
-(bytecode-put-u32-le 9) ; PUSH
-(bytecode-put-u32-le 103) (bytecode-put-u32-le 0) ; CONSTINT(0)
-(bytecode-put-u32-le 9) ; PUSH
-(bytecode-put-u32-le 53) (bytecode-put-u32-le 0) ; GETGLOBAL(0)
-(bytecode-put-u32-le 9) ; PUSH
-(bytecode-put-u32-le 8) (bytecode-put-u32-le 3) ; ACC(3)
-(bytecode-put-u32-le 96) (bytecode-put-u32-le 1) ; C_CALL4(1)
-(bytecode-put-u32-le 8) (bytecode-put-u32-le 0) ; ACC(0)
-(bytecode-put-u32-le 93) (bytecode-put-u32-le 2) ; C_CALL1(2)
-(bytecode-put-u32-le 143) ; STOP
+
+(compile-defs empty-env prog)
+(bytecode-put-u32-le STOP)
+
 (bytecode-begin-section "PRIM")
-(bytecode-put-string "caml_ml_open_descriptor_out") (bytecode-put-u8 0)
-(bytecode-put-string "caml_ml_output") (bytecode-put-u8 0)
-(bytecode-put-string "caml_ml_flush") (bytecode-put-u8 0)
+(bytecode-write-prims)
 (bytecode-begin-section "DATA")
-(bytecode-write-globals (list "Hello, world!"))
+(bytecode-write-globals)
 (bytecode-close-output)
