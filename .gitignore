@@ -1,0 +1,8 @@
+*.o
+*.a
+*.so
+*.lib
+*.cmi
+*.cmx
+.ccls-cache/
+

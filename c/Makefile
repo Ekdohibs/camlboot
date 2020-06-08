@@ -13,3 +13,6 @@ mod.a: wrap.c wrap.ml
 
 interp: mod.a main.c
 	cc -o interp -I `$(OCAMLC) -where` main.c mod.a -lm -ldl
+
+clean:
+	rm -f *.a *.o *.cmx *.cmi

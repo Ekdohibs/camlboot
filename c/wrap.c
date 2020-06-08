@@ -10,7 +10,7 @@ value parse(char * filename)
   CAMLparam0();
   CAMLlocal1 (fname);
   fname = caml_copy_string(filename);
-  static value * parse_closure = NULL;
+  static const value * parse_closure = NULL;
   if (parse_closure == NULL)
     parse_closure = caml_named_value("parse");
   CAMLreturn (caml_callback(*parse_closure, fname));
