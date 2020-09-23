@@ -1092,7 +1092,7 @@
                              (cons (car v) (mkvar (list 'VarEnv (cdr r)) (get-var-funshape (cdr v))))
                              #f))))
                  (env-get-vars env)))
-         (nvars (fold (lambda (arg i vs) (vhash-replace (get-arg-name arg) (cons #t (mkvar (list 'VarStack i) #nil)) vs)) mvars args (range 0 arity)))
+         (nvars (fold (lambda (arg i vs) (vhash-replace (get-arg-name arg) (cons #t (mkvar (list 'VarStack (- (- arity 1) i)) #nil)) vs)) mvars args (range 0 arity)))
 ;         (dummy (begin
 ;                  (display #\newline) (display #\newline)
 ;                  (display fv)
