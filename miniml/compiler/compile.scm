@@ -10,7 +10,7 @@
    (expect: 0)
    ;; Token definitions
    (LPAREN LBRACE RBRACE QUOTE TILDE
-           QUESTION SEMICOLONSEMICOLON LBRACK RBRACK LBRACKBAR RBRACKBAR
+           QUESTION SEMICOLONSEMICOLON LBRACK RBRACK LBRACKBAR BARRBRACK
            AND BEGIN END EXCEPTION EXTERNAL FUN IF IN MODULE
            MUTABLE OF OPEN REC STRUCT TRY TYPE WITH
            EOF STRING LIDENT UIDENT INT
@@ -202,7 +202,8 @@
     (LBRACK RBRACK) : (list 'EConstr (list 'Lident "Null") #nil)
     (LBRACK semi_separated_expr_list_opt RBRACK) :
         (fold-right (lambda (e r) (list 'EConstr (list 'Lident "Cons") (list e r))) (list 'EConstr (list 'Lident "Null") #nil) $2)
-    (LBRACKBAR RBRACKBAR) : (list 'EVar (list 'Ldot (list 'Lident "Array") "empty_array"))
+    (LBRACKBAR BARRBRACK) : (list 'EVar (list 'Ldot (list 'Lident "Array") "empty_array"))
+    (LBRACKBAR semi_separated_expr_list_opt BARRBRACK) : (list 'EConstr (list 'Lident "") $2)
     (BANG simple_expr) : (mkapp1 "ref_get" $2)
     (simple_expr DOT LPAREN expr RPAREN) : (mkapp2 "array_get" $1 $4)
     (simple_expr DOT LBRACK expr RBRACK) : (mkapp2 "string_get" $1 $4))
@@ -353,15 +354,20 @@
              (assert (char-numeric? c3))
              (integer->char (+ (* 100 (char-to-hex c)) (+ (* 10 (char-to-hex c2)) (char-to-hex c3))))
              ))
-          (else (errorp "Invalid escape sequence")))
+          (else (errorp "Invalid escape sequence" c)))
   ))
+
+(define (space-or-tab? c) (or (char=? c #\space) (char=? c #\tab)))
 
 (define (string-chars errorp)
   (let* ((location (make-source-location "*stdin*" (port-line (current-input-port)) (port-column (current-input-port)) -1 -1))
          (c (read-char)))
     (cond ((eof-object? c) (errorp "Unterminated string"))
           ((char=? c #\") #nil)
-          ((char=? c #\\ ) (let* ((nc (escape-sequence errorp))) (cons nc (string-chars errorp))))
+          ((char=? c #\\ )
+           (if (char=? (peek-char) #\newline)
+               (begin (read-char) (while (space-or-tab? (peek-char)) (read-char)) (string-chars errorp))
+               (let* ((nc (escape-sequence errorp))) (cons nc (string-chars errorp)))))
           (else (cons c (string-chars errorp)))
   )))
 
@@ -370,7 +376,7 @@
 (define (ident errorp)
   (let ((c (peek-char)))
         (cond ((eof-object? c) #nil)
-              ((or (char-alphanumeric? c) (char=? c #\_)) (begin (read-char) (cons c (ident errorp))))
+              ((or (char-alphanumeric? c) (or (char=? c #\_) (char=? c #\'))) (begin (read-char) (cons c (ident errorp))))
               (else #nil)
               )))
 
@@ -395,7 +401,7 @@
 
 (define (token-dispatch errorp location c)
   (cond ((eof-object? c) (make-lexical-token '*eoi* location #f))
-        ((or (char=? c #\space) (char=? c #\tab)) (token errorp))
+        ((space-or-tab? c) (token errorp))
         ((char=? c #\newline) (token errorp))
         ((char=? c #\#) (if (= (port-column (current-input-port)) 1)
                             (begin (skip-until-newline) (token errorp))
