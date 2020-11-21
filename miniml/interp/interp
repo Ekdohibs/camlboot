@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+OCAMLRUNPARAM='l=10M' ocamlrun $(dirname $0)/testbyte $@

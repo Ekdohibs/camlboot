@@ -806,7 +806,7 @@ and skip_hash_bang = parse
     comment_list := [];
     match !preprocessor with
     | None -> ()
-    | Some (init, _preprocess) -> init ()
+    | Some a -> let (init, _preprocess) = a in init ()
 
   let set_preprocessor init preprocess =
     escaped_newlines := true;

@@ -227,7 +227,7 @@ let rec highlight_locations ppf locs = (*
 
 (* Print the location in some way or another *)
 
-open Format
+(* open Format *)
 
 (*
 let rewrite_absolute_path =

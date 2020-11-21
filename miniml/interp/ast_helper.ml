@@ -91,9 +91,9 @@ module Typ = struct
           List.iter1 (fun vt v -> let (var_names, t) = vt in
             check_variable var_names t.ptyp_loc v.txt) (var_names,t) string_lst;
             Ptyp_poly(string_lst, loop var_names core_type)
-        | Ptyp_package(longident,lst) ->
+        | Ptyp_package a -> let (longident,lst) = a in
             Ptyp_package(longident,List.map1 (fun var_names nt -> let (n,typ) = nt in (n,loop var_names typ) ) var_names lst)
-        | Ptyp_extension (s, arg) ->
+        | Ptyp_extension a -> let (s, arg) = a in
             Ptyp_extension (s, arg)
       in
       {t with ptyp_desc = desc}

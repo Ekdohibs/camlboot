@@ -1,10 +1,25 @@
 open Asttypes
 open Parsetree
 
-let trace = false
-let tracearg_from = 742740000
-let tracecur = ref 0
+let trace = true
+let traceall = false
+
 let debug = false
+let indent = ref ""
+
+external format_int : string -> int -> string = "caml_format_int"
+let rec obj_to_string x =
+  let t = Obj.tag x in
+  if t = 1000 then format_int "%d" x
+  else if t = 1001 then "<out of heap>"
+  else if t = 1002 then "<unaligned>"
+  else if t = 252 then x
+  else format_int "%d" t ^ "[" ^ obj_fields_to_string x 0 ^ "]"
+
+and obj_fields_to_string x i =
+  if i = Obj.size x then ""
+  else if i = Obj.size x - 1 then obj_to_string (Obj.field x i)
+  else obj_to_string (Obj.field x i) ^ " " ^ obj_fields_to_string x (i + 1)
 
 module SMap = struct
   (* Unbalanced maps of strings *)
@@ -131,6 +146,49 @@ let static_records = [
 ]
 
 exception InternalException of value
+
+external caml_int64_to_int32 : Int64.t -> Int32.t = "caml_int64_to_int32"
+external caml_int64_to_nativeint : Int64.t -> NativeInt.t = "caml_int64_to_nativeint"
+external caml_float_of_string : string -> float = "caml_float_of_string"
+external caml_obj_tag : Obj.t -> int = "caml_obj_tag"
+external caml_obj_block : int -> int -> Obj.t = "caml_obj_block"
+
+
+external caml_int64_neg : Int64.t -> Int64.t = "caml_int64_neg"
+external caml_int64_add : Int64.t -> Int64.t -> Int64.t = "caml_int64_add"
+external caml_int64_sub : Int64.t -> Int64.t -> Int64.t = "caml_int64_sub"
+external caml_int64_mul : Int64.t -> Int64.t -> Int64.t = "caml_int64_mul"
+external caml_int64_div : Int64.t -> Int64.t -> Int64.t = "caml_int64_div"
+external caml_int64_mod : Int64.t -> Int64.t -> Int64.t = "caml_int64_mod"
+external caml_int64_and : Int64.t -> Int64.t -> Int64.t = "caml_int64_and"
+external caml_int64_or : Int64.t -> Int64.t -> Int64.t = "caml_int64_or"
+external caml_int64_xor : Int64.t -> Int64.t -> Int64.t = "caml_int64_xor"
+external caml_int64_shift_left : Int64.t -> int -> Int64.t = "caml_int64_shift_left"
+external caml_int64_shift_right : Int64.t -> int -> Int64.t = "caml_int64_shift_right"
+external caml_int64_shift_right_unsigned : Int64.t -> int -> Int64.t = "caml_int64_shift_right_unsigned"
+external caml_int64_of_int : int -> Int64.t = "caml_int64_of_int"
+external caml_int64_to_int : Int64.t -> int = "caml_int64_to_int"
+external caml_int64_of_string : string -> Int64.t = "caml_int64_of_string"
+
+external caml_int32_of_string : string -> Int32.t = "caml_int32_of_string"
+external caml_int32_neg : Int32.t -> Int32.t = "caml_int32_neg"
+
+
+external caml_nativeint_neg : NativeInt.t -> NativeInt.t = "caml_nativeint_neg"
+external caml_nativeint_add : NativeInt.t -> NativeInt.t -> NativeInt.t = "caml_nativeint_add"
+external caml_nativeint_sub : NativeInt.t -> NativeInt.t -> NativeInt.t = "caml_nativeint_sub"
+external caml_nativeint_mul : NativeInt.t -> NativeInt.t -> NativeInt.t = "caml_nativeint_mul"
+external caml_nativeint_div : NativeInt.t -> NativeInt.t -> NativeInt.t = "caml_nativeint_div"
+external caml_nativeint_mod : NativeInt.t -> NativeInt.t -> NativeInt.t = "caml_nativeint_mod"
+external caml_nativeint_and : NativeInt.t -> NativeInt.t -> NativeInt.t = "caml_nativeint_and"
+external caml_nativeint_or : NativeInt.t -> NativeInt.t -> NativeInt.t = "caml_nativeint_or"
+external caml_nativeint_xor : NativeInt.t -> NativeInt.t -> NativeInt.t = "caml_nativeint_xor"
+external caml_nativeint_shift_left : NativeInt.t -> int -> NativeInt.t = "caml_nativeint_shift_left"
+external caml_nativeint_shift_right : NativeInt.t -> int -> NativeInt.t = "caml_nativeint_shift_right"
+external caml_nativeint_shift_right_unsigned : NativeInt.t -> int -> NativeInt.t = "caml_nativeint_shift_right_unsigned"
+external caml_nativeint_of_int : int -> NativeInt.t = "caml_nativeint_of_int"
+external caml_nativeint_to_int : NativeInt.t -> int = "caml_nativeint_to_int"
+external caml_nativeint_of_string : string -> NativeInt.t = "caml_nativeint_of_string"
 
 let rec read_caml_int_loop s base i c =
   if i = String.length s then c
@@ -344,6 +402,60 @@ let mkprim f (arity : int) =
   Obj.set_field r 1 (Obj.repr arity);
   r
 
+external caml_add_float : float -> float -> float = "caml_add_float"
+external caml_sub_float : float -> float -> float = "caml_sub_float"
+external caml_mul_float : float -> float -> float = "caml_mul_float"
+external caml_div_float : float -> float -> float = "caml_div_float"
+external caml_float_of_int : int -> float = "caml_float_of_int"
+external caml_int_of_float : float -> int = "caml_int_of_float"
+
+external caml_weak_create : int -> 'a t = "caml_weak_create"
+external caml_weak_set : 'a t -> int -> 'a option -> unit = "caml_weak_set"
+external caml_weak_get : 'a t -> int -> 'a option = "caml_weak_get"
+external caml_weak_get_copy : 'a t -> int -> 'a option = "caml_weak_get_copy"
+external caml_weak_check : 'a t -> int -> bool = "caml_weak_check"
+external caml_weak_blit : 'a t -> int -> 'a t -> int -> int -> unit = "caml_weak_blit"
+
+external caml_sys_file_exists : string -> bool = "caml_sys_file_exists"
+external caml_sys_getcwd : unit -> strin = "caml_sys_getcwd"
+external caml_sys_rename : string -> string -> unit = "caml_sys_rename"
+external caml_sys_remove : string -> unit = "caml_sys_remove"
+external caml_sys_get_argv : unit -> string * string array = "caml_sys_get_argv"
+external caml_sys_get_config : unit -> string * int * bool = "caml_sys_get_config"
+external caml_sys_const_big_endian : unit -> bool = "caml_sys_const_big_endian"
+external caml_sys_exit : int -> 'a = "caml_sys_exit"
+
+external caml_format_int : string -> int -> string = "caml_format_int"
+external caml_format_float : string -> float -> string = "caml_format_float"
+external caml_int_of_string : string -> int = "caml_int_of_string"
+external caml_output_value : out_channel -> 'a -> extern_flags list -> unit = "caml_output_value"
+external caml_output_value_to_buffer : bytes -> int -> int -> 'a -> extern_flags list -> int = "caml_output_value_to_buffer"
+external caml_input_value : in_channel -> 'a = "caml_input_value"
+
+external caml_register_named_value : string -> 'a -> unit = "caml_register_named_value"
+external caml_int64_float_of_bits : Int64.t -> float = "caml_int64_float_of_bits"
+external caml_ml_open_descriptor_out : int -> out_channel = "caml_ml_open_descriptor_out"
+external caml_ml_open_descriptor_in : int -> in_channel = "caml_ml_open_descriptor_in"
+external caml_sys_open : string -> open_flag list -> int -> int = "caml_sys_open"
+external caml_sys_close : int -> unit = "caml_sys_close"
+external caml_ml_set_channel_name : 'a -> string -> unit = "caml_ml_set_channel_name"
+external caml_ml_close_channel : 'a -> unit = "caml_ml_close_channel"
+external caml_ml_out_channels_list : unit -> out_channel list = "caml_ml_out_channels_list"
+external caml_ml_output_bytes : out_channel -> bytes -> int -> int -> unit = "caml_ml_output_bytes"
+external caml_ml_output : out_channel -> string -> int -> int -> unit = "caml_ml_output"
+external caml_ml_output_int : out_channel -> int -> unit = "caml_ml_output_int"
+external caml_ml_output_char : out_channel -> char -> unit = "caml_ml_output_int"
+external caml_ml_flush : out_channel -> unit = "caml_ml_flush"
+external caml_ml_input_char : in_channel -> char = "caml_ml_input_char"
+external caml_ml_input_int : in_channel -> int = "caml_ml_input_int"
+external caml_ml_input_scan_line : in_channel -> int = "caml_ml_input_scan_line"
+(* external caml_ml_input_value : in_channel -> 'a = "caml_input_value" *)
+external caml_ml_input : in_channel -> bytes -> int -> int -> int = "caml_ml_input"
+external caml_ml_seek_out : out_channel -> int -> unit = "caml_ml_seek_out"
+external caml_ml_pos_out : out_channel -> int = "caml_ml_pos_out"
+external caml_ml_seek_in : in_channel -> int -> unit = "caml_ml_seek_in"
+external caml_ml_pos_in : in_channel -> int = "caml_ml_pos_in"
+
 external seeded_hash_param : int -> int -> int -> 'a -> int = "caml_hash"
 external open_descriptor_out : int -> out_channel = "caml_ml_open_descriptor_out"
 external open_descriptor_in : int -> in_channel = "caml_ml_open_descriptor_in"
@@ -353,18 +465,19 @@ external set_out_channel_name: out_channel -> string -> unit = "caml_ml_set_chan
 external out_channels_list : unit -> out_channel list = "caml_ml_out_channels_list"
 external unsafe_output : out_channel -> bytes -> int -> int -> unit = "caml_ml_output_bytes"
 external unsafe_output_string : out_channel -> string -> int -> int -> unit = "caml_ml_output"
-(* external set_in_channel_name: in_channel -> string -> unit = "caml_ml_set_channel_name"
+external set_in_channel_name: in_channel -> string -> unit = "caml_ml_set_channel_name"
 external unsafe_input : in_channel -> bytes -> int -> int -> int = "caml_ml_input"
 external format_int : string -> int -> string = "caml_format_int"
 external format_float : string -> float -> string = "caml_format_float"
 external random_seed : unit -> int array = "caml_sys_random_seed"
+external digest_channel : in_channel -> int -> string = "caml_md5_chan"
 external digest_unsafe_string : string -> int -> int -> string = "caml_md5_string"
 external marshal_to_channel : out_channel -> 'a -> unit list -> unit = "caml_output_value"
 external append_prim : 'a array -> 'a array -> 'a array = "caml_array_append"
 external input_scan_line : in_channel -> int = "caml_ml_input_scan_line"
 external caml_register_named_value : string -> Obj.t -> unit = "caml_register_named_value"
 external caml_ml_set_channel_name : Obj.t -> string -> unit = "caml_ml_set_channel_name"
-external caml_ml_close_channel : Obj.t -> unit = "caml_ml_close_channel" *)
+external caml_ml_close_channel : Obj.t -> unit = "caml_ml_close_channel"
 external lex_engine : Lexing.lex_tables -> int -> Lexing.lexbuf -> int = "caml_lex_engine"
 external new_lex_engine : Lexing.lex_tables -> int -> Lexing.lexbuf -> int = "caml_new_lex_engine"
 
@@ -405,6 +518,7 @@ let not_found_exn =
   let r = Obj.new_block 0 1 in
   Obj.set_field r 0 (Obj.repr not_found_exn_id);
   r
+
 let _ = declare_exn "Exit" 0
 let _ = declare_exn "Invalid_argument" 1
 let _ = declare_exn "Failure" 1
@@ -461,8 +575,8 @@ let prims = [
   ("%compare", mkprim value_compare 2);
   ("%equal", mkprim value_equal 2);
   ("%notequal", mkprim (fun x y -> not (value_equal x y)) 2);
-  ("%eq", mkprim caml_eq 2);
-  ("%noteq", mkprim caml_noteq 2);
+  ("%eq", mkprim physeq 2);
+  ("%noteq", mkprim physneq 2);
   ("%identity", mkprim (fun x -> x) 1);
   ("caml_register_named_value", mkprim caml_register_named_value 2);
   ("caml_int64_float_of_bits", mkprim caml_int64_float_of_bits 1);
@@ -591,18 +705,18 @@ let prims = [
   ("caml_nativeint_of_string", mkprim caml_nativeint_of_string 1);
 
   (* Array *)
-  ("caml_make_vect", mkprim caml_make_vect 2);
+  ("caml_make_vect", mkprim Array.make 2);
   ("%array_length", mkprim Array.length 1);
-  ("caml_array_sub", mkprim caml_array_sub 3);
-  ("%array_safe_get", mkprim caml_array_get 2);
-  ("%array_unsafe_get", mkprim caml_array_unsafe_get 2);
-  ("%array_safe_set", mkprim caml_array_set 3);
-  ("%array_unsafe_set", mkprim caml_array_unsafe_set 3);
-  ("caml_array_blit", mkprim caml_array_blit 5);
-  ("caml_array_append", mkprim caml_array_append 2);
+  ("caml_array_sub", mkprim Array.sub 3);
+  ("%array_safe_get", mkprim Array.get 2);
+  ("%array_unsafe_get", mkprim Array.unsafe_get 2);
+  ("%array_safe_set", mkprim Array.set 3);
+  ("%array_unsafe_set", mkprim Array.unsafe_set 3);
+  ("caml_array_blit", mkprim Array.blit 5);
+  ("caml_array_append", mkprim Array.append 2);
 
   (* Hashtbl *)
-  ("caml_hash", mkprim caml_hash 4);
+  ("caml_hash", mkprim seeded_hash_param 4);
 
   (* Weak *)
   ("caml_weak_create", mkprim caml_weak_create 1);
@@ -613,11 +727,11 @@ let prims = [
   ("caml_weak_blit", mkprim caml_weak_blit 5);
 
   (* Random *)
-  ("caml_sys_random_seed", mkprim caml_sys_random_seed 1);
+  ("caml_sys_random_seed", mkprim random_seed 1);
 
   (* Digest *)
-  ("caml_md5_string", mkprim caml_md5_string 3);
-  ("caml_md5_chan", mkprim caml_md5_chan 2);
+  ("caml_md5_string", mkprim digest_unsafe_string 3);
+  ("caml_md5_chan", mkprim digest_channel 2);
 
   (* Ugly *)
   ("%obj_size", mkprim Obj.size 1);
@@ -630,6 +744,7 @@ let prims = [
 
 let prims = List.fold_left (fun env nv -> let name, v = nv in SMap.add name v env) SMap.empty prims
 let hash_variant_name (name : string) = land_ (Hashtbl.hash name) (lsl_ 1 30 - 1)
+
 
 let fmt_ebb_of_string_fct = ref (Obj.repr 0)
 
@@ -865,14 +980,18 @@ and eval_expr env expr =
       if is_true (eval_expr env arg1) then eval_expr env arg2 else Obj.repr false
     else begin
       let args = List.map1 (fun env le -> let (lab, e) = le in (lab, eval_expr env e)) env l in
-      if trace then begin match f.pexp_desc with Pexp_ident lident ->
-        (* Format.eprintf "apply %s@." (String.concat "." (Longident.flatten lident.txt)); *)
-        print_string (longident_flatten lident.txt);
-        incr tracecur
-        (*if !tracecur > tracearg_from then Format.eprintf " %a" (Format.pp_print_list ~pp_sep:(fun ff () -> Format.fprintf ff " ") (fun ff (_, v) -> Format.fprintf ff "%a" pp_print_value v)) args; *)
-        | _ -> ()
-         end;
-      apply fc args
+      if trace then begin
+        if traceall then begin
+          let name = match f.pexp_desc with Pexp_ident lident -> longident_flatten lident.txt | _ -> "<unknown>" in
+          let oldindent = !indent in
+          indent := " " ^ oldindent; print_string (oldindent ^ "[enter] " ^ name ^ "\n"); incr tracecur;
+          try (let r = apply fc args in print_string (oldindent ^ "[leave] " ^ name ^ "\n"); indent := oldindent; r)
+          with e -> print_string (oldindent ^ "[error] " ^ name ^ " " ^ (obj_to_string e) ^ "\n"); indent := oldindent; raise e
+        else begin
+          let name = match f.pexp_desc with Pexp_ident lident -> longident_flatten lident.txt | _ -> "<unknown>" in
+          incr tracecur; print_string ("[enter] " ^ name ^ "\n"); apply fc args
+        end
+      end else apply fc args
     end
   | Pexp_tuple l ->
     let args = List.map1 eval_expr env l in
@@ -1328,6 +1447,7 @@ let _ = apply_ref := apply
 let _ = eval_expr_ref := eval_expr
 
 let parse filename =
+  if debug then print_string ("Parsing " ^ filename ^ "\n");
   let inc = open_in filename in
   let lexbuf = Lexing.from_channel inc in
   let parsed = Parser.implementation Lexer.real_token lexbuf in
@@ -1374,6 +1494,7 @@ let stdlib_modules = List.map (fun np -> let (n, p) = np in (n, stdlib_path ^ "/
 let load_modules env modules =
   List.fold_left (fun env namepath ->
       let modname, modpath = namepath in
+      if debug then print_string ("Loading " ^ modname ^ "\n");
       (* if debug then Format.eprintf "Loading %s@." modname; *)
       let module_contents = eval_structure None env (parse modpath) in
       if modname = "CamlinternalFormat" then
@@ -1511,9 +1632,11 @@ let compiler_modules = [
   ("Main", "driver/main.ml");
 ]
 
+
 let compiler_path = "%CAMLBOOT_PATH%/_boot"
 let compiler_modules = List.map (fun np -> let (n, p) = np in (n, compiler_path ^ "/" ^ p)) compiler_modules
 
 let _ =
   load_modules init_env compiler_modules
 
+let _ = print_string "Loaded.\n\n\n"

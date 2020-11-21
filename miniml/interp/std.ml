@@ -2,8 +2,35 @@ exception Not_found
 exception End_of_file
 exception Failure of string
 exception Invalid_argument of string
+exception Assert_failure
 
-external raise : = "_raise"
+external plus : int -> int -> int = "%110"
+external minus : int -> int -> int = "%111"
+external times : int -> int -> int = "%112"
+external div_ : int -> int -> int = "%113"
+external uminus : int -> int = "%109"
+external mod_ : int -> int -> int = "%114"
+external land_ : int -> int -> int = "%115"
+external lor_ : int -> int -> int = "%116"
+external lxor_ : int -> int -> int = "%117"
+external lsl_ : int -> int -> int = "%118"
+external lsr_ : int -> int -> int = "%119"
+external asr_ : int -> int -> int = "%120"
+
+external compare : 'a -> 'a -> int = "caml_compare"
+external eq : 'a -> 'a -> bool = "caml_equal"
+external neq : 'a -> 'a -> bool = "caml_notequal"
+external lessequal : 'a -> 'a -> bool = "caml_lessequal"
+external lessthan : 'a -> 'a -> bool = "caml_lessthan"
+
+external physeq : 'a -> 'a -> bool = "%121"
+external physneq : 'a -> 'a -> bool = "%122"
+
+
+external raise : exn -> 'a = "%91"
+
+external fst : 'a * 'b -> 'a = "%67"
+external snd : 'a * 'b -> 'a = "%68"
 
 let invalid_arg x = raise (Invalid_argument x)
 let failwith x = raise (Failure x)
@@ -13,22 +40,27 @@ let succ x = x + 1
 let pred x = x - 1
 
 type bool = false | true
-type ref = { mutable contents : 'a }
-type result = Ok of 'a | Error of 'b
-type list = Null | Cons of 'a * 'a list
+type 'a ref = { mutable contents : 'a }
+type ('a, 'b) result = Ok of 'a | Error of 'b
+type 'a list = Null | Cons of 'a * 'a list
+type 'a option = None | Some of 'a
+
+let assert b = if b = 0 then raise Assert_failure
 
 module Obj = struct
+  type t
   let repr x = x
   let magic x = x
-  external is_block : = "caml_obj_is_block"
-  external new_block : = "caml_obj_block"
-  external tag : = "caml_obj_tag"
-  external set_tag : = "caml_obj_set_tag"
-  external size : = "caml_obj_size"
-  external field : = "caml_obj_field"
-  external set_field : = "caml_obj_set_field"
-  external is_int : = "caml_obj_is_int"
-  external string_tag : = "(Val_long(String_tag))"
+  external is_block : t -> bool = "caml_obj_is_block"
+  external new_block : int -> int -> t = "caml_obj_block"
+  external tag : t -> int = "caml_obj_tag"
+  external set_tag : t -> int -> unit = "caml_obj_set_tag"
+  external size : t -> int = "%79" (* VECTLENGTH "caml_obj_size" *)
+  external field : t -> int -> t = "%80" (* GETVECTITEM "caml_obj_field" *)
+  external set_field : t -> int -> t -> unit = "%81" (* SETVECTITEM "caml_obj_set_field" *)
+  external is_int : t -> bool = "%129"
+  (* external string_tag : = "(Val_long(String_tag))" *)
+  let string_tag = 252
 end
 let lazy x = x
 module Lazy = struct let force x = x end
@@ -58,28 +90,30 @@ module List = struct
   let rec find f l = match l with [] -> raise Not_found | x :: l -> if f x then x else find f l
   let rec find1 f a l = match l with [] -> raise Not_found | x :: l -> if f a x then x else find1 f a l
 
-  let rec assoc x l = match l with | [] -> raise Not_found | a :: l -> let (u, v) = a in if x = u then v else assoc x l
+  let rec assoc x l = match l with [] -> raise Not_found | a :: l -> let (u, v) = a in if x = u then v else assoc x l
   let rec mem_assoc x l = match l with | [] -> false | a :: l -> let (u, v) = a in if x = u then true else mem_assoc x l
 end
 
 module Hashtbl = struct
+  external seeded_hash_param : int -> int -> int -> 'a -> int = "caml_hash"
   let find t x = List.assoc x t
   let mem t x = List.mem_assoc x t
+  let hash x = seeded_hash_param 10 100 0 x
 end
 
 module Bytes = struct
-  external blit : = "caml_blit_bytes"
-  external unsafe_blit : = "caml_blit_bytes"
-  external blit_string : = "caml_blit_string"
-  external create : = "caml_create_bytes"
-  external get : = "caml_bytes_get"
-  external set : = "caml_bytes_set"
-  external unsafe_get : = "caml_bytes_get"
-  external unsafe_set : = "caml_bytes_set"
-  external unsafe_of_string : = "caml_bytes_of_string"
-  external unsafe_to_string : = "caml_string_of_bytes"
-  external length : = "caml_ml_bytes_length"
-  external unsafe_fill : = "caml_fill_bytes"
+  external blit : bytes -> int -> bytes -> int -> int -> unit = "caml_blit_bytes"
+  external unsafe_blit : bytes -> int -> bytes -> int -> int -> unit = "caml_blit_bytes"
+  external blit_string : string -> int -> bytes -> int -> int -> unit = "caml_blit_string"
+  external create : int -> bytes = "caml_create_bytes"
+  external get : bytes -> int -> char = "caml_bytes_get"
+  external set : bytes -> int -> char -> unit = "caml_bytes_set"
+  external unsafe_get : bytes -> int -> char = "caml_bytes_get"
+  external unsafe_set : bytes -> int -> char -> unit = "caml_bytes_set"
+  external unsafe_of_string : string -> bytes = "caml_bytes_of_string"
+  external unsafe_to_string : bytes -> string = "caml_string_of_bytes"
+  external length : bytes -> int = "caml_ml_bytes_length"
+  external unsafe_fill : bytes -> int -> int -> char -> unit = "caml_fill_bytes"
 
   let copy s =
     let len = length s in
@@ -103,9 +137,9 @@ module Bytes = struct
 end
 
 module String = struct
-  external length : = "caml_ml_string_length"
-  external unsafe_get : = "caml_string_get"
-  external blit : = "caml_blit_string"
+  external length : string -> int = "caml_ml_string_length"
+  external unsafe_get : string -> int -> char = "caml_string_get"
+  external blit : string -> int -> bytes -> int -> int -> unit = "caml_blit_string"
 
   let sub s ofs len =
     Bytes.unsafe_to_string (Bytes.sub (Bytes.unsafe_of_string s) ofs len)
@@ -120,7 +154,7 @@ module String = struct
       index_rec s l i c
 end
 
-external string_get : = "caml_string_get"
+external string_get : string -> int -> char = "caml_string_get"
 let string_concat s1 s2 =
   let r = Bytes.create (String.length s1 + String.length s2) in
   Bytes.blit_string s1 0 r 0 (String.length s1);
@@ -132,12 +166,6 @@ module Uchar = struct let unsafe_of_int x = x let to_int x = x let is_valid x = 
 
 let rec list_concat l1 l2 = match l1 with [] -> l2 | x :: l1 -> x :: list_concat l1 l2
 
-external compare : = "caml_compare"
-external eq : = "caml_equal"
-external neq : = "caml_notequal"
-external lessequal : = "caml_lessequal"
-external lessthan : = "caml_lessthan"
-
 let ref x = { contents = x }
 let ref_get x = x.contents
 let ref_set x y = x.contents <- y
@@ -146,41 +174,46 @@ let decr x = ref_set x (ref_get x - 1)
 let not x = 1 - x
 
 module Array = struct
-  external blit : = "caml_array_blit"
-  external make : = "caml_make_vect"
-  external unsafe_set : = "caml_array_set"
-  external length : = "caml_obj_size"
-  external empty_array : = "(Atom(0))"
+  external blit : 'a array -> int -> 'a array -> int -> int -> unit = "caml_array_blit"
+  external make : int -> 'a -> 'a array = "caml_make_vect"
+  external unsafe_set : 'a array -> int -> 'a -> unit = "caml_array_set"
+  external length : 'a array -> int = "%79"
+  external append : 'a array -> 'a array -> 'a array = "caml_array_append"
+  external sub : 'a array -> int -> int -> 'a array = "caml_array_sub"
+  external make : int -> 'a -> 'a array = "caml_make_vect"
+  external _empty_array : unit -> 'a array = "%58"
+  let empty_array = _empty_array ()
 
   let rec fill_loop a x y v = if x >= y then () else begin unsafe_set a x v; fill_loop a (x + 1) y v end
   let fill a ofs len v =
     fill_loop a ofs (ofs + len) v
-  
+
   let rec of_list_loop a i l = match l with
     | [] -> a
     | hd :: tl -> unsafe_set a i hd; of_list_loop a (i + 1) tl
   let of_list l = match l with
     | [] -> empty_array
     | hd :: tl -> let a = make (List.length l) hd in of_list_loop a 1 tl
+
+  external get : 'a array -> int -> 'a = "caml_array_get"
+  external set : 'a array -> int -> 'a -> unit = "caml_array_set"
+  external unsafe_get : 'a array -> int -> 'a = "caml_array_unsafe_get"
+  external unsafe_set : 'a array -> int -> 'a -> unit = "caml_array_unsafe_set"
+
 end
 
-module Hashtbl = struct
-  external seeded_hash_param : = "caml_hash"
-  let hash x = seeded_hash_param 10 100 0 x
-end
+external array_get : 'a array -> int -> 'a = "caml_array_get"
+external array_set : 'a array -> int -> 'a -> unit = "caml_array_set"
+external int_of_string : string -> int = "caml_int_of_string"
 
-external array_get : = "caml_array_get"
-external array_set : = "caml_array_set"
-external int_of_string : = "caml_int_of_string"
-
-external unsafe_input : = "caml_ml_input"
+external unsafe_input : in_channel -> bytes -> int -> int -> unit = "caml_ml_input"
 
 let input ic s ofs len =
   if ofs < 0 || len < 0 || ofs > Bytes.length s - len
   then invalid_arg "input"
   else unsafe_input ic s ofs len
 
-external unsafe_output : = "caml_ml_output_bytes"
+external unsafe_output : out_channel -> bytes -> int -> int -> unit = "caml_ml_output_bytes"
 
 let output oc s ofs len =
   if ofs < 0 || len < 0 || ofs > Bytes.length s - len
@@ -197,6 +230,10 @@ type open_flag =
 
 external open_desc : string -> open_flag list -> int -> int = "caml_sys_open"
 
+
+external set_in_channel_name: in_channel -> string -> unit =
+  "caml_ml_set_channel_name"
+
 let open_in_gen mode perm name =
   let c = open_descriptor_in(open_desc name mode perm) in
   set_in_channel_name c name;
@@ -207,8 +244,12 @@ let open_in name =
 
 external close_in : in_channel -> unit = "caml_ml_close_channel"
 
-external set_in_channel_name: in_channel -> string -> unit =
-  "caml_ml_set_channel_name"
+
+let stdout = open_descriptor_out 1
+external caml_ml_output : out_channel -> string -> int -> int -> unit = "caml_ml_output"
+external caml_ml_flush : out_channel -> unit = "caml_ml_flush"
+external caml_ml_bytes_length : string -> int = "caml_ml_bytes_length"
+let print_string s = caml_ml_output stdout s 0 (caml_ml_bytes_length s); caml_ml_flush stdout
 
 module Sys = struct
   type backend_type =

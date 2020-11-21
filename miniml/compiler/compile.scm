@@ -137,6 +137,7 @@
     (MINUSGT type_count_arrows) : (+ 1 $2)
     (longident_lident type_count_arrows) : $2
     (QUOTE type_count_arrows) : $2
+    (STAR type_count_arrows) : $2
     (LPAREN type_ignore RPAREN type_count_arrows) : $4)
 
    (constant
@@ -802,23 +803,27 @@
 (define (env-with-fields env nfields) (cons (car env) (cons nfields (cdr (cdr env)))))
 (define (env-with-modules env nmodules) (cons (car env) (cons (car (cdr env)) nmodules)))
 
+(define (vhash-assoc-err name env)
+  (let ((r (vhash-assoc name env)))
+    (if (pair? r) r (errorp "Not found in env: " name))
+    ))
 (define (env-get-module env ld)
-  (cond ((= (car ld) 'Lident) (cdr (cdr (vhash-assoc (car (cdr ld)) (env-get-modules env)))))
-        ((= (car ld) 'Ldot) (cdr (cdr (vhash-assoc (car (cdr (cdr ld))) (env-get-modules (env-get-module env (car (cdr ld))))))))
+  (cond ((equal? (car ld) 'Lident) (cdr (cdr (vhash-assoc-err (car (cdr ld)) (env-get-modules env)))))
+        ((equal? (car ld) 'Ldot) (cdr (cdr (vhash-assoc-err (car (cdr (cdr ld))) (env-get-modules (env-get-module env (car (cdr ld))))))))
         (else (assert #f))))
 (define (env-get-env-li env ld)
   (cond ((equal? (car ld) 'Lident) (cons env (car (cdr ld))))
-        ((equal? (car ld) 'Ldot) (cons (env-get-modules (env-get-module env (car (cdr ld)))) (car (cdr (cdr ld)))))
+        ((equal? (car ld) 'Ldot) (cons (env-get-module env (car (cdr ld))) (car (cdr (cdr ld)))))
         (else (assert #f))))
 (define (env-get-var env ld)
   (let ((envs (env-get-env-li env ld)))
-    (cdr (cdr (vhash-assoc (cdr envs) (env-get-vars (car envs)))))))
+    (cdr (cdr (vhash-assoc-err (cdr envs) (env-get-vars (car envs)))))))
 (define (env-get-constr env ld)
   (let ((envs (env-get-env-li env ld)))
-    (cdr (cdr (vhash-assoc (cdr envs) (env-get-constrs (car envs)))))))
+    (cdr (cdr (vhash-assoc-err (cdr envs) (env-get-constrs (car envs)))))))
 (define (env-get-field env ld)
   (let ((envs (env-get-env-li env ld)))
-    (cdr (cdr (vhash-assoc (cdr envs) (env-get-fields (car envs)))))))
+    (cdr (cdr (vhash-assoc-err (cdr envs) (env-get-fields (car envs)))))))
 
 
 (define (mkvar location funshape) (cons location funshape))
@@ -1154,6 +1159,7 @@
                (f  (car (cdr (cdr expr))))
                (e2 (car (cdr (cdr (cdr expr))))))
            (compile-expr env stacksize #f e2)
+           (bytecode-put-u32-le PUSH)
            (compile-expr env (+ 1 stacksize) #f e1)
            (bytecode-put-u32-le SETFIELD)
            (bytecode-put-u32-le (get-field-index (env-get-field env f)))))
@@ -1461,8 +1467,8 @@
          (let* ((l (car (cdr tdef)))
                 (numtags (fold (lambda (namearity counts)
                                  (if (> (cdr namearity) 0)
-                                     (cons (+ 1 (car counts)) (cdr counts))
-                                     (cons (car counts) (+ 1 (cdr counts)))))
+                                     (cons (car counts) (+ 1 (cdr counts)))
+                                     (cons (+ 1 (car counts)) (cdr counts))))
                                (cons 0 0) l))
                 (nenv-constrs
                  (car (fold (lambda (namearity eis)
@@ -1471,10 +1477,11 @@
                                      (e (car eis))
                                      (i1 (car (cdr eis)))
                                      (i2 (cdr (cdr eis)))
-                                     (tag (if (> arity 0) i1 i2))
-                                     (nis (if (> arity 0) (cons (+ 1 i1) i2) (cons i1 (+ 1 i2)))))
+                                     (tag (if (> arity 0) i2 i1))
+                                     (nis (if (> arity 0) (cons i1 (+ 1 i2)) (cons (+ 1 i1) i2))))
                                 (cons (vhash-replace name (cons #t (mkconstr arity tag numtags)) e) nis)))
                             (cons (env-get-constrs env) (cons 0 0)) l))))
+           ; (newline)(display name)(newline)(display numtags)(newline)(newline)
            (env-with-constrs env nenv-constrs)))
         ((equal? (car tdef) 'IRecord)
          (let* ((l (car (cdr tdef)))
@@ -1519,6 +1526,7 @@
                 (tenv (if rec-flag nenv env)))
            (for-each (lambda (def loc)
                        (begin
+                         ; (display "Compiling ") (display (get-def-name def)) (newline)
                          (if (null? (get-def-args def))
                              (compile-expr tenv 0 #f (get-def-body def))
                              (compile-fundef tenv 0 (get-def-args def) (get-def-body def)))
@@ -1595,7 +1603,7 @@
 (bytecode-open-output "testbyte")
 (bytecode-begin-section "CODE")
 
-(define initial-env (env-with-constrs empty-env (vhash-replace "" (cons #t (mkconstr -1 0 1)) (env-get-constrs empty-env))))
+(define initial-env (env-with-constrs empty-env (vhash-replace "" (cons #t (mkconstr -1 0 (cons 0 1))) (env-get-constrs empty-env))))
 (compile-defs initial-env prog)
 (bytecode-put-u32-le STOP)
 
