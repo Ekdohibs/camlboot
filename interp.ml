@@ -11,7 +11,9 @@ let parse filename =
   close_in inc;
   parsed
 
-let stdlib_flag = [`Open (Longident.Lident "Stdlib")]
+type env_flag = Open of Longident.t
+
+let stdlib_flag = [Open (Longident.Lident "Stdlib")]
 let no_stdlib_flag = []
 
 let stdlib_units =
@@ -76,7 +78,7 @@ let stdlib_units =
 
 let eval_env_flag ~loc env flag =
   match flag with
-  | `Open module_ident ->
+  | Open module_ident ->
      let module_ident = Location.mkloc module_ident loc in
      env_extend false env (env_get_module_data env module_ident)
 
