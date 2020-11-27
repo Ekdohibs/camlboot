@@ -262,7 +262,8 @@
     (expr SEMICOLON expr) : (list 'EChain $1 $3))
 
    (llet
-    (pattern EQ expr) : (cons $1 $3))
+    (pattern EQ expr) : (cons $1 $3)
+    (LIDENT nonempty_list_lident EQ expr) : (cons (list 'PVar $1) (list 'ELambda $2 $4)))
 
    (llet_ands
     ( ) : #nil

@@ -52,6 +52,9 @@ let f x = let x = x + x in x + x + x
 let _ = print_int (f 7)
 
 let _ =
+  let twice x = x + x in print_int (twice 21)
+
+let _ =
   let u = { a = 5 ; b = 7 } in
   print_int u.a; print_int u.b
 
