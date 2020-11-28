@@ -358,10 +358,14 @@ let run_files () =
 
 (* let _ = load_rec_units stdlib_env [stdlib_flag, "test.ml"] *)
 let () =
+  let open Conf in
   try match Conf.command () with
-        | Some Conf.Ocamlc -> run_ocamlc ()
-        | Some Conf.Ocamlopt -> run_ocamlopt ()
-        | Some Conf.Files -> run_files ()
-        | None -> run_ocamlc ()
+    | Some cmd ->
+      begin match cmd with
+        | Ocamlc -> run_ocamlc ()
+        | Ocamlopt -> run_ocamlopt ()
+        | Files -> run_files ()
+      end
+    | None -> run_ocamlc ()
   with InternalException e ->
     Format.eprintf "Code raised exception: %a@." pp_print_value e
