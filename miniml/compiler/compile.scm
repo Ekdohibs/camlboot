@@ -1,10 +1,13 @@
 (use-modules (system base lalr) (srfi srfi-1) (rnrs base) (ice-9 binary-ports) (ice-9 vlist))
 
-(define (mknolabel arg) (cons arg (list 'Nolabel)))
-(define (mkapp fname args) (list 'EApply (list 'Lident fname) (map mknolabel args)))
+(define (mknolabelapp arg) (cons arg (list 'Nolabel)))
+(define (mknolabelfun arg) (cons arg (cons (list 'Nolabel) (list 'None))))
+
+(define (mkapp fname args) (list 'EApply (list 'Lident fname) (map mknolabelapp args)))
 (define (mkapp1 fname arg1) (mkapp fname (list arg1)))
 (define (mkapp2 fname arg1 arg2) (mkapp fname (list arg1 arg2)))
 (define (mkapp3 fname arg1 arg2 arg3) (mkapp fname (list arg1 arg2 arg3)))
+
 
 (define ml-parser
   (lalr-parser
@@ -12,7 +15,7 @@
    ;; Token definitions
    (LPAREN LBRACE RBRACE QUOTE TILDE
            QUESTION SEMICOLONSEMICOLON LBRACK RBRACK LBRACKBAR BARRBRACK
-           AND BEGIN END EXCEPTION EXTERNAL FUN IF IN MODULE
+           AND BEGIN END EXCEPTION EXTERNAL FUN FUNCTION IF IN MODULE
            MUTABLE OF OPEN REC STRUCT TRY TYPE WITH
            EOF STRING LIDENT UIDENT INT
            (right: MINUSGT)
@@ -94,7 +97,7 @@
     (labelled_arg nonempty_list_labelled_arg) : (cons $1 $2))
 
    (labelled_arg
-    (simple_pattern) : (cons $1 (cons (list 'Nolabel) (list 'None)))
+    (simple_pattern) : (mknolabelfun $1)
     (TILDE LIDENT) : (cons (list 'PVar $2) (cons (list 'Labelled $2) (list 'None)))
     (QUESTION LIDENT) : (cons (list 'PVar $2) (cons (list 'Optional $2) (list 'None)))
     (QUESTION LPAREN LIDENT EQ expr RPAREN) : (cons (list 'PVar $3) (cons (list 'Optional $3) (list 'Some $5))))
@@ -217,7 +220,7 @@
     (simple_expr DOT LBRACK expr RBRACK) : (mkapp2 "string_get" $1 $4))
 
    (labelled_simple_expr
-    (simple_expr) : (mknolabel $1)
+    (simple_expr) : (mknolabelapp $1)
     (TILDE LIDENT (prec: label_prec)) : (cons (list 'EVar (list 'Lident $2)) (list 'Labelled $2))
     (QUESTION LIDENT (prec: label_prec)) : (cons (list 'EVar (list 'Lident $2)) (list 'Optional $2))
     (TILDE LIDENT COLON simple_expr) : (cons $4 (list 'Labelled $2))
@@ -258,12 +261,16 @@
     (expr_no_semi BARBAR expr_no_semi) : (list 'EIf $1 (list 'EConstant (list 'CInt 1)) $3)
     (expr_no_semi BARGT longident_lident list_labelled_simple_expr):
       ;; (e |> f e1 e2 .. en) ~> f e1 .. en e
-      (list 'EApply $3 (append $4 (list (mknolabel $1))))
+      (list 'EApply $3 (append $4 (list (mknolabelapp $1))))
     (longident_lident list_labelled_simple_expr ATAT expr_no_semi):
       ;; (f e1 .. en @@ e) ~> f e1 .. en e
-      (list 'EApply $1 (append $2 (list (mknolabel $4))))
+      (list 'EApply $1 (append $2 (list (mknolabelapp $4))))
     (MATCH expr WITH clauses) : (list 'EMatch $2 $4)
     (TRY expr WITH clauses) : (list 'ETry $2 $4)
+    (FUNCTION clauses) :
+      (list 'ELambda
+            (list (mknolabelfun (list 'PVar "arg#function")))
+            (list 'EMatch (list 'EVar (list 'Lident "arg#function")) $2))
     (LET llet llet_ands IN expr (prec: LET)) : (list 'ELet (cons $2 $3) $5)
     (LET OPEN longident_uident IN expr (prec: LET)) : (list 'ELetOpen $3 $5)
     (expr_no_semi COLONCOLON expr_no_semi) : (list 'EConstr (list 'Lident "Cons") (cons $1 (cons $3 #nil)))
@@ -312,6 +319,7 @@
     (cons "external" (cons 'EXTERNAL #f))
     (cons "false" (cons 'UIDENT "false"))
     (cons "fun" (cons 'FUN #f))
+    (cons "function" (cons 'FUNCTION #f))
     (cons "if" (cons 'IF #f))
     (cons "in" (cons 'IN #f))
     (cons "let" (cons 'LET #f))
