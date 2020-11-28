@@ -82,6 +82,7 @@
     (AND letdef let_ands) : (cons $2 $3))
 
    (letdef
+    (LPAREN RPAREN EQ expr) : (cons "_" (cons #nil $4))
     (LIDENT list_labelled_arg EQ expr) : (cons $1 (cons $2 $4)))
 
    (list_labelled_arg
