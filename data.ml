@@ -185,7 +185,7 @@ exception InternalException of value
 
 let unit = ptr @@ Constructor ("()", 0, None)
 
-let rec is_true = onptr @@ function
+let is_true = onptr @@ function
   | Constructor ("true", _, None) -> true
   | Constructor ("false", _, None) -> false
   | _ -> assert false
@@ -380,7 +380,7 @@ let next_exn_id =
     !last_exn_id
 
 exception No_module_data
-let get_module_data env loc = function
+let get_module_data loc = function
   | Module data -> data
   | Functor _ ->
      Format.eprintf "%a@.Tried to access the components of a functor@."
