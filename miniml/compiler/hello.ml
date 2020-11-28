@@ -152,4 +152,14 @@ let _ = print " "; show_exn (E2 7)
 let _ = print " "; show_exn E3
 let _ = print " "; show_exn (E4 7)
 
+module M = struct
+  let x = 42
+  let f x = x + x
+end
+
+let _ =
+  print_int M.x;
+  let open M in
+  print_int (f 42)
+
 let _ = caml_ml_flush stdout
