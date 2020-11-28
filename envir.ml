@@ -80,7 +80,7 @@ let make_module_data env =
   let values env_map =
     env_map
     |> SMap.filter (fun _ -> function
-          | Value v -> true
+          | Value _v -> true
           | Instance_variable _ -> false)
     |> SMap.map (function
            | Value v -> v
@@ -138,4 +138,4 @@ and env_get_class env ({ loc; _ } as lid) =
   lookup "class" ~env_name env.classes { txt = id; loc }
 
 and env_get_module_data env ({ loc; _ } as id) =
-  get_module_data env loc (env_get_module env id)
+  get_module_data loc (env_get_module env id)
