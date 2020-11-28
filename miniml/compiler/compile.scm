@@ -262,10 +262,8 @@
     (longident_lident list_labelled_simple_expr ATAT expr_no_semi):
       ;; (f e1 .. en @@ e) ~> f e1 .. en e
       (list 'EApply $1 (append $2 (list (mknolabel $4))))
-    (MATCH expr WITH pattern_lines) : (list 'EMatch $2 $4)
-    (TRY expr WITH pattern_lines) : (list 'ETry $2 $4)
-    (MATCH expr WITH BAR pattern_lines) : (list 'EMatch $2 $5)
-    (TRY expr WITH BAR pattern_lines) : (list 'ETry $2 $5)
+    (MATCH expr WITH clauses) : (list 'EMatch $2 $4)
+    (TRY expr WITH clauses) : (list 'ETry $2 $4)
     (LET llet llet_ands IN expr (prec: LET)) : (list 'ELet (cons $2 $3) $5)
     (LET OPEN longident_uident IN expr (prec: LET)) : (list 'ELetOpen $3 $5)
     (expr_no_semi COLONCOLON expr_no_semi) : (list 'EConstr (list 'Lident "Cons") (cons $1 (cons $3 #nil)))
@@ -287,9 +285,16 @@
     ( ) : #nil
     (AND llet llet_ands) : (cons $2 $3))
 
-   (pattern_lines
-    (pattern MINUSGT expr) : (cons (cons $1 $3) #nil)
-    (pattern MINUSGT expr BAR pattern_lines) : (cons (cons $1 $3) $5))
+   (clauses
+    (clauses_without_bar) : $1
+    (BAR clauses_without_bar) : $2)
+
+   (clauses_without_bar
+    (clause) : (list $1)
+    (clause BAR clauses_without_bar) : (cons $1 $3))
+
+   (clause
+    (pattern MINUSGT expr) : (cons $1 $3))
 
    (field_decl
     (LIDENT COLON type_ignore) : $1
