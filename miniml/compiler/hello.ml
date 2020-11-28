@@ -80,6 +80,8 @@ let _ =
 let _ =
   print_int (match Cons (1, Null) with Null -> 2 | Cons (x, l) -> 3)
 
+let _ = print "\nLists:\n"
+
 let rec iter f l =
   match l with
   | [] -> ()
@@ -98,6 +100,9 @@ let rec map f l =
 
 let _ = print_list (map (fun x -> x + 1) [1; 2; 3; 4; 5; 6; 7; 8; 9])
 
+let _ = print_list (map (fun (x, y) -> x + y) [(1, 1); (2, 2); (3, 3)])
+
+let _ = print "\nArguments:\n"
 
 let f1 ~x ~y = print_int (x + 2 * y)
 let _ = f1 0 1
@@ -110,6 +115,12 @@ let _ = f2 ~y:101 (* Note: this is different from ocaml *)
 let _ = f2 ?x:None ~y:102
 let _ = f2 ?x:(Some 0) ~y:103
 let _ = f2 ~x:0 ~y:104
+
+let f3 () ?(x=1) (y1, y2) ~z = print_int x; print_int y1; print_int y2; print_int z
+let _ = f3 () (2, 3) ~z:4
+let _ = f3 () ~x:0 (1, 2) ~z:3
+
+let _ = print "\nRecords:\n"
 
 let _ =
   let u = { a = 5 ; b = 7 } in

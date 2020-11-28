@@ -81,19 +81,21 @@
     (AND letdef let_ands) : (cons $2 $3))
 
    (letdef
-    (LIDENT list_labelled_args EQ expr) : (cons $1 (cons $2 $4)))
+    (LIDENT list_labelled_arg EQ expr) : (cons $1 (cons $2 $4)))
 
-   (list_labelled_args
+   (list_labelled_arg
     ( ) : #nil
-    (labelled_args list_labelled_args) : (cons $1 $2))
+    (labelled_arg list_labelled_arg) : (cons $1 $2))
 
-   (labelled_args
-    (LIDENT) : (cons $1 (cons (list 'Nolabel) (list 'None)))
-    (TILDE LIDENT) : (cons $2 (cons (list 'Labelled $2) (list 'None)))
-    (QUESTION LIDENT) : (cons $2 (cons (list 'Optional $2) (list 'None)))
-    (LPAREN LIDENT COLON type_ignore RPAREN) : (cons $2 (cons (list 'Nolabel) (list 'None)))
-    (LPAREN RPAREN) : (cons "_" (cons (list 'Nolabel) (list 'None)))
-    (QUESTION LPAREN LIDENT EQ expr RPAREN) : (cons $3 (cons (list 'Optional $3) (list 'Some $5))))
+   (nonempty_list_labelled_arg
+    (labelled_arg) : (list $1)
+    (labelled_arg nonempty_list_labelled_arg) : (cons $1 $2))
+
+   (labelled_arg
+    (simple_pattern) : (cons $1 (cons (list 'Nolabel) (list 'None)))
+    (TILDE LIDENT) : (cons (list 'PVar $2) (cons (list 'Labelled $2) (list 'None)))
+    (QUESTION LIDENT) : (cons (list 'PVar $2) (cons (list 'Optional $2) (list 'None)))
+    (QUESTION LPAREN LIDENT EQ expr RPAREN) : (cons (list 'PVar $3) (cons (list 'Optional $3) (list 'Some $5))))
 
    (constr_decl
     (UIDENT) : (cons $1 0)
@@ -178,15 +180,18 @@
     (comma_separated_list2_expr COMMA expr_no_semi) : (cons $3 $1))
 
    (pattern
-    (LIDENT) : (list 'PVar $1)
-    (longident_constr) : (list 'PConstr $1 #nil)
+    (simple_pattern) : $1
     (longident_constr LIDENT) : (list 'PConstr $1 (cons $2 #nil))
     (longident_constr LPAREN pattern_constr_args RPAREN) : (list 'PConstr $1 $3)
     (comma_separated_list2_lident) : (list 'PConstr (list 'Lident "") (reverse $1))
+    (LIDENT COLONCOLON LIDENT) : (list 'PConstr (list 'Lident "Cons") (cons $1 (cons $3 #nil))))
+
+   (simple_pattern
+    (LIDENT) : (list 'PVar $1)
+    (longident_constr) : (list 'PConstr $1 #nil)
     (LBRACK RBRACK) : (list 'PConstr (list 'Lident "Null") #nil)
-    (LIDENT COLONCOLON LIDENT) : (list 'PConstr (list 'Lident "Cons") (cons $1 (cons $3 #nil)))
     (LPAREN pattern COLON type_ignore RPAREN) : $2
-    (LPAREN RPAREN) : (list 'PInt "0")
+    (LPAREN RPAREN) : (list 'PInt 0)
     (LPAREN pattern RPAREN) : $2
     (INT) : (list 'PInt $1))
 
@@ -226,7 +231,7 @@
 
    (expr_no_semi
     (simple_expr) : $1
-    (FUN nonempty_list_lident MINUSGT expr) : (list 'ELambda $2 $4)
+    (FUN nonempty_list_labelled_arg MINUSGT expr) : (list 'ELambda $2 $4)
     (longident_lident nonempty_list_labelled_simple_expr) : (list 'EApply $1 $2)
     (longident_constr simple_expr) : (list 'EConstr $1 (cons $2 #nil))
     (comma_separated_list2_expr (prec: comma_prec)) : (list 'EConstr (list 'Lident "") (reverse $1))
@@ -264,7 +269,7 @@
 
    (llet
     (pattern EQ expr) : (cons $1 $3)
-    (LIDENT nonempty_list_lident EQ expr) : (cons (list 'PVar $1) (list 'ELambda $2 $4)))
+    (LIDENT nonempty_list_labelled_arg EQ expr) : (cons (list 'PVar $1) (list 'ELambda $2 $4)))
 
    (llet_ands
     ( ) : #nil
@@ -1296,7 +1301,7 @@
         ((equal? (car expr) 'ELambda)
          (let* ((args (car (cdr expr)))
                 (body (car (cdr (cdr expr)))))
-           (compile-fundef env stacksize (map (lambda (arg) (cons arg (cons (list 'Nolabel) (list 'None)))) args) body)))
+           (compile-fundef env stacksize args body)))
         (else (assert #f))))
 
 (define (compile-expr-list env stacksize l)
@@ -1326,7 +1331,8 @@
 (define (get-def-name d) (car d))
 (define (get-def-args d) (car (cdr d)))
 (define (get-def-body d) (cdr (cdr d)))
-(define (get-arg-name a) (car a))
+
+(define (get-arg-pat a) (car a))
 (define (get-arg-label a) (car (cdr a)))
 (define (get-arg-default a) (cdr (cdr a)))
 
@@ -1403,8 +1409,9 @@
            ))
         ((equal? (car expr) 'ELambda)
          (let* ((args (car (cdr expr)))
+                (pats (map get-arg-pat args))
                 (body (car (cdr (cdr expr)))))
-           (expr-fv-binding body env args)))
+           (expr-fv body (fold fv-env-pat env pats))))
         (else (assert #f))))
 
 (define (expr-fv-binding expr env args)
@@ -1430,25 +1437,21 @@
       (fold fv-env-var env l)))
    (else (assert #f))))
 
+
 (define (range a b) (if (>= a b) #nil (cons a (range (+ a 1) b))))
 
 (define (compile-fundef env stacksize args basebody)
-  (let* ((body (fold-right
-                (lambda (arg body)
+  (let* ((arity (length args))
+         (arg-names (map compile-arg-name args (range 0 arity)))
+         (body (fold-right
+                (lambda (arg name body)
                   (if (equal? (car (get-arg-default arg)) 'Some)
-                      (let* ((name (get-arg-name arg))
-                             (def (car (cdr (get-arg-default arg))))
-                             (noneline (cons (list 'PConstr (list 'Lident "None") #nil) def))
-                             (someline (cons (list 'PConstr (list 'Lident "Some") (list name))
-                                             (list 'EVar (list 'Lident name))))
-                             (match (list 'EMatch (list 'EVar (list 'Lident name)) (list noneline someline))))
-                        (list 'ELet (list (cons (list 'PVar name) match)) body))
-                      body))
-                basebody args))
-         (arity (length args))
+                      (compile-arg-default (get-arg-label arg) (get-arg-default arg) body)
+                      (compile-arg-pat (get-arg-pat arg) name body)))
+                basebody args arg-names))
          (lab1 (newlabel))
          (lab2 (newlabel))
-         (fv (map car (vlist->list (expr-fv-binding body env (map get-arg-name args)))))
+         (fv (map car (vlist->list (expr-fv-binding body env arg-names))))
          (nfv (fold (lambda (name i nfv) (vhash-replace name i nfv)) vlist-null fv (range 0 (length fv))))
          (mvars (vhash-filter-map
                  (lambda (name v)
@@ -1459,7 +1462,7 @@
                              (cons (car v) (mkvar (list 'VarEnv (cdr r)) (get-var-funshape (cdr v))))
                              #f))))
                  (env-get-vars env)))
-         (nvars (fold (lambda (arg i vs) (vhash-replace (get-arg-name arg) (cons #t (mkvar (list 'VarStack (- (- arity 1) i)) #nil)) vs)) mvars args (range 0 arity)))
+         (nvars (fold (lambda (arg-name i vs) (vhash-replace arg-name (cons #t (mkvar (list 'VarStack (- (- arity 1) i)) #nil)) vs)) mvars arg-names (range 0 arity)))
          (nenv (env-with-vars env nvars))
          )
     (assert (> arity 0))
@@ -1478,6 +1481,32 @@
     (bytecode-put-u32-le (length fv))
     (bytecode-emit-labref lab2)
   ))
+
+(define (compile-arg-name a i)
+  (let ((p (get-arg-pat a)))
+    (cond
+     ((equal? (car p) 'PVar)
+      (car (cdr p)))
+     (else
+      (string-append "arg" (number->string i))))))
+
+(define (compile-arg-default label default body)
+  (assert (equal? (car label) 'Optional))
+  (assert (equal? (car default) 'Some))
+  (let* ((name (car (cdr label)))
+         (def (car (cdr default)))
+         (noneline (cons (list 'PConstr (list 'Lident "None") #nil) def))
+         (someline (cons (list 'PConstr (list 'Lident "Some") (list name))
+                         (list 'EVar (list 'Lident name))))
+         (match (list 'EMatch (list 'EVar (list 'Lident name)) (list noneline someline))))
+    (list 'ELet (list (cons (list 'PVar name) match)) body)))
+
+(define (compile-arg-pat pat name body)
+  (if (equal? (car pat) 'PVar)
+      body
+      (list 'EMatch
+            (list 'EVar (list 'Lident name))
+            (list (cons pat body)))))
 
 (define (compile-type env name tdef)
   (cond ((equal? (car tdef) 'ISum)
