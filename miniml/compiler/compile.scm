@@ -1408,23 +1408,26 @@
         (else (assert #f))))
 
 (define (expr-fv-binding expr env args)
-  (expr-fv expr
-           (fold (lambda (name env)
-                   (env-with-vars env (vhash-replace name (cons #t (mkvar (list 'VarGlobal "dummy") "dummy")) (env-get-vars env))))
-                 env args)))
+  (expr-fv expr (fold fv-env-var env args)))
 
 (define (branch-fv b env)
+  (let ((p (car b))
+        (e (cdr b)))
+    (expr-fv e (fv-env-pat p env))))
+
+(define (fv-env-var arg env)
+  (env-with-vars env (vhash-replace arg (cons #t (mkvar (list 'VarGlobal "dummy") "dummy")) (env-get-vars env))))
+
+(define (fv-env-pat p env)
   (cond
-   ((equal? (car (car b)) 'PVar)
-    (let* ((v (car (cdr (car b))))
-           (e (cdr b)))
-      (expr-fv-binding e env (list v))))
-   ((equal? (car (car b)) 'PInt)
-    (expr-fv (cdr b) env))
-   ((equal? (car (car b)) 'PConstr)
-    (let* ((l (car (cdr (cdr (car b)))))
-           (e (cdr b)))
-      (expr-fv-binding e env l)))
+   ((equal? (car p) 'PVar)
+    (let ((v (car (cdr p))))
+      (fv-env-var v env)))
+   ((equal? (car p) 'PInt)
+    env)
+   ((equal? (car p) 'PConstr)
+    (let ((l (car (cdr (cdr p)))))
+      (fold fv-env-var env l)))
    (else (assert #f))))
 
 (define (range a b) (if (>= a b) #nil (cons a (range (+ a 1) b))))
