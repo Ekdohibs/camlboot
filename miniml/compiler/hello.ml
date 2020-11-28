@@ -84,6 +84,13 @@ let () =
     | Null -> 2 (* note: leading bar *)
     | Cons (x, l) -> 3)
 
+let test_function = function
+  | Null -> 2
+  | Cons (x, l) -> x + 1
+
+let () =
+  print_int (test_function (Cons (3, Null)))
+
 let () = print "\nLists:\n"
 
 let rec iter f l =
