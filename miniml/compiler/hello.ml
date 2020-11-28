@@ -74,11 +74,15 @@ let rec go n =
 let () = go 10
 let () = caml_ml_flush stdout
 
+let () = print "\nPattern-matching:\n"
+
 let () =
   print_int (match Null with Null -> 2 | Cons (x, l) -> 3)
 
 let () =
-  print_int (match Cons (1, Null) with Null -> 2 | Cons (x, l) -> 3)
+  print_int (match Cons (1, Null) with
+    | Null -> 2 (* note: leading bar *)
+    | Cons (x, l) -> 3)
 
 let () = print "\nLists:\n"
 
@@ -150,7 +154,8 @@ let () =
 
 let () =
   try raise (E2 7) with
-  | E2 x -> if x = 7 then print " ok" else print " ko"
+    (* note: no leading bar *)
+    E2 x -> if x = 7 then print " ok" else print " ko"
   | _ -> print " ko"
 
 let () = print (try " ok" with _ -> " ko")
