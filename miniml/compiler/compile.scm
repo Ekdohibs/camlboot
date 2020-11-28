@@ -1,6 +1,7 @@
 (use-modules (system base lalr) (srfi srfi-1) (rnrs base) (ice-9 binary-ports) (ice-9 vlist))
 
-(define (mkapp fname args) (list 'EApply (list 'Lident fname) (map (lambda (arg) (cons arg (list 'Nolabel))) args)))
+(define (mknolabel arg) (cons arg (list 'Nolabel)))
+(define (mkapp fname args) (list 'EApply (list 'Lident fname) (map mknolabel args)))
 (define (mkapp1 fname arg1) (mkapp fname (list arg1)))
 (define (mkapp2 fname arg1 arg2) (mkapp fname (list arg1 arg2)))
 (define (mkapp3 fname arg1 arg2 arg3) (mkapp fname (list arg1 arg2 arg3)))
@@ -27,8 +28,8 @@
            (left: COMMA)
            (right: BARBAR)
            (right: AMPERAMPER)
-           (left: EQ LTGT LT GT LTEQ GTEQ)
-           (right: CARET AT)
+           (left: EQ LTGT LT GT LTEQ GTEQ BARGT)
+           (right: CARET AT ATAT)
            (right: COLONCOLON)
            (left: PLUS MINUS)
            (left: STAR)
@@ -85,7 +86,7 @@
 
    (list_labelled_arg
     ( ) : #nil
-    (labelled_arg list_labelled_arg) : (cons $1 $2))
+    (nonempty_list_labelled_arg) : $1)
 
    (nonempty_list_labelled_arg
     (labelled_arg) : (list $1)
@@ -215,7 +216,7 @@
     (simple_expr DOT LBRACK expr RBRACK) : (mkapp2 "string_get" $1 $4))
 
    (labelled_simple_expr
-    (simple_expr) : (cons $1 (list 'Nolabel))
+    (simple_expr) : (mknolabel $1)
     (TILDE LIDENT (prec: label_prec)) : (cons (list 'EVar (list 'Lident $2)) (list 'Labelled $2))
     (QUESTION LIDENT (prec: label_prec)) : (cons (list 'EVar (list 'Lident $2)) (list 'Optional $2))
     (TILDE LIDENT COLON simple_expr) : (cons $4 (list 'Labelled $2))
@@ -224,6 +225,10 @@
    (nonempty_list_lident
     (LIDENT) : (cons $1 #nil)
     (LIDENT nonempty_list_lident) : (cons $1 $2))
+
+   (list_labelled_simple_expr
+    ( ) : #nil
+    (nonempty_list_labelled_simple_expr) : $1)
 
    (nonempty_list_labelled_simple_expr
     (labelled_simple_expr) : (cons $1 #nil)
@@ -250,6 +255,12 @@
     (expr_no_semi COLONEQ expr_no_semi) : (mkapp2 "ref_set" $1 $3)
     (expr_no_semi AMPERAMPER expr_no_semi) : (list 'EIf $1 $3 (list 'EConstant (list 'CInt 0)))
     (expr_no_semi BARBAR expr_no_semi) : (list 'EIf $1 (list 'EConstant (list 'CInt 1)) $3)
+    (expr_no_semi BARGT longident_lident list_labelled_simple_expr):
+      ;; (e |> f e1 e2 .. en) ~> f e1 .. en e
+      (list 'EApply $3 (append $4 (list (mknolabel $1))))
+    (longident_lident list_labelled_simple_expr ATAT expr_no_semi):
+      ;; (f e1 .. en @@ e) ~> f e1 .. en e
+      (list 'EApply $1 (append $2 (list (mknolabel $4))))
     (MATCH expr WITH pattern_lines) : (list 'EMatch $2 $4)
     (TRY expr WITH pattern_lines) : (list 'ETry $2 $4)
     (MATCH expr WITH BAR pattern_lines) : (list 'EMatch $2 $5)
@@ -425,11 +436,14 @@
                             (begin (read-char) (make-lexical-token 'LBRACKBAR location #f))
                             (make-lexical-token 'LBRACK location #f)))
         ((char=? c #\]) (make-lexical-token 'RBRACK location #f))
-        ((char=? c #\|) (if (char=? (peek-char) #\])
-                            (begin (read-char) (make-lexical-token 'BARRBRACK location #f))
-                            (if (char=? (peek-char) #\|)
-                                (begin (read-char) (make-lexical-token 'BARBAR location #f))
-                                (make-lexical-token 'BAR location #f))))
+        ((char=? c #\|) (cond
+                         ((char=? (peek-char) #\])
+                          (read-char) (make-lexical-token 'BARRBRACK location #f))
+                         ((char=? (peek-char) #\|)
+                          (read-char) (make-lexical-token 'BARBAR location #f))
+                         ((char=? (peek-char) #\>)
+                          (read-char) (make-lexical-token 'BARGT location #f))
+                         (else (make-lexical-token 'BAR location #f))))
         ((char=? c #\;) (if (char=? (peek-char) #\;)
                             (begin (read-char) (make-lexical-token 'SEMICOLONSEMICOLON location #f))
                             (make-lexical-token 'SEMICOLON location #f)))
@@ -448,7 +462,10 @@
                                 (make-lexical-token 'MINUS location #f))))
         ((char=? c #\*) (make-lexical-token 'STAR location #f))
         ((char=? c #\~) (make-lexical-token 'TILDE location #f))
-        ((char=? c #\@) (make-lexical-token 'AT location #f))
+        ((char=? c #\@) (cond
+                         ((char=? (peek-char) #\@)
+                          (read-char) (make-lexical-token 'ATAT location #f))
+                         (else (make-lexical-token 'AT location #f))))
         ((char=? c #\^) (make-lexical-token 'CARET location #f))
         ((char=? c #\?) (make-lexical-token 'QUESTION location #f))
         ((char=? c #\!) (make-lexical-token 'BANG location #f))

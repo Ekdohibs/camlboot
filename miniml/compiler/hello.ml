@@ -130,6 +130,8 @@ let _ =
   print_int v.a; print_int v.b;
   print_int w.a; print_int w.b
 
+let _ = print "\nExceptions:\n"
+
 exception E1
 exception E2 of int
 exception E3
@@ -166,6 +168,8 @@ let _ = print " "; show_exn (E2 7)
 let _ = print " "; show_exn E3
 let _ = print " "; show_exn (E4 7)
 
+let _ = print "\nopen:\n"
+
 module M = struct
   let x = 42
   let f x = x + x
@@ -176,4 +180,12 @@ let _ =
   let open M in
   print_int (f 42)
 
+let _ = print "\nInfix operators treated as sugar:\n"
+
+let succ n = n + 1
+let ignore_and_print_int () n = print_int n
+let _ = ignore_and_print_int () @@ succ @@ 1
+let _ = 2 |> succ |> ignore_and_print_int ()
+
+let _ = print "\n"
 let _ = caml_ml_flush stdout
