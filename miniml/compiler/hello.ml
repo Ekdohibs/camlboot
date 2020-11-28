@@ -23,7 +23,7 @@ let print_int n = print (format_int " %d" n)
 let _ = print "Hello, world!\n"
 
 let _ = print_int (6 * 7)
-let _ = print_int (17 + 12)
+let () = print_int (17 + 12)
 
 (* let g x = let z = x * 2 in fun y -> z * 3 *)
 
@@ -31,56 +31,56 @@ let g x y = x - y
 
 let h = g 6
 
-let _ = print_int (6 - 3)
-let _ = print_int (g 6 3)
-let _ = print_int (h 3)
+let () = print_int (6 - 3)
+let () = print_int (g 6 3)
+let () = print_int (h 3)
 
 let f1 = fun x -> fun y -> x * y
 let f2 = f1 6
 
-let _ = print_int (f2 7)
+let () = print_int (f2 7)
 
 let double f x = f (f x)
 let add2n n x = double (plus n) x
 
-let _ = print_int (add2n 20 2)
-let _ = print_int (double double double double (plus 1) 0)
-let _ = print_int (if false then 17 else 42)
-let _ = print_int (if true then 17 else 42)
+let () = print_int (add2n 20 2)
+let () = print_int (double double double double (plus 1) 0)
+let () = print_int (if false then 17 else 42)
+let () = print_int (if true then 17 else 42)
 
 let f x = let x = x + x in x + x + x
-let _ = print_int (f 7)
+let () = print_int (f 7)
 
-let _ =
+let () =
   let twice x = x + x in print_int (twice 21)
 
-let _ =
+let () =
   let u = { a = 5 ; b = 7 } in
   print_int u.a; print_int u.b
 
-let _ =
+let () =
   let u = { b = 5 ; a = 7 } in
   print_int u.a; print_int u.b
 
 
-let _ = print_int (let a = 17 in let b = 42 in if (let x = 2 in true) then a else b)
-let _ = print_int (let a = 17 in let b = 42 in if (let x = 2 in false) then a else b)
+let () = print_int (let a = 17 in let b = 42 in if (let x = 2 in true) then a else b)
+let () = print_int (let a = 17 in let b = 42 in if (let x = 2 in false) then a else b)
 
-let _ = caml_ml_flush stdout
+let () = caml_ml_flush stdout
 
 let rec go n =
   if n = 0 then () else (print_int n; go (n - 1))
 
-let _ = go 10
-let _ = caml_ml_flush stdout
+let () = go 10
+let () = caml_ml_flush stdout
 
-let _ =
+let () =
   print_int (match Null with Null -> 2 | Cons (x, l) -> 3)
 
-let _ =
+let () =
   print_int (match Cons (1, Null) with Null -> 2 | Cons (x, l) -> 3)
 
-let _ = print "\nLists:\n"
+let () = print "\nLists:\n"
 
 let rec iter f l =
   match l with
@@ -91,38 +91,38 @@ let rec iter f l =
 let print_list l =
   print "["; iter print_int l; print "]"
 
-let _ = print_list [1; 2; 3; 4; 5; 6; 7; 8; 9]
+let () = print_list [1; 2; 3; 4; 5; 6; 7; 8; 9]
 
 let rec map f l =
   match l with
   | [] -> []
   | x :: l -> f x :: map f l
 
-let _ = print_list (map (fun x -> x + 1) [1; 2; 3; 4; 5; 6; 7; 8; 9])
+let () = print_list (map (fun x -> x + 1) [1; 2; 3; 4; 5; 6; 7; 8; 9])
 
-let _ = print_list (map (fun (x, y) -> x + y) [(1, 1); (2, 2); (3, 3)])
+let () = print_list (map (fun (x, y) -> x + y) [(1, 1); (2, 2); (3, 3)])
 
-let _ = print "\nArguments:\n"
+let () = print "\nArguments:\n"
 
 let f1 ~x ~y = print_int (x + 2 * y)
-let _ = f1 0 1
-let _ = f1 ~x:0 ~y:1
-let _ = f1 ~y:1 ~x:0
+let () = f1 0 1
+let () = f1 ~x:0 ~y:1
+let () = f1 ~y:1 ~x:0
 
 let f2 ?(x=1) ~y = print_int (x + 2 * y)
-let _ = f2 100
-let _ = f2 ~y:101 (* Note: this is different from ocaml *)
-let _ = f2 ?x:None ~y:102
-let _ = f2 ?x:(Some 0) ~y:103
-let _ = f2 ~x:0 ~y:104
+let () = f2 100
+let () = f2 ~y:101 (* Note: this is different from ocaml *)
+let () = f2 ?x:None ~y:102
+let () = f2 ?x:(Some 0) ~y:103
+let () = f2 ~x:0 ~y:104
 
 let f3 () ?(x=1) (y1, y2) ~z = print_int x; print_int y1; print_int y2; print_int z
-let _ = f3 () (2, 3) ~z:4
-let _ = f3 () ~x:0 (1, 2) ~z:3
+let () = f3 () (2, 3) ~z:4
+let () = f3 () ~x:0 (1, 2) ~z:3
 
-let _ = print "\nRecords:\n"
+let () = print "\nRecords:\n"
 
-let _ =
+let () =
   let u = { a = 5 ; b = 7 } in
   let v = { u with a = 42 } in
   let w = { u with b = 16 } in
@@ -130,7 +130,7 @@ let _ =
   print_int v.a; print_int v.b;
   print_int w.a; print_int w.b
 
-let _ = print "\nExceptions:\n"
+let () = print "\nExceptions:\n"
 
 exception E1
 exception E2 of int
@@ -143,49 +143,49 @@ let show_exn e =
   | E2 i -> print "(E2"; print_int i; print ")"
   | _ -> print "<unknown>"
 
-let _ =
+let () =
   try raise E1 with
   | E1 -> print " ok"
   | _ -> print " ko"
 
-let _ =
+let () =
   try raise (E2 7) with
   | E2 x -> if x = 7 then print " ok" else print " ko"
   | _ -> print " ko"
 
-let _ = print (try " ok" with _ -> " ko")
+let () = print (try " ok" with _ -> " ko")
 
-let _ = try (try raise E1 with E2 _ -> print " ko") with E1 -> print " ok" | _ -> print " ko"
-let _ = try (try raise (E2 7) with E1 -> print " ko") with E2 x -> if x = 7 then print " ok" else print " ko" | _ -> print " ko"
-let _ = try (try raise E3 with E1 -> print " ko" | E2 _ -> print " ko") with _ -> print " ok"
-let _ = try (try raise (E4 7) with E1 -> print " ko" | E2 _ -> print " ko") with _ -> print " ok"
+let () = try (try raise E1 with E2 _ -> print " ko") with E1 -> print " ok" | _ -> print " ko"
+let () = try (try raise (E2 7) with E1 -> print " ko") with E2 x -> if x = 7 then print " ok" else print " ko" | _ -> print " ko"
+let () = try (try raise E3 with E1 -> print " ko" | E2 _ -> print " ko") with _ -> print " ok"
+let () = try (try raise (E4 7) with E1 -> print " ko" | E2 _ -> print " ko") with _ -> print " ok"
 
-let _ = try (try raise E1 with E1 -> print " ok") with _ -> print " ko"
-let _ = try (try raise (E2 7) with E2 x -> if x = 7 then print " ok" else print " ko") with _ -> print " ko"
+let () = try (try raise E1 with E1 -> print " ok") with _ -> print " ko"
+let () = try (try raise (E2 7) with E2 x -> if x = 7 then print " ok" else print " ko") with _ -> print " ko"
 
-let _ = print " "; show_exn E1
-let _ = print " "; show_exn (E2 7)
-let _ = print " "; show_exn E3
-let _ = print " "; show_exn (E4 7)
+let () = print " "; show_exn E1
+let () = print " "; show_exn (E2 7)
+let () = print " "; show_exn E3
+let () = print " "; show_exn (E4 7)
 
-let _ = print "\nopen:\n"
+let () = print "\nopen:\n"
 
 module M = struct
   let x = 42
   let f x = x + x
 end
 
-let _ =
+let () =
   print_int M.x;
   let open M in
   print_int (f 42)
 
-let _ = print "\nInfix operators treated as sugar:\n"
+let () = print "\nInfix operators treated as sugar:\n"
 
 let succ n = n + 1
 let ignore_and_print_int () n = print_int n
-let _ = ignore_and_print_int () @@ succ @@ 1
-let _ = 2 |> succ |> ignore_and_print_int ()
+let () = ignore_and_print_int () @@ succ @@ 1
+let () = 2 |> succ |> ignore_and_print_int ()
 
-let _ = print "\n"
-let _ = caml_ml_flush stdout
+let () = print "\n"
+let () = caml_ml_flush stdout
