@@ -1,4 +1,7 @@
-(use-modules (system base lalr) (srfi srfi-1) (rnrs base) (ice-9 binary-ports) (ice-9 vlist))
+(use-modules (system base lalr)
+             (srfi srfi-1) (srfi srfi-9 gnu)
+             (rnrs base)
+             (ice-9 binary-ports) (ice-9 vlist) (ice-9 match))
 
 (define (mknolabelapp arg) (cons arg (list 'Nolabel)))
 (define (mknolabelfun arg) (cons arg (cons (list 'Nolabel) (list 'None))))
