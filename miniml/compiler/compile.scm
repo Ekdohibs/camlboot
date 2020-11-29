@@ -1459,16 +1459,13 @@
   (env-with-vars env (vhash-replace arg (cons #t (mkvar (list 'VarGlobal "dummy") "dummy")) (env-get-vars env))))
 
 (define (fv-env-pat p env)
-  (cond
-   ((equal? (car p) 'PVar)
-    (let ((v (car (cdr p))))
-      (fv-env-var v env)))
-   ((equal? (car p) 'PInt)
+  (match p
+   (('PVar v)
+    (fv-env-var v env))
+   (('PInt _)
     env)
-   ((equal? (car p) 'PConstr)
-    (let ((l (car (cdr (cdr p)))))
-      (fold fv-env-var env l)))
-   (else (assert #f))))
+   (('PConstr c l)
+    (fold fv-env-var env l))))
 
 
 (define (range a b) (if (>= a b) #nil (cons a (range (+ a 1) b))))
