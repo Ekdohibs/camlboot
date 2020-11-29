@@ -833,16 +833,15 @@
 (define RERAISE 146)
 (define obj_tag (prim "caml_obj_tag"))
 
-(define (mkenv vars constrs fields modules) (cons (cons vars constrs) (cons fields modules)))
+(define-immutable-record-type <env>
+  (mkenv vars constrs fields modules)
+  env?
+  (vars env-get-vars env-with-vars)
+  (constrs env-get-constrs env-with-constrs)
+  (fields env-get-fields env-with-fields)
+  (modules env-get-modules env-with-modules))
+
 (define empty-env (mkenv vlist-null vlist-null vlist-null vlist-null))
-(define (env-get-vars env) (car (car env)))
-(define (env-get-constrs env) (cdr (car env)))
-(define (env-get-fields env) (car (cdr env)))
-(define (env-get-modules env) (cdr (cdr env)))
-(define (env-with-vars env nvars) (cons (cons nvars (cdr (car env))) (cdr env)))
-(define (env-with-constrs env nconstrs) (cons (cons (car (car env)) nconstrs) (cdr env)))
-(define (env-with-fields env nfields) (cons (car env) (cons nfields (cdr (cdr env)))))
-(define (env-with-modules env nmodules) (cons (car env) (cons (car (cdr env)) nmodules)))
 
 (define (vhash-assoc-err name env)
   (let ((r (vhash-assoc name env)))
