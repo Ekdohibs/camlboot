@@ -847,14 +847,21 @@
   (let ((r (vhash-assoc name env)))
     (if (pair? r) r (errorp "Not found in env: " name))
     ))
+
 (define (env-get-module env ld)
-  (cond ((equal? (car ld) 'Lident) (cdr (cdr (vhash-assoc-err (car (cdr ld)) (env-get-modules env)))))
-        ((equal? (car ld) 'Ldot) (cdr (cdr (vhash-assoc-err (car (cdr (cdr ld))) (env-get-modules (env-get-module env (car (cdr ld))))))))
-        (else (assert #f))))
+  (match ld
+    (('Lident v)
+     (cdr (cdr (vhash-assoc-err v (env-get-modules env)))))
+    (('Ldot ld uid)
+     (cdr (cdr (vhash-assoc-err uid (env-get-modules (env-get-module env ld))))))))
+
 (define (env-get-env-li env ld)
-  (cond ((equal? (car ld) 'Lident) (cons env (car (cdr ld))))
-        ((equal? (car ld) 'Ldot) (cons (env-get-module env (car (cdr ld))) (car (cdr (cdr ld)))))
-        (else (assert #f))))
+  (match ld
+    (('Lident v)
+     (cons env v))
+    (('Ldot ld uid)
+     (cons (env-get-module env ld) uid))))
+
 (define (env-get-var env ld)
   (let ((envs (env-get-env-li env ld)))
     (cdr (cdr (vhash-assoc-err (cdr envs) (env-get-vars (car envs)))))))
