@@ -2,7 +2,7 @@ function test() {
   echo "Testing $1"
   cd $1
   OCAMLINTERP_DEBUG=0 OCAMLRUNPARAM=b \
-    OCAMLINTERP_SRC_PATH=../../ocaml-src \
+    OCAMLINTERP_SRC_PATH=../../../ocaml-src \
     OCAMLINTERP_STDLIB_PATH=$OCAMLINTERP_SRC_PATH/stdlib \
     OCAMLINTERP_COMMAND=files ../../interpopt $(cat files)
   echo "done with $1."

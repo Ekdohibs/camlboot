@@ -814,7 +814,7 @@ and eval_structitem prims env it =
   | Pstr_class_type _ -> env
   | Pstr_include { pincl_mod = me; pincl_loc = loc; _ } ->
     let m = eval_module_expr prims env me in
-    env_extend true env (get_module_data env loc m)
+    env_extend true env (get_module_data loc m)
   | Pstr_attribute _ -> env
   | Pstr_extension _ -> unsupported it.pstr_loc; assert false
 
