@@ -931,24 +931,24 @@
   (align funshape args))
 
 (define (access-var location stacksize)
-  (cond ((equal? (car location) 'VarStack)
-         (begin
-           (bytecode-put-u32-le ACC)
-           (bytecode-put-u32-le (- (- stacksize (car (cdr location))) 1))))
-        ((equal? (car location) 'VarEnv)
-         (begin
-           (bytecode-put-u32-le ENVACC)
-           (bytecode-put-u32-le (+ 1 (car (cdr location))))))
-        ((equal? (car location) 'VarGlobal)
-         (begin
-           (bytecode-put-u32-le GETGLOBAL)
-           (bytecode-put-u32-le (car (cdr location)))))
-        (else (assert #f))))
+  (match location
+    (('VarStack pos)
+     (bytecode-put-u32-le ACC)
+     (bytecode-put-u32-le (- (- stacksize pos) 1)))
+    (('VarEnv pos)
+     (bytecode-put-u32-le ENVACC)
+     (bytecode-put-u32-le (+ 1 pos)))
+    (('VarGlobal id)
+     (bytecode-put-u32-le GETGLOBAL)
+     (bytecode-put-u32-le id))))
 
 (define (adjust-constr-args args arity)
-  (cond ((and (= arity 1) (> (length args) 1)) (list 'EConstr (list 'Lident "") args))
-        ((and (> arity 1) (= (length args) 1) (equal? (car (car args)) 'EConstr) (equal? (car (cdr (car args))) (list 'Lident "")))
-         (car (cdr (cdr (car args)))))
+  (cond ((and (= arity 1) (> (length args) 1))
+         (list 'EConstr (list 'Lident "") args))
+        ((and (> arity 1) (= (length args) 1))
+         (match args
+           ((('EConstr ('Lident "") args)) args)
+           (_ args)))
         (else args)))
 
 (define (show-env env)
