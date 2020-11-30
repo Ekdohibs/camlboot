@@ -1509,11 +1509,17 @@
                              #f))))
                  (env-get-vars env)))
          (rvars (fold (lambda (rec-name shape i vs)
-                        (vhash-replace rec-name
-                                       (cons #t (mkvar (list 'VarRec (* rec-closure-step (- i recoffset))) shape))
-                                       vs))
+                        (vhash-replace
+                         rec-name
+                         (cons #t (mkvar (list 'VarRec (* rec-closure-step (- i recoffset))) shape))
+                         vs))
                       mvars recvars recshapes (range 0 (length recvars))))
-         (nvars (fold (lambda (arg-name i vs) (vhash-replace arg-name (cons #t (mkvar (list 'VarStack (- (- arity 1) i)) #nil)) vs)) rvars arg-names (range 0 arity)))
+         (nvars (fold (lambda (arg-name i vs)
+                        (vhash-replace
+                         arg-name
+                         (cons #t (mkvar (list 'VarStack (- (- arity 1) i)) #nil))
+                         vs))
+                      rvars arg-names (range 0 arity)))
          (nenv (env-with-vars env nvars))
          )
     (assert (> arity 0))
