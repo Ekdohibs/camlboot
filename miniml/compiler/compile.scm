@@ -1024,25 +1024,21 @@
   (env-with-vars env (vhash-replace var (cons #t (mkvar (list 'VarStack pos) #nil)) (env-get-vars env))))
 
 (define (compile-bind-fields env stacksize istail vars e)
-  (let* ((ijenv (fold
-             (lambda (var ijenv)
+  (match-let (((i j env) (fold
+             (match-lambda* ((var (i j env))
                (if (equal? var "_")
-                   (cons (+ (car ijenv) 1) (cdr ijenv))
-                   (let*
-                       ((i (car ijenv))
-                        (j (car (cdr ijenv)))
-                        (env (cdr (cdr ijenv)))
-                        (nenv (localvar env var (+ stacksize j))))
+                   (list (+ i 1) j env)
+                   (let* ((nenv (localvar env var (+ stacksize j))))
                      (bytecode-put-u32-le ACC)
                      (bytecode-put-u32-le j)
                      (bytecode-put-u32-le GETFIELD)
                      (bytecode-put-u32-le i)
                      (bytecode-put-u32-le PUSH)
-                     (cons (+ i 1) (cons (+ j 1) nenv))))
-               ) (cons 0 (cons 0 env)) vars)))
-    (compile-expr (cdr (cdr ijenv)) (+ stacksize (car (cdr ijenv))) istail e)
+                     (list (+ i 1) (+ j 1) nenv)))
+               )) (list 0 0 env) vars)))
+    (compile-expr env (+ stacksize j) istail e)
     (bytecode-put-u32-le POP)
-    (bytecode-put-u32-le (+ (car (cdr ijenv)) 1))
+    (bytecode-put-u32-le (+ j 1))
   ))
 
 (define (compile-bind-var env stacksize istail var e)
