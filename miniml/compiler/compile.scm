@@ -11,8 +11,15 @@
   (args def-get-args)
   (body def-get-body))
 
+(define-immutable-record-type <arg>
+  (mkarg pat label default)
+  def?
+  (pat arg-get-pat)
+  (label arg-get-label)
+  (default arg-get-default))
+
 (define (mknolabelapp arg) (cons arg (list 'Nolabel)))
-(define (mknolabelfun arg) (cons arg (cons (list 'Nolabel) (list 'None))))
+(define (mknolabelfun arg) (mkarg arg (list 'Nolabel) (list 'None)))
 
 (define (mkapp fname args) (list 'EApply (list 'Lident fname) (map mknolabelapp args)))
 (define (mkapp1 fname arg1) (mkapp fname (list arg1)))
@@ -109,9 +116,9 @@
 
    (labelled_arg
     (simple_pattern) : (mknolabelfun $1)
-    (TILDE LIDENT) : (cons (list 'PVar $2) (cons (list 'Labelled $2) (list 'None)))
-    (QUESTION LIDENT) : (cons (list 'PVar $2) (cons (list 'Optional $2) (list 'None)))
-    (QUESTION LPAREN LIDENT EQ expr RPAREN) : (cons (list 'PVar $3) (cons (list 'Optional $3) (list 'Some $5))))
+    (TILDE LIDENT) : (mkarg (list 'PVar $2) (list 'Labelled $2) (list 'None))
+    (QUESTION LIDENT) : (mkarg (list 'PVar $2) (list 'Optional $2) (list 'None))
+    (QUESTION LPAREN LIDENT EQ expr RPAREN) : (mkarg (list 'PVar $3) (list 'Optional $3) (list 'Some $5)))
 
    (constr_decl
     (UIDENT) : (cons $1 0)
@@ -1359,10 +1366,6 @@
 (define (vset-difference s1 s2) (vhash-fold (lambda (k v s) (vhash-delete k s)) s1 s2))
 (define (vset-list-union l) (fold vset-union vset-empty l))
 
-(define (get-arg-pat a) (car a))
-(define (get-arg-label a) (car (cdr a)))
-(define (get-arg-default a) (cdr (cdr a)))
-
 (define (expr-fv expr env)
   (cond ((equal? (car expr) 'EVar)
          (let* ((v (car (cdr expr)))
@@ -1436,7 +1439,7 @@
            ))
         ((equal? (car expr) 'ELambda)
          (let* ((args (car (cdr expr)))
-                (pats (map get-arg-pat args))
+                (pats (map arg-get-pat args))
                 (body (car (cdr (cdr expr)))))
            (expr-fv body (fold fv-env-pat env pats))))
         (else (assert #f))))
@@ -1468,10 +1471,10 @@
   (let* ((arity (length args))
          (arg-names (map compile-arg-name args (range 0 arity)))
          (body (fold-right
-                (lambda (arg name body)
-                  (if (equal? (car (get-arg-default arg)) 'Some)
-                      (compile-arg-default (get-arg-label arg) (get-arg-default arg) body)
-                      (compile-arg-pat (get-arg-pat arg) name body)))
+                (match-lambda* ((($ <arg> pat label default) name body)
+                  (if (equal? (car default) 'Some)
+                      (compile-arg-default label default body)
+                      (compile-arg-pat pat name body))))
                 basebody args arg-names))
          (lab1 (newlabel))
          (lab2 (newlabel))
@@ -1507,12 +1510,11 @@
   ))
 
 (define (compile-arg-name a i)
-  (let ((p (get-arg-pat a)))
-    (cond
-     ((equal? (car p) 'PVar)
-      (car (cdr p)))
-     (else
-      (string-append "arg#" (number->string i))))))
+  (match (arg-get-pat a)
+     (('PVar v)
+      v)
+     (_
+      (string-append "arg#" (number->string i)))))
 
 (define (compile-arg-default label default body)
   (assert (equal? (car label) 'Optional))
@@ -1522,8 +1524,8 @@
          (noneline (cons (list 'PConstr (list 'Lident "None") #nil) def))
          (someline (cons (list 'PConstr (list 'Lident "Some") (list name))
                          (list 'EVar (list 'Lident name))))
-         (match (list 'EMatch (list 'EVar (list 'Lident name)) (list noneline someline))))
-    (list 'ELet (list (cons (list 'PVar name) match)) body)))
+         (default-expr (list 'EMatch (list 'EVar (list 'Lident name)) (list noneline someline))))
+    (list 'ELet (list (cons (list 'PVar name) default-expr)) body)))
 
 (define (compile-arg-pat pat name body)
   (if (equal? (car pat) 'PVar)
@@ -1593,7 +1595,7 @@
                 (nenv-vars (fold (match-lambda* ((($ <def> name args body) loc e)
                                    (if (equal? name "_") e
                                        (vhash-replace name
-                                                   (cons #t (mkvar (list 'VarGlobal loc) (map get-arg-label args))) e))))
+                                                   (cons #t (mkvar (list 'VarGlobal loc) (map arg-get-label args))) e))))
                                  (env-get-vars env) bindings locations))
                 (nenv (env-with-vars env nenv-vars))
                 (tenv (if rec-flag nenv env)))
