@@ -3,6 +3,14 @@
              (rnrs base)
              (ice-9 binary-ports) (ice-9 vlist) (ice-9 match))
 
+
+(define-immutable-record-type <def>
+  (mkdef name args body)
+  def?
+  (name def-get-name)
+  (args def-get-args)
+  (body def-get-body))
+
 (define (mknolabelapp arg) (cons arg (list 'Nolabel)))
 (define (mknolabelfun arg) (cons arg (cons (list 'Nolabel) (list 'None))))
 
@@ -88,8 +96,8 @@
     (AND letdef let_ands) : (cons $2 $3))
 
    (letdef
-    (LPAREN RPAREN EQ expr) : (cons "_" (cons #nil $4))
-    (LIDENT list_labelled_arg EQ expr) : (cons $1 (cons $2 $4)))
+    (LPAREN RPAREN EQ expr) : (mkdef "_" #nil $4)
+    (LIDENT list_labelled_arg EQ expr) : (mkdef $1 $2 $4))
 
    (list_labelled_arg
     ( ) : #nil
@@ -1351,10 +1359,6 @@
 (define (vset-difference s1 s2) (vhash-fold (lambda (k v s) (vhash-delete k s)) s1 s2))
 (define (vset-list-union l) (fold vset-union vset-empty l))
 
-(define (get-def-name d) (car d))
-(define (get-def-args d) (car (cdr d)))
-(define (get-def-body d) (cdr (cdr d)))
-
 (define (get-arg-pat a) (car a))
 (define (get-arg-label a) (car (cdr a)))
 (define (get-arg-default a) (cdr (cdr a)))
@@ -1585,21 +1589,22 @@
         ((equal? (car d) 'MLet)
          (let* ((rec-flag (car (cdr d)))
                 (bindings (car (cdr (cdr d))))
-                (locations (map (lambda (def) (if (equal? (get-def-name def) "_") #nil (slot-for-global))) bindings))
-                (nenv-vars (fold (lambda (def loc e)
-                                   (if (equal? (get-def-name def) "_") e
-                                       (vhash-replace (get-def-name def)
-                                                   (cons #t (mkvar (list 'VarGlobal loc) (map get-arg-label (get-def-args def)))) e)))
+                (locations (map (lambda (def) (if (equal? (def-get-name def) "_") #nil (slot-for-global))) bindings))
+                (nenv-vars (fold (match-lambda* ((($ <def> name args body) loc e)
+                                   (if (equal? name "_") e
+                                       (vhash-replace name
+                                                   (cons #t (mkvar (list 'VarGlobal loc) (map get-arg-label args))) e))))
                                  (env-get-vars env) bindings locations))
                 (nenv (env-with-vars env nenv-vars))
                 (tenv (if rec-flag nenv env)))
-           (for-each (lambda (def loc)
-                       (begin
-                         ; (display "Compiling ") (display (get-def-name def)) (newline)
-                         (if (null? (get-def-args def))
-                             (compile-expr tenv 0 #f (get-def-body def))
-                             (compile-fundef tenv 0 (get-def-args def) (get-def-body def)))
-                         (if (not (null? loc)) (begin (bytecode-put-u32-le SETGLOBAL) (bytecode-put-u32-le loc)))
+           (for-each (match-lambda* ((($ <def> name args body) loc)
+                         ; (display "Compiling ") (display name) (newline)
+                         (if (null? args)
+                             (compile-expr tenv 0 #f body)
+                             (compile-fundef tenv 0 args body))
+                         (if (not (null? loc))
+                             (begin (bytecode-put-u32-le SETGLOBAL)
+                                    (bytecode-put-u32-le loc)))
                        )) bindings locations)
            nenv
            ))
