@@ -1661,12 +1661,6 @@
       env
       (compile-defs (compile-def env (car defs)) (cdr defs))))
 
-(define prog (ml-parser (lambda () (token errorp)) errorp))
-; (display prog)
-
-(bytecode-open-output "testbyte")
-(bytecode-begin-section "CODE")
-
 (define initial-env (env-with-constrs empty-env (vhash-replace "" (cons #t (mkconstr -1 0 (cons 0 1))) (env-get-constrs empty-env))))
 (define (declare-builtin-exn name arity)
   (set! initial-env (declare-exn name arity initial-env))
@@ -1685,11 +1679,35 @@
 (declare-builtin-exn "Assert_failure" 1)
 (declare-builtin-exn "Undefined_recursive_module" 1)
 
+(define input-file "")
+(define output-file "out.byte")
+(define (usage-and-exit)
+  (display "Usage: guile compile.scm input.ml -o output\n")
+  (exit))
+
+(define (process-args args)
+  (match args
+         (#nil '())
+         (("-h" . rest) (usage-and-exit))
+         (("-o" outfile . rest) (set! output-file outfile) (process-args rest))
+         ((infile . rest) (set! input-file infile) (process-args rest))
+  ))
+(if (null? (cdr (program-arguments))) (usage-and-exit))
+(process-args (cdr (program-arguments)))
+
+(set-current-input-port (open-input-file input-file))
+(define prog (ml-parser (lambda () (token errorp)) errorp))
+
+(bytecode-open-output output-file)
+
+(bytecode-begin-section "CODE")
 (compile-defs initial-env prog)
 (bytecode-put-u32-le STOP)
 
 (bytecode-begin-section "PRIM")
 (bytecode-write-prims)
+
 (bytecode-begin-section "DATA")
 (bytecode-write-globals)
+
 (bytecode-close-output)
