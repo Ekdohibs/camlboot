@@ -865,6 +865,16 @@
   (fields env-get-fields env-with-fields)
   (modules env-get-modules env-with-modules))
 
+
+(define (env-replace-var env k v)
+  (env-with-vars env (vhash-replace k v (env-get-vars env))))
+(define (env-replace-constr env k v)
+  (env-with-constrs env (vhash-replace k v (env-get-constrs env))))
+(define (env-replace-field env k v)
+  (env-with-fields env (vhash-replace k v (env-get-fields env))))
+(define (env-replace-module env k v)
+  (env-with-modules env (vhash-replace k v (env-get-modules env))))
+
 (define empty-env (mkenv vlist-null vlist-null vlist-null vlist-null))
 
 (define (vhash-assoc-err name env)
@@ -1064,7 +1074,7 @@
              (switch-cons-block sw block)))))))))
 
 (define (localvar-with-shape env var pos shape)
-  (env-with-vars env (vhash-replace var (cons #t (mkvar (list 'VarStack pos) shape)) (env-get-vars env))))
+  (env-replace-var env var (cons #t (mkvar (list 'VarStack pos) shape))))
 
 (define (localvar env var pos) (localvar-with-shape env var pos #nil))
 
@@ -1474,7 +1484,7 @@
     (expr-fv e (fv-env-pat p env))))
 
 (define (fv-env-var arg env)
-  (env-with-vars env (vhash-replace arg (cons #t (mkvar (list 'VarGlobal "dummy") "dummy")) (env-get-vars env))))
+  (env-replace-var env arg (cons #t (mkvar (list 'VarGlobal "dummy") "dummy"))))
 
 (define (fv-env-pat p env)
   (match p
@@ -1644,7 +1654,7 @@
 (define exnid 0)
 (define (declare-exn name arity env)
   (set! exnid (+ 1 exnid))
-  (env-with-constrs env (vhash-replace name (cons #t (mkconstr arity exnid (cons -2 -2))) (env-get-constrs env))))
+  (env-replace-constr env name (cons #t (mkconstr arity exnid (cons -2 -2)))))
 
 (define (env-open env menv)
   (let* ((add-bindings (lambda (e me) (vhash-fold-right (lambda (k v ne)
@@ -1692,7 +1702,7 @@
                           (mark (env-get-fields env))
                           (mark (env-get-modules env))))
            (nenv (compile-defs modenv l)))
-      (env-with-modules env (vhash-replace name (cons #t nenv) (env-get-modules env)))
+      (env-replace-module env name (cons #t nenv))
       ))
    (('MExternal name arity primname)
     (let* ((shape (make-list arity (list 'Nolabel)))
@@ -1732,10 +1742,7 @@
       (bytecode-emit-labref lab2)
       (bytecode-put-u32-le SETGLOBAL)
       (bytecode-put-u32-le pos)
-      (env-with-vars env
-        (vhash-replace name
-          (cons #t (mkvar (list 'VarGlobal pos) shape))
-          (env-get-vars env)))
+      (env-replace-var env name (cons #t (mkvar (list 'VarGlobal pos) shape)))
       ))
    ))
 
@@ -1747,10 +1754,8 @@
     (compile-defs (compile-def env def) rest))))
 
 (define initial-env
-  (env-with-constrs empty-env
-    (vhash-replace ""
-      (cons #t (mkconstr -1 0 (cons 0 1)))
-      (env-get-constrs empty-env))))
+  (env-replace-constr empty-env "" (cons #t (mkconstr -1 0 (cons 0 1)))))
+
 (define (declare-builtin-exn name arity)
   (set! initial-env (declare-exn name arity initial-env))
   (newglob exnid))
