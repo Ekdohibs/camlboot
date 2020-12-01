@@ -1489,11 +1489,11 @@
 (define (range a b) (if (>= a b) #nil (cons a (range (+ a 1) b))))
 
 (define (get-fun-body args arg-names basebody)
-  (fold-right
-   (match-lambda* ((($ <arg> pat label default) name body)
-     (if (equal? (car default) 'Some)
-         (compile-arg-default label default body)
-         (compile-arg-pat pat name body))))
+  (fold-right (lambda (arg name body) (match arg
+     (($ <arg> pat ('Optional label) ('Some default))
+      (compile-arg-default label default body))
+     (($ <arg> pat _ ('None))
+      (compile-arg-pat pat name body))))
    basebody args arg-names))
 
 (define (compile-fundef-body env arg-names body nfv lab recvars recshapes recoffset)
@@ -1593,12 +1593,8 @@
      (_
       (string-append "arg#" (number->string i)))))
 
-(define (compile-arg-default label default body)
-  (assert (equal? (car label) 'Optional))
-  (assert (equal? (car default) 'Some))
-  (let* ((name (car (cdr label)))
-         (def (car (cdr default)))
-         (noneline (cons (list 'PConstr (list 'Lident "None") #nil) def))
+(define (compile-arg-default name default body)
+  (let* ((noneline (cons (list 'PConstr (list 'Lident "None") #nil) default))
          (someline (cons (list 'PConstr (list 'Lident "Some") (list name))
                          (list 'EVar (list 'Lident name))))
          (default-expr (list 'EMatch (list 'EVar (list 'Lident name)) (list noneline someline))))
