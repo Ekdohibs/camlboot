@@ -1229,7 +1229,16 @@
               ))
     )))
 
+(define (lower-expr env istail expr)
+  (match expr
+    (other other)
+))
+
 (define (compile-expr env stacksize istail expr)
+  (compile-low-expr env stacksize istail
+    (lower-expr env istail expr)))
+
+(define (compile-low-expr env stacksize istail expr)
   ; (newline)(show-env env)(newline)(display stacksize)(newline)(display istail)(newline)(display expr)(newline)
   (match expr
     (('EVar v)
