@@ -1295,6 +1295,18 @@
        (list 'LCatch e var (list 'EMatch (lid->evar var)
          (append m (list
            (cons (list 'PVar "_") (list 'LReraise (lid->evar var)))))))))
+    (('ELet rec-flag bindings body)
+       (if rec-flag
+         (list 'LLetrecfun bindings body)
+         ; HACK: sequential let!
+         (fold-right (lambda (binding body) (match binding
+           ((('PVar v) . (and e ('ELambda args fun)))
+            (list 'LLetfun v args fun body))
+           ((('PVar v) . e)
+            (list 'LLet v e body))
+           ((p . e)
+            (list 'EMatch e (list (cons p body)))))
+        ) body bindings)))
     (other other)
 ))
 
@@ -1388,23 +1400,15 @@
     (('LLet var e body)
      (compile-expr env stacksize #f e)
      (compile-bind-var env stacksize istail var body))
-    (('ELet rec-flag bindings body)
-       (if rec-flag
-           (let* ((nenv (compile-recfundefs env stacksize bindings)))
-             (compile-expr nenv (+ stacksize (length bindings)) istail body)
-             (bytecode-put-u32-le POP)
-             (bytecode-put-u32-le (length bindings)))
-       ; HACK: sequential let!
-          (match bindings
-             (#nil
-              (compile-expr env stacksize istail body))
-             (((('PVar f) . ('ELambda args fbody)) . rest)
-              (compile-fundef env stacksize args fbody)
-              (compile-bind-var-with-shape
-               env stacksize istail f (list 'ELet rec-flag rest body) (map arg-get-label args)))
-             (((p . e) . rest)
-              (compile-expr env stacksize istail
-                 (list 'EMatch e (list (cons p (list 'ELet rec-flag rest body)))))))))
+    (('LLetfun f args fun body)
+     (compile-fundef env stacksize args fun)
+     (compile-bind-var-with-shape
+      env stacksize istail f body (map arg-get-label args)))
+    (('LLetrecfun bindings body)
+     (let* ((nenv (compile-recfundefs env stacksize bindings)))
+       (compile-expr nenv (+ stacksize (length bindings)) istail body)
+       (bytecode-put-u32-le POP)
+       (bytecode-put-u32-le (length bindings))))
     (('ELetOpen m e)
      (let* ((menv (env-get-module env m)))
        (compile-expr (env-open env menv) stacksize istail e)))
