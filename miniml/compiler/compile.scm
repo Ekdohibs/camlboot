@@ -13,7 +13,7 @@
 
 (define-immutable-record-type <arg>
   (mkarg pat label default)
-  def?
+  arg?
   (pat arg-get-pat)
   (label arg-get-label)
   (default arg-get-default))
@@ -26,6 +26,11 @@
 (define (mkapp2 fname arg1 arg2) (mkapp fname (list arg1 arg2)))
 (define (mkapp3 fname arg1 arg2 arg3) (mkapp fname (list arg1 arg2 arg3)))
 
+(define (mklambda args body)
+  (match body
+         (('ELambda args2 body2) (list 'ELambda (append args args2) body2))
+         (_ (list 'ELambda args body))
+  ))
 
 (define ml-parser
   (lalr-parser
@@ -258,7 +263,7 @@
 
    (expr_no_semi
     (simple_expr) : $1
-    (FUN nonempty_list_labelled_arg MINUSGT expr) : (list 'ELambda $2 $4)
+    (FUN nonempty_list_labelled_arg MINUSGT expr) : (mklambda $2 $4)
     (longident_lident nonempty_list_labelled_simple_expr) : (list 'EApply $1 $2)
     (longident_constr simple_expr) : (list 'EConstr $1 (cons $2 #nil))
     (comma_separated_list2_expr (prec: comma_prec)) : (list 'EConstr (list 'Lident "") (reverse $1))
@@ -286,11 +291,13 @@
     (MATCH expr WITH clauses) : (list 'EMatch $2 $4)
     (TRY expr WITH clauses) : (list 'ETry $2 $4)
     (FUNCTION clauses) :
-      (list 'ELambda
+      (mklambda
             (list (mknolabelfun (list 'PVar "arg#function")))
             (list 'EMatch (list 'EVar (list 'Lident "arg#function")) $2))
-    (LET llet llet_ands IN expr (prec: LET)) : (list 'ELet (cons $2 $3) $5)
+    (LET llet llet_ands IN expr (prec: LET)) : (list 'ELet #f (cons $2 $3) $5)
+    (LET REC llet llet_ands IN expr (prec: LET)) : (list 'ELet #t (cons $3 $4) $6)
     (LET OPEN longident_uident IN expr (prec: LET)) : (list 'ELetOpen $3 $5)
+    (longident_uident DOT LPAREN expr RPAREN) : (list 'ELetOpen $1 $4)
     (expr_no_semi COLONCOLON expr_no_semi) : (list 'EConstr (list 'Lident "Cons") (cons $1 (cons $3 #nil)))
     (expr_no_semi CARET expr_no_semi) : (mkapp2 "string_concat" $1 $3)
     (expr_no_semi AT expr_no_semi) : (mkapp2 "list_concat" $1 $3)
@@ -304,7 +311,7 @@
 
    (llet
     (pattern EQ expr) : (cons $1 $3)
-    (LIDENT nonempty_list_labelled_arg EQ expr) : (cons (list 'PVar $1) (list 'ELambda $2 $4)))
+    (LIDENT nonempty_list_labelled_arg EQ expr) : (cons (list 'PVar $1) (mklambda $2 $4)))
 
    (llet_ands
     ( ) : #nil
@@ -825,6 +832,8 @@
 (define RESTART 41)
 (define GRAB 42)
 (define CLOSURE 43)
+(define CLOSUREREC 44)
+(define OFFSETCLOSURE 48)
 (define GETGLOBAL 53)
 (define SETGLOBAL 57)
 (define MAKEBLOCK 62)
@@ -945,6 +954,8 @@
 
   (align funshape args))
 
+(define rec-closure-step 2)
+
 (define (access-var location stacksize)
   (match location
     (('VarStack pos)
@@ -953,6 +964,9 @@
     (('VarEnv pos)
      (bytecode-put-u32-le ENVACC)
      (bytecode-put-u32-le (+ 1 pos)))
+    (('VarRec pos)
+     (bytecode-put-u32-le OFFSETCLOSURE)
+     (bytecode-put-u32-le pos))
     (('VarGlobal id)
      (bytecode-put-u32-le GETGLOBAL)
      (bytecode-put-u32-le id))))
@@ -1049,8 +1063,10 @@
              (assert (or (= arity -1) (= arity (length l))))
              (switch-cons-block sw block)))))))))
 
-(define (localvar env var pos)
-  (env-with-vars env (vhash-replace var (cons #t (mkvar (list 'VarStack pos) #nil)) (env-get-vars env))))
+(define (localvar-with-shape env var pos shape)
+  (env-with-vars env (vhash-replace var (cons #t (mkvar (list 'VarStack pos) shape)) (env-get-vars env))))
+
+(define (localvar env var pos) (localvar-with-shape env var pos #nil))
 
 (define (compile-bind-fields env stacksize istail vars e)
   (match-let (((i j env) (fold
@@ -1078,6 +1094,13 @@
         (compile-expr (localvar env var stacksize) (+ stacksize 1) istail e)
         (bytecode-put-u32-le POP)
         (bytecode-put-u32-le 1))))
+
+(define (compile-bind-var-with-shape env stacksize istail var e shape)
+  (bytecode-put-u32-le PUSH)
+  (compile-expr (localvar-with-shape env var stacksize shape) (+ stacksize 1) istail e)
+  (bytecode-put-u32-le POP)
+  (bytecode-put-u32-le 1))
+
 
 (define (compile-bind-var-pushed env stacksize istail var e)
   (if (equal? var "_")
@@ -1343,14 +1366,23 @@
          (bytecode-emit-label lab1)
          (compile-matching env stacksize istail m #t)
          (bytecode-emit-label lab2)))
-    (('ELet bindings body)
+    (('ELet rec-flag bindings body)
+       (if rec-flag
+           (let* ((nenv (compile-recfundefs env stacksize bindings)))
+             (compile-expr nenv (+ stacksize (length bindings)) istail body)
+             (bytecode-put-u32-le POP)
+             (bytecode-put-u32-le (length bindings)))
        ; HACK: sequential let!
-       (match bindings
-         (#nil
-          (compile-expr env stacksize istail body))
-         (((p . e) . rest)
-          (compile-expr env stacksize istail
-            (list 'EMatch e (list (cons p (list 'ELet rest body))))))))
+          (match bindings
+             (#nil
+              (compile-expr env stacksize istail body))
+             (((('PVar f) . ('ELambda args fbody)) . rest)
+              (compile-fundef env stacksize args fbody)
+              (compile-bind-var-with-shape
+               env stacksize istail f (list 'ELet rec-flag rest body) (map arg-get-label args)))
+             (((p . e) . rest)
+              (compile-expr env stacksize istail
+                 (list 'EMatch e (list (cons p (list 'ELet rec-flag rest body)))))))))
     (('ELetOpen m e)
      (let* ((menv (env-get-module env m)))
        (compile-expr (env-open env menv) stacksize istail e)))
@@ -1418,12 +1450,15 @@
         (let* ((fv1 (expr-fv e env))
                (lfv (map (lambda (b) (branch-fv b env)) m)))
           (vset-union fv1 (vset-list-union lfv))))
-    (('ELet bindings body)
-     (match bindings
-       (#nil
-        (expr-fv body env))
-       (((p . e) . rest)
-        (expr-fv (list 'EMatch e (list (cons p (list 'ELet rest body)))) env))))
+    (('ELet rec-flag bindings body)
+     (if rec-flag
+         (let* ((nenv (fold fv-env-pat env (map car bindings))))
+           (vset-union (vset-list-union (map (lambda (b) (expr-fv (cdr b) nenv)) bindings)) (expr-fv body nenv)))
+         (match bindings
+           (#nil
+            (expr-fv body env))
+           (((p . e) . rest)
+            (expr-fv (list 'EMatch e (list (cons p (list 'ELet rec-flag rest body)))) env)))))
     (('ELetOpen m e)
      (let* ((menv (env-get-module env m)))
        (expr-fv e (env-open env menv))))
@@ -1453,46 +1488,96 @@
 
 (define (range a b) (if (>= a b) #nil (cons a (range (+ a 1) b))))
 
-(define (compile-fundef env stacksize args basebody)
-  (let* ((arity (length args))
-         (arg-names (map compile-arg-name args (range 0 arity)))
-         (body (fold-right
-                (match-lambda* ((($ <arg> pat label default) name body)
-                  (if (equal? (car default) 'Some)
-                      (compile-arg-default label default body)
-                      (compile-arg-pat pat name body))))
-                basebody args arg-names))
-         (lab1 (newlabel))
-         (lab2 (newlabel))
-         (fv (map car (vlist->list (expr-fv-binding body env arg-names))))
-         (nfv (fold (lambda (name i nfv) (vhash-replace name i nfv)) vlist-null fv (range 0 (length fv))))
+(define (get-fun-body args arg-names basebody)
+  (fold-right
+   (match-lambda* ((($ <arg> pat label default) name body)
+     (if (equal? (car default) 'Some)
+         (compile-arg-default label default body)
+         (compile-arg-pat pat name body))))
+   basebody args arg-names))
+
+(define (compile-fundef-body env arg-names body nfv lab recvars recshapes recoffset)
+  (let* ((arity (length arg-names))
+         (envoff (* rec-closure-step (- (- (length recvars) 1) recoffset)))
          (mvars (vhash-filter-map
                  (lambda (name v)
                    (if (equal? (car (var-get-location (cdr v))) 'VarGlobal)
                        v
                        (let ((r (vhash-assoc name nfv)))
                          (if (pair? r)
-                             (cons (car v) (mkvar (list 'VarEnv (cdr r)) (var-get-funshape (cdr v))))
+                             (cons (car v) (mkvar (list 'VarEnv (+ envoff (cdr r))) (var-get-funshape (cdr v))))
                              #f))))
                  (env-get-vars env)))
-         (nvars (fold (lambda (arg-name i vs) (vhash-replace arg-name (cons #t (mkvar (list 'VarStack (- (- arity 1) i)) #nil)) vs)) mvars arg-names (range 0 arity)))
+         (rvars (fold (lambda (rec-name shape i vs)
+                        (vhash-replace rec-name
+                                       (cons #t (mkvar (list 'VarRec (* rec-closure-step (- i recoffset))) shape))
+                                       vs))
+                      mvars recvars recshapes (range 0 (length recvars))))
+         (nvars (fold (lambda (arg-name i vs) (vhash-replace arg-name (cons #t (mkvar (list 'VarStack (- (- arity 1) i)) #nil)) vs)) rvars arg-names (range 0 arity)))
          (nenv (env-with-vars env nvars))
          )
     (assert (> arity 0))
-    (compile-args env stacksize (map (lambda (v) (list 'EVar (list 'Lident v))) fv))
-    (bytecode-put-u32-le BRANCH)
-    (bytecode-emit-labref lab1)
     (bytecode-put-u32-le RESTART)
-    (bytecode-emit-label lab2)
+    (bytecode-emit-label lab)
     (bytecode-put-u32-le GRAB)
     (bytecode-put-u32-le (- arity 1))
     (compile-expr nenv arity #t body)
     (bytecode-put-u32-le RETURN)
     (bytecode-put-u32-le arity)
+  ))
+
+(define (fv-list fv) (map car (vlist->list fv)))
+(define (make-nfv fv) (fold (lambda (name i nfv) (vhash-replace name i nfv)) vlist-null fv (range 0 (length fv))))
+
+(define (compile-fundef env stacksize args basebody)
+  (let* ((arity (length args))
+         (arg-names (map compile-arg-name args (range 0 arity)))
+         (body (get-fun-body args arg-names basebody))
+         (fv (fv-list (expr-fv-binding body env arg-names)))
+         (nfv (make-nfv fv))
+         (lab1 (newlabel))
+         (lab2 (newlabel))
+         )
+    (compile-args env stacksize (map (lambda (v) (list 'EVar (list 'Lident v))) fv))
+    (bytecode-put-u32-le BRANCH)
+    (bytecode-emit-labref lab1)
+    (compile-fundef-body env arg-names body nfv lab2 #nil #nil -1)
     (bytecode-emit-label lab1)
     (bytecode-put-u32-le CLOSURE)
     (bytecode-put-u32-le (length fv))
     (bytecode-emit-labref lab2)
+    ))
+
+(define (compile-recfundefs env stacksize funs)
+  (let* ((numfuns (length funs))
+         (names (map (match-lambda ((('PVar name) . _) name) (_ (assert #f))) funs))
+         (args (map (match-lambda ((_ . ('ELambda args _)) args) (_ (assert #f))) funs))
+         (shapes (map (lambda (arg) (map arg-get-label arg)) args))
+         (basebodies (map (match-lambda ((_ . ('ELambda _ body)) body) (_ (assert #f))) funs))
+         (arg-names (map (lambda (arg) (map compile-arg-name arg (range 0 (length arg)))) args))
+         (bodies (map get-fun-body args arg-names basebodies))
+         (fvenv (fold fv-env-var env names))
+         (fv (fv-list (vset-list-union
+                       (map (lambda (body arg-name) (expr-fv-binding body fvenv arg-name)) bodies arg-names))))
+         (nfv (make-nfv fv))
+         (labs (map (lambda (_) (newlabel)) funs))
+         (endlab (newlabel))
+         (nenv (fold (lambda (name shape pos env) (localvar-with-shape env name (+ stacksize pos) shape))
+                     env names shapes (range 0 numfuns)))
+         )
+    (compile-args env stacksize (map (lambda (v) (list 'EVar (list 'Lident v))) fv))
+    (bytecode-put-u32-le BRANCH)
+    (bytecode-emit-labref endlab)
+    (for-each (lambda (arg-name body lab pos)
+                (compile-fundef-body env arg-name body nfv lab names shapes pos))
+              arg-names bodies labs (range 0 numfuns))
+    (bytecode-emit-label endlab)
+    (bytecode-put-u32-le CLOSUREREC)
+    (bytecode-put-u32-le numfuns)
+    (bytecode-put-u32-le (length fv))
+    (let* ((basepos (bytecode-get-pos)))
+      (for-each (lambda (lab) (bytecode-emit-labref-with-pos lab basepos)) labs))
+    nenv
   ))
 
 (define (compile-arg-name a i)
@@ -1511,7 +1596,7 @@
          (someline (cons (list 'PConstr (list 'Lident "Some") (list name))
                          (list 'EVar (list 'Lident name))))
          (default-expr (list 'EMatch (list 'EVar (list 'Lident name)) (list noneline someline))))
-    (list 'ELet (list (cons (list 'PVar name) default-expr)) body)))
+    (list 'ELet #f (list (cons (list 'PVar name) default-expr)) body)))
 
 (define (compile-arg-pat pat name body)
   (if (equal? (car pat) 'PVar)
@@ -1666,6 +1751,8 @@
   (set! initial-env (declare-exn name arity initial-env))
   (newglob exnid))
 
+; Order sensitive! Must match declarations in runtime/caml/fail.h
+; Do NOT call newglob before this point: the builtin exceptions must correspond to the globals 0-11
 (declare-builtin-exn "Out_of_memory" 0)
 (declare-builtin-exn "Sys_error" 1)
 (declare-builtin-exn "Failure" 1)

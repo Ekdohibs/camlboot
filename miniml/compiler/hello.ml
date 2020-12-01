@@ -7,6 +7,7 @@ external format_int : string -> int -> string = "caml_format_int"
 external plus : int -> int -> int = "%110"
 external minus : int -> int -> int = "%111"
 external times : int -> int -> int = "%112"
+external div : int -> int -> int = "%113"
 external eq : 'a -> 'a -> bool = "caml_equal"
 external raise : exn -> 'a = "%91"
 type bool = false | true
@@ -55,13 +56,15 @@ let () =
   let twice x = x + x in print_int (twice 21)
 
 let () =
-  let u = { a = 5 ; b = 7 } in
-  print_int u.a; print_int u.b
+  let n = 10 in
+  let rec sum i = if i = n then 0 else i + sum (i + 1) in
+  print_int (sum 0)
 
 let () =
-  let u = { b = 5 ; a = 7 } in
-  print_int u.a; print_int u.b
-
+  let n = 10 in
+  let rec sum1 i = if i = n then 0 else i + sum2 (i + 1)
+  and sum2 i = if i = n then 0 else sum1 (i + 1) in
+  print_int (sum1 0); print_int (sum2 0)
 
 let () = print_int (let a = 17 in let b = 42 in if (let x = 2 in true) then a else b)
 let () = print_int (let a = 17 in let b = 42 in if (let x = 2 in false) then a else b)
@@ -135,6 +138,14 @@ let () = print "\nRecords:\n"
 
 let () =
   let u = { a = 5 ; b = 7 } in
+  print_int u.a; print_int u.b
+
+let () =
+  let u = { b = 5 ; a = 7 } in
+  print_int u.a; print_int u.b
+
+let () =
+  let u = { a = 5 ; b = 7 } in
   let v = { u with a = 42 } in
   let w = { u with b = 16 } in
   print_int u.a; print_int u.b;
@@ -180,7 +191,7 @@ let () = print " "; show_exn (E2 7)
 let () = print " "; show_exn E3
 let () = print " "; show_exn (E4 7)
 
-let () = print "\nopen:\n"
+let () = print "\nlet open:\n"
 
 module M = struct
   let x = 42
@@ -189,8 +200,9 @@ end
 
 let () =
   print_int M.x;
+  M.(print_int x);
   let open M in
-  print_int (f 42)
+  print_int (f 21)
 
 let () = print "\nInfix operators treated as sugar:\n"
 
@@ -245,6 +257,7 @@ let () = run_and_print_exn (fun () -> int_of_string "fqsq")
 let () = run_and_print_exn (fun () -> sys_getenv "fqsq")
 let rec stack_overflow () = 1 + stack_overflow ()
 let () = run_and_print_exn stack_overflow
+let () = run_and_print_exn (fun () -> div 1 0)
 
 let () = print "\n"
 let () = caml_ml_flush stdout
