@@ -1231,6 +1231,14 @@
 
 (define (lower-expr env istail expr)
   (match expr
+    (('EConstant c)
+     (match c
+       (('CInt n)
+        (list 'LConst n))
+       (('CUnit)
+        (list 'LConst 0))
+       (('CString id)
+        (list 'LGlobal (newglob id)))))
     (other other)
 ))
 
@@ -1243,22 +1251,17 @@
   (match expr
     (('EVar v)
      (access-var (var-get-location (env-get-var env v)) stacksize))
-    (('EConstant c)
-     (match c
-       (('CInt n)
-        (if (and (<= -1073741824 n) (< n 1073741823))
-            (begin
-              (bytecode-put-u32-le CONSTINT)
-              (bytecode-put-u32-le n))
-            (begin
-              (bytecode-put-u32-le GETGLOBAL)
-              (bytecode-put-u32-le (newglob n)))))
-       (('CUnit)
-        (bytecode-put-u32-le CONSTINT)
-        (bytecode-put-u32-le 0))
-       (('CString id)
-        (bytecode-put-u32-le GETGLOBAL)
-        (bytecode-put-u32-le (newglob id)))))
+    (('LGlobal id)
+     (bytecode-put-u32-le GETGLOBAL)
+     (bytecode-put-u32-le id))
+    (('LConst n)
+     (if (and (<= -1073741824 n) (< n 1073741823))
+         (begin
+           (bytecode-put-u32-le CONSTINT)
+           (bytecode-put-u32-le n))
+         (begin
+           (bytecode-put-u32-le GETGLOBAL)
+           (bytecode-put-u32-le (newglob n)))))
     (('EConstr name args)
      (match-let ((($ <constr> arity tag nums) (env-get-constr env name)))
         (if (null? args)
