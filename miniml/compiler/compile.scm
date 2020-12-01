@@ -1307,6 +1307,8 @@
            ((p . e)
             (list 'EMatch e (list (cons p body)))))
         ) body bindings)))
+    (('ELambda args fun)
+     (list 'LLetfun "lambda#" args fun (lid->evar "lambda#")))
     (other other)
 ))
 
@@ -1411,9 +1413,7 @@
        (bytecode-put-u32-le (length bindings))))
     (('ELetOpen m e)
      (let* ((menv (env-get-module env m)))
-       (compile-expr (env-open env menv) stacksize istail e)))
-    (('ELambda args body)
-     (compile-fundef env stacksize args body))))
+       (compile-expr (env-open env menv) stacksize istail e)))))
 
 (define (compile-expr-list env stacksize l)
   (if (not (null? l))
