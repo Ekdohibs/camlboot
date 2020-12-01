@@ -1732,16 +1732,25 @@
       (bytecode-emit-labref lab2)
       (bytecode-put-u32-le SETGLOBAL)
       (bytecode-put-u32-le pos)
-      (env-with-vars env (vhash-replace name (cons #t (mkvar (list 'VarGlobal pos) shape)) (env-get-vars env)))
+      (env-with-vars env
+        (vhash-replace name
+          (cons #t (mkvar (list 'VarGlobal pos) shape))
+          (env-get-vars env)))
       ))
    ))
 
 (define (compile-defs env defs)
-  (if (null? defs)
-      env
-      (compile-defs (compile-def env (car defs)) (cdr defs))))
+  (match defs
+   (#nil
+    env)
+   ((def . rest)
+    (compile-defs (compile-def env def) rest))))
 
-(define initial-env (env-with-constrs empty-env (vhash-replace "" (cons #t (mkconstr -1 0 (cons 0 1))) (env-get-constrs empty-env))))
+(define initial-env
+  (env-with-constrs empty-env
+    (vhash-replace ""
+      (cons #t (mkconstr -1 0 (cons 0 1)))
+      (env-get-constrs empty-env))))
 (define (declare-builtin-exn name arity)
   (set! initial-env (declare-exn name arity initial-env))
   (newglob exnid))
