@@ -1308,41 +1308,236 @@
   (vars switch-block-get-vars)
   (rhs switch-block-get-rhs))
 
-(define (split-pattern-matching env m)
-  (match m
-    (#nil empty-switch)
-    (((p . e) . rest)
-     (match p
-       (('PWild)
-        (switch-with-default empty-switch (cons #nil e)))
-       (('PVar v)
-        (switch-with-default empty-switch (cons v e)))
-       (('PInt n)
-        (let* ((sw-rest (split-pattern-matching env rest))
-               (sw (switch-no-nums sw-rest)))
-          (switch-cons-const sw (mkswitch-const n e))))
-       (('PConstr c l)
-        (let* ((sw-rest (split-pattern-matching env rest))
-               (cdef (env-get-constr env c))
-               (arity (constr-get-arity cdef))
-               (tag (constr-get-tag cdef))
-               (cnums (constr-get-numconstrs cdef))
-               (const (mkswitch-const tag e))
-               (l (adjust-pconstr-args l arity))
-               (vars (map (match-lambda
-                           (('PVar v) v)
-                           (('PWild) #nil)) l))
-               (block (mkswitch-block tag arity vars e))
-               (sw (switch-merge-nums sw-rest cnums)))
-          (match l
-            (#nil
-             (assert (or (= arity 0) (= arity -1)))
-             (switch-cons-const sw const))
-            (('PWild)
-              (switch-cons-block sw block))
-            (_
-             (assert (or (= arity -1) (= arity (length l))))
-             (switch-cons-block sw block)))))))))
+; Pattern-matching compilation is done using "matrix decomposition".
+; A matrix represents an ordered list of pattern-matching clauses that
+; simultaneously match on several argument variables (rather than arbitrary expressions).
+; The right-hand-side of each clause is not only an expression, but also a list
+; of bindings of pattern variables to argument variables.
+;
+; One matrix corresponding to
+;   match x,  y,  z with
+;      |  p1 as v, q1, r1 -> e1
+;      |  p2,      q2 as w, r2 -> e2
+; has the "arguments" list (args)
+;   (list x y z)
+; and the "matrix" of clauses (m)
+;   (list
+;    (list (list p1 q1 r1) (list (cons v x)) e1)
+;    (list (list p2 q2 r2) (list (cons w y)) e2))
+; The "arity" of a matrix is the size of its (args)
+; list, and the number of columns of the matrix --
+; the two quantities always remain equal.
+;
+; The output of the matrix decomposition is a "matching tree"
+; (constructors use the 'MT prefix), which is itself turned
+; into lower code by the lower-matching-tree function.
+;
+; Note: matrix rows are represented as fixed-sized lists
+; (one element for the patterns, one for bindings, one for the right-hand-side)
+; instead of cons-pairs, as further specialized representations
+; are used during the transformation at higher arities
+; (4 for non-empty rows, 5 for non-empty rows with beheaded simple first pattern)
+; and cons-pairs quickly become inconvenient at higher arities.
+
+(define (lower-match env istail arg h)
+  (let* (
+     (h
+      (map (match-lambda ((p . e)
+             (cons p (lower-expr (local-vars env (pat-vars p)) istail e))
+       )) h))
+     (args (list arg))
+     (matrix
+      ; a list of clauses is turned into a matrix of arity 1
+      (map (match-lambda ((p . e) (list (list p) #nil e))) h))
+     (matching-tree
+      (match-decompose-matrix env args matrix))
+     (code
+      (lower-matching-tree env matching-tree))
+  )
+  code))
+
+(define (pat-vars p)
+  (let loop ((p p) (acc #nil))
+    (match p
+      (('PVar v) (cons v acc))
+      (('PAs p v) (loop p (cons v acc)))
+      (('PWild) acc)
+      (('PInt _) acc)
+      (('PConstr c ps) (fold-right loop acc ps))
+)))
+
+(define (match-decompose-matrix env args m)
+  ; (display "matrix") (display args) (newline)
+  ; (for-each (lambda (r) (display r) (newline)) m)
+  (assert (or (null? m) (equal? (length args) (length (car (car m))))))
+  (match (cons args m)
+    ((_ . #nil)
+     ; no clauses: this matrix rejects all inputs
+     (list 'MTFailure))
+    ((#nil . ((#nil bindings e) . _))
+     ; at least one clause of arity 0: matching (on nothing)
+     ; always succeeds and goes to this right-hand-side.
+     (list 'MTAction bindings e))
+    (((arg . args) . m)
+     ; arity > 0; we represent m with a distinguished head column
+     ; (first column, other columns, bindings, action)
+     (let*
+      ((m (map (match-lambda (((p . ps) bindings e) (list p ps bindings e))) m))
+       (m (simplify-matrix env arg m))
+       (groups (split-matrix-in-groups env m))
+       (matching-tree (match-decompose-groups env arg args groups)))
+      matching-tree
+     ))
+    ))
+
+(define (simplify-matrix env arg m)
+  (map (lambda (row) (simplify-row env arg row)) m))
+
+; rows of a "simplified (non-empty) matrix" are of the form
+; (head head-subpatterns other-patterns bindings action)
+;
+; a head is either #nil, for the wildcard pattern, or a "strong head"
+; representing the head constructor of the values being matched.
+(define (simplify-row env arg row)
+  (match-let (((p ps bindings e) row))
+   (match p
+    (('PVar v)
+     (let* ((p (list 'PAs (list 'PWild) v)))
+     (simplify-row env arg (list p ps bindings e))))
+    (('PAs p v)
+     (let* ((bindings (cons (cons v arg) bindings)))
+     (simplify-row env arg (list p ps bindings e))))
+    (('PWild)
+     (list #nil #nil ps bindings e))
+    (('PInt n)
+     (list (list 'HPInt n) #nil ps bindings e))
+    (('PConstr c l)
+     (let* ((arity (pconstr-arity env c l))
+            (l (adjust-pconstr-args l arity)))
+       (list (list 'HPConstr c (pconstr-arity env c l)) l ps bindings e))))))
+
+; two things may go wrong here:
+; - the environment may not know the arity of the declaration,
+;   in which case we trust the pattern itself
+; - the pattern may use a single wildcard for several wildcards,
+;   in which case we trust the environment (if available)
+(define (pconstr-arity env c l)
+  (let* ((cdef (env-get-constr env c))
+         (env-arity (constr-get-arity cdef))
+         (l-arity (length l)))
+    (if (= env-arity -1) l-arity
+      (match l
+        ((('PWild))
+         env-arity)
+        (_
+         (assert (equal? l-arity env-arity))
+         l-arity)))))
+
+(define (omegas-for-pattern-head h)
+  (match h
+   (#nil #nil)
+   (('HPInt n) #nil)
+   (('HPConstr c arity) (make-list arity (list 'PWild)))))
+
+(define (args-for-pattern-head arg h)
+  (match h
+   (#nil #nil)
+   (('HPInt n) #nil)
+   (('HPConstr c arity)
+    (map (lambda (i) (string-append arg "#" (number->string i))
+       ) (range 0 arity)))
+))
+
+(define (split-matrix-in-groups env simplified-matrix)
+  (let*
+      (; first we compute all groups present in the matrix
+       (groups
+        (fold (lambda (row groups)
+                (match-let (((h hps ps bindings e) row))
+                 (vhash-replace h #nil groups))
+               ) vlist-null simplified-matrix))
+       ; then we populate all the groups by adding rows with the corresponding head
+       (groups
+        (fold-right (lambda (row groups)
+                (match-let (((h hps ps bindings e) row))
+                 (assert (pair? (vhash-assoc h groups)))
+                 (if (not (null? h))
+                   (match-let (((_ . group-rows) (vhash-assoc h groups))
+                               (row (list (append hps ps) bindings e)))
+                     (vhash-replace h (cons row group-rows) groups))
+                   (begin
+                     (assert (null? hps))
+                     ; in the wildcard case, we add the row to the default group
+                     ; (representing any value whose head is not among the other groups)
+                     ; *and* to each group (their values also match a wildcard)
+                     ; this is why we need to have a pre-computed list of all groups
+                     (vhash-fold (lambda (h group-rows groups)
+                       (let ((row (list (append (omegas-for-pattern-head h) ps) bindings e)))
+                         (vhash-replace h (cons row group-rows) groups))
+                       ) vlist-null groups))
+                   ))
+               ) groups simplified-matrix))
+       )
+    groups))
+
+(define (match-decompose-groups env arg args groups)
+  (list
+   'MTSwitch
+   arg
+   (vhash-map (lambda (h submatrix)
+       (let* ((newargs (args-for-pattern-head arg h))
+              (matching-tree (match-decompose-matrix env (append newargs args) submatrix)))
+       (cons newargs matching-tree))
+     ) groups)
+))
+
+(define (lower-matching-tree env matching-tree)
+  (match matching-tree
+    (('MTFailure) (list 'LMatchFailure))
+    (('MTAction bindings e)
+     ; bindings were accumulated into a list during decomposition,
+     ; so the earliest binding is at the end of the list. We use 'fold' so that
+     ; it ends up at the beginning of the resulting expression.
+     (fold (match-lambda* (((v . arg) e)
+             ; note: this Let is a variable rebinding (let x = y in ...),
+             ; with special support in the code generator
+             (list 'LLet v (lid->lvar arg) e)
+        )) e bindings))
+    (('MTSwitch arg groups) (lower-match-groups env arg groups))
+))
+
+(define (lower-match-groups env arg groups)
+  (let* (; separate the wildcard group from the groups with strong heads
+         (default-matching-tree
+           (let ((r (vhash-assoc #nil groups)))
+             ; the returned pair, if any, binds the head #nil to
+             ; a cons-list of new arguments (also #nil) and the
+             ; default matching tree.
+             (if (pair? r) (cddr r) #nil)))
+         (groups (vhash-delete #nil groups))
+         (sw (if (null? default-matching-tree)
+                 empty-switch
+                 (switch-with-default empty-switch (cons #nil
+                   (lower-matching-tree env default-matching-tree)))))
+         (sw (vhash-fold (lambda (h group sw)
+                (match-let* (((group-vars . group-matching-tree) group)
+                             (group-code (lower-matching-tree env group-matching-tree)))
+                (match h
+                  (('HPInt n)
+                   (switch-cons-const sw (mkswitch-const n group-code)))
+                  (('HPConstr c arity)
+                   ; TODO: instead of passing argument variables to the switch compiler,
+                   ; we could lower the field-access logic by binding the new-args
+                   ; with LGetField access.
+                   (let* ((cdef (env-get-constr env c))
+                          (nums (constr-get-numconstrs cdef))
+                          (tag (constr-get-tag cdef))
+                          (sw (switch-merge-nums sw nums)))
+                   (if (equal? arity 0)
+                       (switch-cons-const sw (mkswitch-const tag group-code))
+                       (switch-cons-block sw (mkswitch-block tag arity group-vars group-code)))))
+                ))) sw groups)))
+  (list 'LSwitch (lid->lvar arg) sw)))
 
 (define (lower-expr env istail expr)
   (let ((lower-tail (lambda (e) (lower-expr env istail e)))
@@ -1432,10 +1627,8 @@
            (list 'LTailApply e args)
            (list 'LApply e args))))
     (('EMatch e h)
-     (let* ((e (lower-notail e))
-            (sw (split-pattern-matching env h))
-            (sw (lower-switch env istail sw)))
-       (list 'LSwitch e sw)))
+     (list 'LLet "match#arg" (lower-notail e)
+             (lower-match (local-var env "match#arg") istail "match#arg" h)))
     (('ETry e h)
      (let* ((e (lower-notail e))
             (var "try#exn"))
@@ -1738,6 +1931,9 @@
     (('LReraise e)
      (compile-expr env stacksize e)
      (bytecode-put-u32-le RERAISE))
+    (('LMatchfailure)
+     ; TODO: we could actually raise a Match_failure exception (no location)
+     (bytecode-put-u32-le STOP))
     (('LCatch body exnvar handler)
      (let* ((lab1 (newlabel))
             (lab2 (newlabel))
