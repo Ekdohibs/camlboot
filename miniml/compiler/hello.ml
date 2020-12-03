@@ -4,11 +4,11 @@ external caml_ml_output : out_channel -> string -> int -> int -> unit = "caml_ml
 external caml_ml_flush : out_channel -> unit = "caml_ml_flush"
 external caml_ml_bytes_length : string -> int = "caml_ml_bytes_length"
 external format_int : string -> int -> string = "caml_format_int"
-external plus : int -> int -> int = "%110"
-external minus : int -> int -> int = "%111"
-external times : int -> int -> int = "%112"
+external ( + ) : int -> int -> int = "%110"
+external ( - ) : int -> int -> int = "%111"
+external ( * ) : int -> int -> int = "%112"
 external div : int -> int -> int = "%113"
-external eq : 'a -> 'a -> bool = "caml_equal"
+external ( = ) : 'a -> 'a -> bool = "caml_equal"
 external raise : exn -> 'a = "%91"
 type bool = false | true
 type t = { a : int ; b : int }
@@ -42,10 +42,10 @@ let f2 = f1 6
 let () = print_int (f2 7)
 
 let double f x = f (f x)
-let add2n n x = double (plus n) x
+let add2n n x = double (( + ) n) x
 
 let () = print_int (add2n 20 2)
-let () = print_int (double double double double (plus 1) 0)
+let () = print_int (double double double double (( + ) 1) 0)
 let () = print_int (if false then 17 else 42)
 let () = print_int (if true then 17 else 42)
 
