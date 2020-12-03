@@ -12,7 +12,7 @@ external ( = ) : 'a -> 'a -> bool = "caml_equal"
 external raise : exn -> 'a = "%91"
 type bool = false | true
 type t = { a : int ; b : int }
-type 'a list = Null | Cons of 'a * 'a list
+type 'a list = [] | (::) of 'a * 'a list
 type 'a option = None | Some of 'a
 
 let stdout = caml_ml_open_descriptor_out 1
@@ -80,19 +80,19 @@ let () = caml_ml_flush stdout
 let () = print "\nPattern-matching:\n"
 
 let () =
-  print_int (match Null with Null -> 2 | Cons (x, l) -> 3)
+  print_int (match [] with [] -> 2 | x :: l -> 3)
 
 let () =
-  print_int (match Cons (1, Null) with
-    | Null -> 2 (* note: leading bar *)
-    | Cons (x, l) -> 3)
+  print_int (match 1 :: [] with
+    | [] -> 2 (* note: leading bar *)
+    | x :: l -> 3)
 
 let test_function = function
-  | Null -> 2
-  | Cons (x, l) -> x + 1
+  | [] -> 2
+  | x :: l -> x + 1
 
 let () =
-  print_int (test_function (Cons (3, Null)))
+  print_int (test_function (3 :: []))
 
 let () = print "\nLists:\n"
 

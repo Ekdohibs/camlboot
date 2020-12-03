@@ -38,7 +38,7 @@ let pred x = x - 1
 type bool = false | true
 type 'a ref = { mutable contents : 'a }
 type ('a, 'b) result = Ok of 'a | Error of 'b
-type 'a list = Null | Cons of 'a * 'a list
+type 'a list = [] | (::) of 'a * 'a list
 type 'a option = None | Some of 'a
 
 let assert b = if b = 0 then raise (Assert_failure ("", 0, 0))
