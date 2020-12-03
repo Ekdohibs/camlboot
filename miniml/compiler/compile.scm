@@ -279,7 +279,7 @@
     (LPAREN expr COLON type_ignore RPAREN) : $2
     (simple_expr DOT longident_field) : (list 'EGetfield $1 $3)
     (LBRACE record_list_expr option_semicolon RBRACE) : (list 'ERecord (reverse $2))
-    (LBRACE expr WITH record_list_expr option_semicolon RBRACE) : (list 'ERecordwith $2 (reverse $4))
+    (LBRACE simple_expr WITH record_list_expr option_semicolon RBRACE) : (list 'ERecordwith $2 (reverse $4))
     (LBRACK RBRACK) : (lid->econstr "Null" #nil)
     (LBRACK semi_separated_expr_list_opt RBRACK) :
         (fold-right (lambda (e r) (lid->econstr "Cons" (list e r))) (lid->econstr "Null" #nil) $2)
