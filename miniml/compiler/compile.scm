@@ -5,7 +5,7 @@
 
 
 (define-immutable-record-type <def>
-  (mkdef name args body)
+  (mkdef_ name args body)
   def?
   (name def-get-name)
   (args def-get-args)
@@ -36,6 +36,13 @@
          (('ELambda args2 body2) (list 'ELambda (append args args2) body2))
          (_ (list 'ELambda args body))
   ))
+
+(define (mkdef name args body)
+  (match body
+         (('ELambda args2 body2) (mkdef_ name (append args args2) body2))
+         (_ (mkdef_ name args body))
+  ))
+
 
 (define ml-parser
   (lalr-parser
