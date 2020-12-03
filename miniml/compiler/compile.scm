@@ -188,7 +188,30 @@
    (longident_constr
     (longident_uident (prec: dot_prec)) : $1)
 
+   (lident_symb
+    (COLONEQ) : ":="
+    (EQ) : "="
+    (LTGT) : "<>"
+    (LT) : "<"
+    (GT) : ">"
+    (LTEQ) : "<="
+    (GTEQ) : ">="
+    (CARET) : "^"
+    (AT) : "@"
+    (PLUS) : "+"
+    (MINUS) : "-"
+    (STAR) : "*"
+    (BANG) : "!")
+
+   (lident_ext
+    (LIDENT) : $1
+    (LPAREN lident_symb RPAREN) : $1)
+
    (longident_lident
+    (lident_ext) : (list 'Lident $1)
+    (longident_uident DOT lident_ext) : (list 'Ldot $1 $3))
+
+   (longident_field
     (LIDENT) : (list 'Lident $1)
     (longident_uident DOT LIDENT) : (list 'Ldot $1 $3))
 
@@ -201,12 +224,12 @@
     (record_list_expr SEMICOLON longident_lident EQ expr_no_semi) : (cons (cons $3 $5) $1))
 
    (pattern_constr_args
-    (LIDENT) : (cons $1 #nil)
-    (LIDENT COMMA pattern_constr_args) : (cons $1 $3))
+    (lident_ext) : (cons $1 #nil)
+    (lident_ext COMMA pattern_constr_args) : (cons $1 $3))
 
    (comma_separated_list2_lident
-    (LIDENT COMMA LIDENT) : (cons $3 (cons $1 #nil))
-    (comma_separated_list2_lident COMMA LIDENT) : (cons $3 $1))
+    (lident_ext COMMA lident_ext) : (cons $3 (cons $1 #nil))
+    (comma_separated_list2_lident COMMA lident_ext) : (cons $3 $1))
 
    (comma_separated_list2_expr
     (expr_no_semi COMMA expr_no_semi) : (cons $3 (cons $1 #nil))
@@ -214,13 +237,13 @@
 
    (pattern
     (simple_pattern) : $1
-    (longident_constr LIDENT) : (list 'PConstr $1 (cons $2 #nil))
+    (longident_constr lident_ext) : (list 'PConstr $1 (cons $2 #nil))
     (longident_constr LPAREN pattern_constr_args RPAREN) : (list 'PConstr $1 $3)
     (comma_separated_list2_lident) : (lid->pconstr "" (reverse $1))
-    (LIDENT COLONCOLON LIDENT) : (lid->pconstr "Cons" (cons $1 (cons $3 #nil))))
+    (lident_ext COLONCOLON lident_ext) : (lid->pconstr "Cons" (cons $1 (cons $3 #nil))))
 
    (simple_pattern
-    (LIDENT) : (list 'PVar $1)
+    (lident_ext) : (list 'PVar $1)
     (longident_constr) : (list 'PConstr $1 #nil)
     (LBRACK RBRACK) : (lid->pconstr "Null" #nil)
     (LPAREN pattern COLON type_ignore RPAREN) : $2
@@ -235,7 +258,7 @@
     (LPAREN expr RPAREN) : $2
     (BEGIN expr END) : $2
     (LPAREN expr COLON type_ignore RPAREN) : $2
-    (simple_expr DOT longident_lident) : (list 'EGetfield $1 $3)
+    (simple_expr DOT longident_field) : (list 'EGetfield $1 $3)
     (LBRACE record_list_expr option_semicolon RBRACE) : (list 'ERecord (reverse $2))
     (LBRACE expr WITH record_list_expr option_semicolon RBRACE) : (list 'ERecordwith $2 (reverse $4))
     (LBRACK RBRACK) : (lid->econstr "Null" #nil)
@@ -255,8 +278,8 @@
     (QUESTION LIDENT COLON simple_expr) : (cons $4 (list 'Optional $2)))
 
    (nonempty_list_lident
-    (LIDENT) : (cons $1 #nil)
-    (LIDENT nonempty_list_lident) : (cons $1 $2))
+    (lident_ext) : (cons $1 #nil)
+    (lident_ext nonempty_list_lident) : (cons $1 $2))
 
    (list_labelled_simple_expr
     ( ) : #nil
@@ -272,7 +295,7 @@
     (longident_lident nonempty_list_labelled_simple_expr) : (list 'EApply $1 $2)
     (longident_constr simple_expr) : (list 'EConstr $1 (cons $2 #nil))
     (comma_separated_list2_expr (prec: comma_prec)) : (list 'EConstr (list 'Lident "") (reverse $1))
-    (simple_expr DOT longident_lident LTMINUS expr_no_semi) : (list 'ESetfield $1 $3 $5)
+    (simple_expr DOT longident_field LTMINUS expr_no_semi) : (list 'ESetfield $1 $3 $5)
     (IF expr THEN expr ELSE expr) : (list 'EIf $2 $4 $6)
     (IF expr THEN expr) : (list 'EIf $2 $4 (list 'EConstant (list 'CUnit)))
     (expr_no_semi EQ expr_no_semi) : (mkapp2 "eq" $1 $3)
@@ -316,7 +339,7 @@
 
    (llet
     (pattern EQ expr) : (cons $1 $3)
-    (LIDENT nonempty_list_labelled_arg EQ expr) : (cons (list 'PVar $1) (mklambda $2 $4)))
+    (lident_ext nonempty_list_labelled_arg EQ expr) : (cons (list 'PVar $1) (mklambda $2 $4)))
 
    (llet_ands
     ( ) : #nil
