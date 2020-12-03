@@ -164,20 +164,20 @@
     (COMMA type_ignore) : '()
     (MINUSGT type_ignore) : '()
     (QUOTE type_ignore) : '()
-    (longident_lident type_ignore) : '()
+    (longident_field type_ignore) : '()
     (LPAREN type_ignore RPAREN type_ignore) : '())
 
    (type_count_stars
     ( ) : 0
     (STAR type_count_stars) : (+ 1 $2)
-    (longident_lident type_count_stars) : $2
+    (longident_field type_count_stars) : $2
     (QUOTE type_count_stars) : $2
     (LPAREN type_ignore RPAREN type_count_stars) : $4)
 
    (type_count_arrows
     ( ) : 0
     (MINUSGT type_count_arrows) : (+ 1 $2)
-    (longident_lident type_count_arrows) : $2
+    (longident_field type_count_arrows) : $2
     (QUOTE type_count_arrows) : $2
     (STAR type_count_arrows) : $2
     (LPAREN type_ignore RPAREN type_count_arrows) : $4)
