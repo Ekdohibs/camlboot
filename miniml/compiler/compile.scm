@@ -214,7 +214,7 @@
 
    (lident_ext
     (LIDENT) : $1
-    (LPAREN lident_symb RPAREN) : $1)
+    (LPAREN lident_symb RPAREN) : $2)
 
    (longident_lident
     (lident_ext) : (list 'Lident $1)
