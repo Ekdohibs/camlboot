@@ -1,12 +1,6 @@
-exception Not_found
-exception End_of_file
-exception Failure of string
-exception Invalid_argument of string
-exception Assert_failure
-
-external plus : int -> int -> int = "%110"
-external minus : int -> int -> int = "%111"
-external times : int -> int -> int = "%112"
+external ( + ) : int -> int -> int = "%110"
+external ( - ) : int -> int -> int = "%111"
+external ( * ) : int -> int -> int = "%112"
 external div_ : int -> int -> int = "%113"
 external uminus : int -> int = "%109"
 external mod_ : int -> int -> int = "%114"
@@ -18,13 +12,15 @@ external lsr_ : int -> int -> int = "%119"
 external asr_ : int -> int -> int = "%120"
 
 external compare : 'a -> 'a -> int = "caml_compare"
-external eq : 'a -> 'a -> bool = "caml_equal"
-external neq : 'a -> 'a -> bool = "caml_notequal"
-external lessequal : 'a -> 'a -> bool = "caml_lessequal"
-external lessthan : 'a -> 'a -> bool = "caml_lessthan"
+external ( = ) : 'a -> 'a -> bool = "caml_equal"
+external ( <> ) : 'a -> 'a -> bool = "caml_notequal"
+external ( <= ) : 'a -> 'a -> bool = "caml_lessequal"
+external ( < ) : 'a -> 'a -> bool = "caml_lessthan"
+external ( >= ) : 'a -> 'a -> bool = "caml_greaterequal"
+external ( > ) : 'a -> 'a -> bool = "caml_greaterthan"
 
-external physeq : 'a -> 'a -> bool = "%121"
-external physneq : 'a -> 'a -> bool = "%122"
+external ( == ) : 'a -> 'a -> bool = "%121"
+external ( != ) : 'a -> 'a -> bool = "%122"
 
 
 external raise : exn -> 'a = "%91"
@@ -45,7 +41,7 @@ type ('a, 'b) result = Ok of 'a | Error of 'b
 type 'a list = Null | Cons of 'a * 'a list
 type 'a option = None | Some of 'a
 
-let assert b = if b = 0 then raise Assert_failure
+let assert b = if b = 0 then raise (Assert_failure ("", 0, 0))
 
 module Obj = struct
   type t
@@ -155,7 +151,7 @@ module String = struct
 end
 
 external string_get : string -> int -> char = "caml_string_get"
-let string_concat s1 s2 =
+let ( ^ ) s1 s2 =
   let r = Bytes.create (String.length s1 + String.length s2) in
   Bytes.blit_string s1 0 r 0 (String.length s1);
   Bytes.blit_string s2 0 r (String.length s1) (String.length s2);
@@ -164,13 +160,13 @@ let string_concat s1 s2 =
 module Char = struct let code x = x let chr x = x let unsafe_chr x = x end
 module Uchar = struct let unsafe_of_int x = x let to_int x = x let is_valid x = true end
 
-let rec list_concat l1 l2 = match l1 with [] -> l2 | x :: l1 -> x :: list_concat l1 l2
+let rec ( @ ) l1 l2 = match l1 with [] -> l2 | x :: l1 -> x :: l1 @ l2
 
 let ref x = { contents = x }
-let ref_get x = x.contents
-let ref_set x y = x.contents <- y
-let incr x = ref_set x (ref_get x + 1)
-let decr x = ref_set x (ref_get x - 1)
+let ( ! ) x = x.contents
+let ( := ) x y = x.contents <- y
+let incr x = x := !x + 1
+let decr x = x := !x - 1
 let not x = 1 - x
 
 module Array = struct
