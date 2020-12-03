@@ -181,7 +181,16 @@
     (BEGIN END) : (list 'CUnit)
     (INT) : (list 'CInt $1))
 
+   (uident_ext
+    (UIDENT) : $1
+    (LBRACK RBRACK) : "[]"
+    (LPAREN COLONCOLON RPAREN) : "::")
+
    (longident_uident
+    (UIDENT) : (list 'Lident $1)
+    (longident_uident DOT UIDENT) : (list 'Ldot $1 $3))
+
+   (longident_uident_ext
     (UIDENT) : (list 'Lident $1)
     (longident_uident DOT UIDENT) : (list 'Ldot $1 $3))
 
@@ -220,8 +229,11 @@
     (SEMICOLON) : '())
 
    (record_list_expr
-    (longident_lident EQ expr_no_semi) : (cons (cons $1 $3) #nil)
-    (record_list_expr SEMICOLON longident_lident EQ expr_no_semi) : (cons (cons $3 $5) $1))
+    (record_item_expr) : (cons $1 #nil)
+    (record_list_expr SEMICOLON record_item_expr) : (cons $3 $1))
+
+   (record_item_expr
+    (longident_field EQ expr_no_semi) : (cons $1 $3))
 
    (pattern_constr_args
     (lident_ext) : (cons $1 #nil)
