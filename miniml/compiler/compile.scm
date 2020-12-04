@@ -1039,12 +1039,28 @@
      (bytecode-put-u32-le GETGLOBAL)
      (bytecode-put-u32-le id))))
 
-(define (adjust-constr-args args arity)
+(define (adjust-econstr-args args arity)
   (cond ((and (= arity 1) (> (length args) 1))
          (list 'EConstr (list 'Lident "") args))
         ((and (> arity 1) (= (length args) 1))
          (match args
            ((('EConstr ('Lident "") args)) args)
+           (_ args)))
+        (else args)))
+
+; Note: currently we only use this adjust function to turn (Cons _)
+; into (Cons (_, _)), so only the wildcard-expansion logic is
+; relevant. But the code would allow us to simplify our parsing of
+; patterns, parsing "K(x,y)" as a single-argument K with a tuple
+; pattern, disambiguated (if K is a binary constructor) when arity
+; information is available. This is still TODO.
+(define (adjust-pconstr-args args arity)
+  (cond ((and (= arity 1) (> (length args) 1))
+         (list 'PConstr (list 'Lident "") args))
+        ((and (> arity 1) (= (length args) 1))
+         (match args
+           ((('PWild)) (make-list arity (list 'PWild)))
+           ((('PConstr ('Lident "") args)) args)
            (_ args)))
         (else args)))
 
@@ -1121,6 +1137,7 @@
                (tag (constr-get-tag cdef))
                (cnums (constr-get-numconstrs cdef))
                (const (mkswitch-const tag e))
+               (l (adjust-pconstr-args l arity))
                (vars (map (match-lambda
                            (('PVar v) v)
                            (('PWild) #nil)) l))
@@ -1308,7 +1325,7 @@
             (begin
               (assert (= arity 0))
               (list 'LConst tag))
-            (let* ((nargs (adjust-constr-args args arity)))
+            (let* ((nargs (adjust-econstr-args args arity)))
               (assert (or (= arity (length nargs)) (= arity -1)))
               (if (= (car nums) -2)
                   (list 'LBlock 0 (cons (list 'LConst tag) nargs))

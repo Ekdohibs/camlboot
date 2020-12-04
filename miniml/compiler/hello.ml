@@ -95,7 +95,7 @@ let () =
 let () =
   print_int (match 1 :: [] with
     | [] -> 2 (* note: leading bar *)
-    | x :: l -> 3)
+    | _ :: _ -> 3)
 
 let test_function = function
   | [] -> 2
@@ -103,6 +103,15 @@ let test_function = function
 
 let () =
   print_int (test_function (3 :: []))
+
+type 'a tree =
+| Leaf of 'a
+| Node of 'a tree * 'a tree
+
+let () = print_int (match Node (Leaf 1, Leaf 2) with
+  | Leaf _ -> 4
+  | Node _ -> 5 (* note: a single wildcard for several arguments *)
+)
 
 let () = print "\nLists:\n"
 
