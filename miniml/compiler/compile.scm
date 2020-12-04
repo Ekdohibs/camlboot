@@ -280,9 +280,9 @@
     (simple_pattern) : (cons $1 #nil)
     (simple_pattern COMMA pattern_constr_args) : (cons $1 $3))
 
-   (comma_separated_list2_lident
-    (lident_ext COMMA lident_ext) : (cons $3 (cons $1 #nil))
-    (comma_separated_list2_lident COMMA lident_ext) : (cons $3 $1))
+   (comma_separated_list2_pattern_lident
+    (pattern_lident COMMA pattern_lident) : (cons $3 (cons $1 #nil))
+    (comma_separated_list2_pattern_lident COMMA pattern_lident) : (cons $3 $1))
 
    (comma_separated_list2_expr
     (expr_no_semi COMMA expr_no_semi) : (cons $3 (cons $1 #nil))
@@ -290,24 +290,27 @@
 
    (pattern
     (simple_pattern) : $1
-    (longident_constr lident_ext) : (list 'PConstr $1 (cons (lid->pvar $2) #nil))
+    (longident_constr pattern_lident) : (list 'PConstr $1 (cons $2 #nil))
     (longident_constr LPAREN pattern_constr_args RPAREN) : (list 'PConstr $1 $3)
-    (comma_separated_list2_lident) :
+    (comma_separated_list2_pattern_lident) :
       ; For now we keep this production which is a bit out of touch with other constructs
       ; that accept patterns rather than ident. A good plan would be to remove it entirely,
       ; as it is a major source of conflicts, and just require that users
       ; parenthesize their toplevel tuple patterns.
-      (lid->pconstr "" (map lid->pvar (reverse $1)))
+      (lid->pconstr "" (reverse $1))
     (simple_pattern COLONCOLON simple_pattern) : (lid->pconstr "::" (cons $1 (cons $3 #nil))))
 
    (simple_pattern
-    (lident_ext) : (list 'PVar $1)
+    (pattern_lident) : $1
     (longident_constr) : (list 'PConstr $1 #nil)
     (LBRACK RBRACK) : (lid->pconstr "[]" #nil)
     (LPAREN pattern COLON type_ignore RPAREN) : $2
     (LPAREN RPAREN) : (list 'PInt 0)
     (LPAREN pattern RPAREN) : $2
     (INT) : (list 'PInt $1))
+
+   (pattern_lident
+    (lident_ext) : (if (equal? $1 "_") (list 'PWild) (list 'PVar $1)))
 
    (simple_expr
     (longident_lident) : (list 'EVar $1)
@@ -1187,6 +1190,8 @@
     (#nil empty-switch)
     (((p . e) . rest)
      (match p
+       (('PWild)
+        (switch-with-default empty-switch (cons #nil e)))
        (('PVar v)
         (switch-with-default empty-switch (cons v e)))
        (('PInt n)
@@ -1200,14 +1205,16 @@
                (tag (constr-get-tag cdef))
                (cnums (constr-get-numconstrs cdef))
                (const (mkswitch-const tag e))
-               (vars (map (match-lambda (('PVar v) v)) l))
+               (vars (map (match-lambda
+                           (('PVar v) v)
+                           (('PWild) #nil)) l))
                (block (mkswitch-block tag arity vars e))
                (sw (switch-merge-nums sw-rest cnums)))
           (match l
             (#nil
              (assert (or (= arity 0) (= arity -1)))
              (switch-cons-const sw const))
-            (("_")
+            (('PWild)
               (switch-cons-block sw block))
             (_
              (assert (or (= arity -1) (= arity (length l))))
@@ -1221,7 +1228,7 @@
 (define (compile-bind-fields env stacksize istail vars e)
   (match-let (((i j env) (fold
              (match-lambda* ((var (i j env))
-               (if (equal? var "_")
+               (if (null? var)
                    (list (+ i 1) j env)
                    (let* ((nenv (localvar env var (+ stacksize j))))
                      (bytecode-put-u32-le ACC)
@@ -1237,7 +1244,7 @@
   ))
 
 (define (compile-bind-var env stacksize istail var e)
-  (if (equal? var "_")
+  (if (null? var)
       (compile-expr env stacksize istail e)
       (begin
         (bytecode-put-u32-le PUSH)
@@ -1246,14 +1253,16 @@
         (bytecode-put-u32-le 1))))
 
 (define (compile-bind-var-with-shape env stacksize istail var e shape)
-  (bytecode-put-u32-le PUSH)
-  (compile-expr (localvar-with-shape env var stacksize shape) (+ stacksize 1) istail e)
-  (bytecode-put-u32-le POP)
-  (bytecode-put-u32-le 1))
-
+  (if (null? var)
+      (compile-expr env stacksize istail e)
+      (begin
+        (bytecode-put-u32-le PUSH)
+        (compile-expr (localvar-with-shape env var stacksize shape) (+ stacksize 1) istail e)
+        (bytecode-put-u32-le POP)
+        (bytecode-put-u32-le 1))))
 
 (define (compile-bind-var-pushed env stacksize istail var e)
-  (if (equal? var "_")
+  (if (null? var)
       (begin
         (bytecode-put-u32-le POP)
         (bytecode-put-u32-le 1)
@@ -1309,11 +1318,12 @@
                     (bytecode-put-u32-le C_CALL1)
                     (bytecode-put-u32-le obj_tag)))
               (for-each (match-lambda (($ <switch-block> i _ l e)
-                          (let* ((lab (newlabel)))
+                          (let* ((lab (newlabel))
+                                 (l (if exntype (cons #nil l) l)))
                             (bytecode-put-u32-le BNEQ)
                             (bytecode-put-u32-le i)
                             (bytecode-emit-labref lab)
-                            (compile-bind-fields env (+ stacksize 1) istail (if exntype (cons "_" l) l) e)
+                            (compile-bind-fields env (+ stacksize 1) istail l e)
                             (bytecode-put-u32-le BRANCH)
                             (bytecode-emit-labref endlab)
                             (bytecode-emit-label lab)
@@ -1429,7 +1439,7 @@
      (let* ((var "try#exn"))
        (list 'LCatch e var (list 'EMatch (lid->evar var)
          (append m (list
-           (cons (list 'PVar "_") (list 'LReraise (lid->evar var)))))))))
+           (cons (list 'PWild) (list 'LReraise (lid->evar var)))))))))
     (('ELet rec-flag bindings body)
        (if rec-flag
          (list 'LLetrecfun bindings body)
@@ -1439,6 +1449,8 @@
             (list 'LLetfun v args fun body))
            ((('PVar v) . e)
             (list 'LLet v e body))
+           ((('PWild) . e)
+            (list 'EChain e body))
            ((p . e)
             (list 'EMatch e (list (cons p body)))))
         ) body bindings)))
@@ -1645,6 +1657,8 @@
 
 (define (fv-env-pat p env)
   (match p
+   (('PWild)
+    env)
    (('PVar v)
     (fv-env-var v env))
    (('PInt _)
@@ -1768,9 +1782,11 @@
     (list 'ELet #f (list (cons (lid->pvar name) default-expr)) body)))
 
 (define (compile-arg-pat pat name body)
-  (if (equal? (car pat) 'PVar)
-      body
-      (list 'EMatch (lid->evar name) (list (cons pat body)))))
+  (match pat
+   (('PVar _)
+    body)
+   (_
+    (list 'EMatch (lid->evar name) (list (cons pat body))))))
 
 (define empty-numtags (cons 0 0))
 (define (numtags-next arity numtags)
