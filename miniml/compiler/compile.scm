@@ -43,6 +43,8 @@
          (_ (mkdef_ name args body))
   ))
 
+(define (mkfunctor args body)
+  (fold-right (lambda (arg b) (list 'MEFunctor arg b)) body args))
 
 (define ml-parser
   (lalr-parser
@@ -50,8 +52,8 @@
    ;; Token definitions
    (LPAREN LBRACE RBRACE QUOTE TILDE
            QUESTION SEMICOLONSEMICOLON LBRACK RBRACK LBRACKBAR BARRBRACK
-           AND BEGIN END EXCEPTION EXTERNAL FUN FUNCTION IF IN MODULE
-           MUTABLE OF OPEN REC STRUCT TRY TYPE WITH
+           AND BEGIN END EXCEPTION EXTERNAL FUN FUNCTION FUNCTOR IF IN MODULE
+           MUTABLE OF OPEN REC SIG STRUCT TRY TYPE VAL WITH
            EOF STRING LIDENT UIDENT INT
            (right: MINUSGT)
            (left: BAR)
@@ -96,8 +98,37 @@
      (TYPE typedef type_ands) : (list 'MTypedef (cons $2 $3))
      (EXCEPTION constr_decl) : (list 'MException (car $2) (cdr $2))
      (OPEN longident_uident) : (list 'MOpen $2)
-     (MODULE UIDENT EQ STRUCT list_semidefinition END) : (list 'MStruct $2 $5)
+     (MODULE UIDENT functor_args EQ module_expr) : (list 'MModule $2 (mkfunctor $3 $5))
      (EXTERNAL lident_ext COLON type_count_arrows EQ STRING) : (list 'MExternal $2 $4 $6))
+
+   (module_expr
+    (STRUCT list_semidefinition END) : (list 'MEStruct $2)
+    (FUNCTOR functor_args MINUSGT module_expr) : (mkfunctor $2 $4)
+    (longident_uident functor_apply) : (list 'MEApply $1 $2))
+
+   (functor_apply
+    ( ) : #nil
+    (LPAREN module_expr RPAREN functor_apply) : (cons $2 $4))
+
+   (signature_item
+    (TYPE typedef type_ands) : '()
+    (VAL lident_ext COLON type_ignore) : '())
+
+   (signature
+    ( ) : '()
+    (SEMICOLONSEMICOLON signature) : '()
+    (signature_item signature) : '())
+
+   (module_type
+    (longident_uident) : '()
+    (SIG signature END) : '())
+
+   (functor_args
+    ( ) : #nil
+    (functor_arg functor_args) : (cons $1 $2))
+
+   (functor_arg
+    (LPAREN UIDENT COLON module_type RPAREN) : $2)
 
    (type_ands
     ( ) : #nil
@@ -395,6 +426,7 @@
     (cons "false" (cons 'UIDENT "false"))
     (cons "fun" (cons 'FUN #f))
     (cons "function" (cons 'FUNCTION #f))
+    (cons "functor" (cons 'FUNCTOR #f))
     (cons "if" (cons 'IF #f))
     (cons "in" (cons 'IN #f))
     (cons "let" (cons 'LET #f))
@@ -404,11 +436,13 @@
     (cons "of" (cons 'OF #f))
     (cons "open" (cons 'OPEN #f))
     (cons "rec" (cons 'REC #f))
+    (cons "sig" (cons 'SIG #f))
     (cons "struct" (cons 'STRUCT #f))
     (cons "then" (cons 'THEN #f))
     (cons "true" (cons 'UIDENT "true"))
     (cons "try" (cons 'TRY #f))
     (cons "type" (cons 'TYPE #f))
+    (cons "val" (cons 'VAL #f))
     (cons "with" (cons 'WITH #f))
     ))
 
@@ -979,19 +1013,22 @@
    (match-lambda ((b) (bindings-make-local b)))
    (list env)))
 
+(define (module-get-env mod)
+  (match-let ((('VModule env) mod)) env))
+
 (define (env-get-module env ld)
   (match ld
     (('Lident v)
      (bindings-get-err (env-get-modules env) v))
     (('Ldot ld uid)
-     (bindings-get-err (env-get-modules (env-get-module env ld)) uid))))
+     (bindings-get-err (env-get-modules (module-get-env (env-get-module env ld))) uid))))
 
 (define (env-get-env-li env ld)
   (match ld
     (('Lident v)
      (cons env v))
     (('Ldot ld uid)
-     (cons (env-get-module env ld) uid))))
+     (cons (module-get-env (env-get-module env ld)) uid))))
 
 (define (env-get-var env ld)
   (match-let (((env . v) (env-get-env-li env ld)))
@@ -1767,8 +1804,23 @@
   (set! exnid (+ 1 exnid))
   (env-replace-constr env name (mkconstr arity exnid (cons -2 -2))))
 
-(define (env-open env menv)
-  (env-merge env (env-make-local (env-only-exported menv))))
+(define (env-open env mod)
+  (env-merge env (env-make-local (env-only-exported (module-get-env mod)))))
+
+(define (apply-functor mod arg)
+  (match mod
+   (('VFunctor env argname body)
+    (compile-module (env-replace-module env argname arg) body))))
+
+(define (compile-module env m)
+  (match m
+   (('MEStruct defs) (list 'VModule (compile-defs (env-make-local env) defs)))
+   (('MEFunctor argname body) (list 'VFunctor env argname body))
+   (('MEApply name args)
+    (let* ((mod (env-get-module env name))
+           (margs (map (lambda (m) (compile-module env m)) args)))
+      (fold (lambda (arg m) (apply-functor m arg)) mod margs))
+    )))
 
 (define (compile-def env d)
   (match d
@@ -1800,10 +1852,8 @@
       ))
    (('MTypedef tdefs)
     (fold (lambda (tdef env) (compile-type env (car tdef) (cdr tdef))) env tdefs))
-   (('MStruct name l)
-    (let* ((modenv (env-make-local env))
-           (nenv (compile-defs modenv l)))
-      (env-replace-module env name nenv)))
+   (('MModule name mod)
+    (env-replace-module env name (compile-module env mod)))
    (('MExternal name arity primname)
     (match-let* ((shape (make-list arity (list 'Nolabel)))
            ((prim-kind . prim-num) (prim primname))

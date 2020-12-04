@@ -269,5 +269,20 @@ let rec stack_overflow () = 1 + stack_overflow ()
 let () = run_and_print_exn stack_overflow
 let () = run_and_print_exn (fun () -> div 1 0)
 
+
+let () = print "\nFunctors:\n"
+
+module X(A : sig val x : int end) = struct
+  let x = 2 * A.x
+end
+
+module Y = X(struct let x = 21 end)
+module Z = X(struct let x = 12 end)
+
+let () =
+  print_int Y.x; print_int Z.x
+
+
+
 let () = print "\n"
 let () = caml_ml_flush stdout
