@@ -99,7 +99,7 @@ let () =
 
 let test_function = function
   | [] -> 2
-  | x :: l -> x + 1
+  | x :: _ -> x + 1 (* note: one of the pattern arguments is a wildcard *)
 
 let () =
   print_int (test_function (3 :: []))
