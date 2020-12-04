@@ -277,8 +277,8 @@
     (longident_field EQ expr_no_semi) : (cons $1 $3))
 
    (pattern_constr_args
-    (lident_ext) : (cons $1 #nil)
-    (lident_ext COMMA pattern_constr_args) : (cons $1 $3))
+    (simple_pattern) : (cons $1 #nil)
+    (simple_pattern COMMA pattern_constr_args) : (cons $1 $3))
 
    (comma_separated_list2_lident
     (lident_ext COMMA lident_ext) : (cons $3 (cons $1 #nil))
@@ -290,10 +290,15 @@
 
    (pattern
     (simple_pattern) : $1
-    (longident_constr lident_ext) : (list 'PConstr $1 (cons $2 #nil))
+    (longident_constr lident_ext) : (list 'PConstr $1 (cons (lid->pvar $2) #nil))
     (longident_constr LPAREN pattern_constr_args RPAREN) : (list 'PConstr $1 $3)
-    (comma_separated_list2_lident) : (lid->pconstr "" (reverse $1))
-    (lident_ext COLONCOLON lident_ext) : (lid->pconstr "::" (cons $1 (cons $3 #nil))))
+    (comma_separated_list2_lident) :
+      ; For now we keep this production which is a bit out of touch with other constructs
+      ; that accept patterns rather than ident. A good plan would be to remove it entirely,
+      ; as it is a major source of conflicts, and just require that users
+      ; parenthesize their toplevel tuple patterns.
+      (lid->pconstr "" (map lid->pvar (reverse $1)))
+    (simple_pattern COLONCOLON simple_pattern) : (lid->pconstr "::" (cons $1 (cons $3 #nil))))
 
    (simple_pattern
     (lident_ext) : (list 'PVar $1)
@@ -1195,7 +1200,8 @@
                (tag (constr-get-tag cdef))
                (cnums (constr-get-numconstrs cdef))
                (const (mkswitch-const tag e))
-               (block (mkswitch-block tag arity l e))
+               (vars (map (match-lambda (('PVar v) v)) l))
+               (block (mkswitch-block tag arity vars e))
                (sw (switch-merge-nums sw-rest cnums)))
           (match l
             (#nil
@@ -1644,7 +1650,7 @@
    (('PInt _)
     env)
    (('PConstr c l)
-    (fold fv-env-var env l))))
+    (fold fv-env-pat env l))))
 
 
 (define (range a b) (if (>= a b) #nil (cons a (range (+ a 1) b))))
@@ -1756,7 +1762,7 @@
 
 (define (compile-arg-default name default body)
   (let* ((noneline (cons (lid->pconstr "None" #nil) default))
-         (someline (cons (lid->pconstr "Some" (list name))
+         (someline (cons (lid->pconstr "Some" (list (lid->pvar name)))
                          (lid->evar name)))
          (default-expr (list 'EMatch (lid->evar name) (list noneline someline))))
     (list 'ELet #f (list (cons (lid->pvar name) default-expr)) body)))
