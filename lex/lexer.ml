@@ -74,30 +74,28 @@ let rec lex_string lexbuf =
   let buff = get_next_buff lexbuf 200 in
   let i = ref 0 in
   let continue = ref true in
-  let str = ref [] in
+  let buf = Buffer.create (Bytes.length buff) in
   while (!continue = true) && (!i < Bytes.length buff) do
     begin match Bytes.get buff !i with
     | '\\' -> begin match Bytes.get buff (!i+1) with
-      | '\\' -> str := '\\' :: !str
-      | '\'' -> str := '\'' :: !str
-      | '"' -> str := '"' :: !str
-      | 'n' -> str := '\010' :: !str
-      | 't' -> str := '\009' :: !str
-      | 'b' -> str := '\008' :: !str
-      | 'r' -> str := '\013' :: !str
-      | ' ' -> str := ' ' :: !str
+      | '\\' -> Buffer.add_char buf '\\'
+      | '\'' -> Buffer.add_char buf '\''
+      | '"' -> Buffer.add_char buf '"'
+      | 'n' -> Buffer.add_char buf '\010'
+      | 't' -> Buffer.add_char buf '\009'
+      | 'b' -> Buffer.add_char buf '\008'
+      | 'r' -> Buffer.add_char buf '\013'
+      | ' ' -> Buffer.add_char buf ' '
       (* We skip many cases that do not happen in lexer.mll, such as \\[0-9]{3},
        * or \\ before a new line. *)
       | _ -> raise Bad_rule
       end; incr i
     | '"' -> continue := false
-    | c -> str := c :: !str
+    | c -> Buffer.add_char buf c
     end;
     incr i
   done;
   advance lexbuf !i;
-  let buf = Buffer.create (List.length !str) in
-  List.iter (Buffer.add_char buf) !str;
   if !continue = true
   then (Buffer.contents buf)::(lex_string lexbuf)
   else (Buffer.contents buf)::[];;
@@ -146,7 +144,9 @@ let lex_ident lexbuf =
   end else raise Bad_rule
 
 let decimal_code  c d u =
-  100 * (Char.code c - 48) + 10 * (Char.code d - 48) + (Char.code u - 48)
+  100 * (Char.code c - Char.code '0')
+    + 10 * (Char.code d - Char.code '0')
+    + (Char.code u - Char.code '0')
 
 let lex_char lexbuf =
   let buff = get_next_buff lexbuf 6 in
@@ -179,8 +179,10 @@ let lex_char lexbuf =
 
 let skip_space_and_comments lexbuf =
   let str = get_next_buff lexbuf 2 in
-  match (Bytes.get str 0) with
-  | '(' -> if (Bytes.get str 1) = '*'
+  let len = Bytes.length str in
+  if len = 0 then raise Bad_rule
+  else match (Bytes.get str 0) with
+  | '(' -> if (len > 1) && ((Bytes.get str 1) = '*')
            then begin
              advance lexbuf 2;
              lex_comment lexbuf;
@@ -194,10 +196,9 @@ let skip_space_and_comments lexbuf =
   | _ -> raise Bad_rule
 
 let rec try_skip_space_and_comments lexbuf =
-  try
-  skip_space_and_comments lexbuf;
-  try_skip_space_and_comments lexbuf
-  with _ -> ();;
+  match skip_space_and_comments lexbuf with
+  | () -> try_skip_space_and_comments lexbuf
+  | exception Bad_rule -> ()
 
 let _main lexbuf: Parser.token =
   (* 1. skip spaces and comments *)
