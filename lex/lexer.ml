@@ -74,30 +74,28 @@ let rec lex_string lexbuf =
   let buff = get_next_buff lexbuf 200 in
   let i = ref 0 in
   let continue = ref true in
-  let str = ref [] in
+  let buf = Buffer.create (Bytes.length buff) in
   while (!continue = true) && (!i < Bytes.length buff) do
     begin match Bytes.get buff !i with
     | '\\' -> begin match Bytes.get buff (!i+1) with
-      | '\\' -> str := '\\' :: !str
-      | '\'' -> str := '\'' :: !str
-      | '"' -> str := '"' :: !str
-      | 'n' -> str := '\010' :: !str
-      | 't' -> str := '\009' :: !str
-      | 'b' -> str := '\008' :: !str
-      | 'r' -> str := '\013' :: !str
-      | ' ' -> str := ' ' :: !str
+      | '\\' -> Buffer.add_char buf '\\'
+      | '\'' -> Buffer.add_char buf '\''
+      | '"' -> Buffer.add_char buf '"'
+      | 'n' -> Buffer.add_char buf '\010'
+      | 't' -> Buffer.add_char buf '\009'
+      | 'b' -> Buffer.add_char buf '\008'
+      | 'r' -> Buffer.add_char buf '\013'
+      | ' ' -> Buffer.add_char buf ' '
       (* We skip many cases that do not happen in lexer.mll, such as \\[0-9]{3},
        * or \\ before a new line. *)
       | _ -> raise Bad_rule
       end; incr i
     | '"' -> continue := false
-    | c -> str := c :: !str
+    | c -> Buffer.add_char buf c
     end;
     incr i
   done;
   advance lexbuf !i;
-  let buf = Buffer.create (List.length !str) in
-  List.iter (Buffer.add_char buf) !str;
   if !continue = true
   then (Buffer.contents buf)::(lex_string lexbuf)
   else (Buffer.contents buf)::[];;
