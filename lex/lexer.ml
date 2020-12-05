@@ -181,8 +181,10 @@ let lex_char lexbuf =
 
 let skip_space_and_comments lexbuf =
   let str = get_next_buff lexbuf 2 in
-  match (Bytes.get str 0) with
-  | '(' -> if (Bytes.get str 1) = '*'
+  let len = Bytes.length str in
+  if len = 0 then raise Bad_rule
+  else match (Bytes.get str 0) with
+  | '(' -> if (len > 1) && ((Bytes.get str 1) = '*')
            then begin
              advance lexbuf 2;
              lex_comment lexbuf;
@@ -196,10 +198,9 @@ let skip_space_and_comments lexbuf =
   | _ -> raise Bad_rule
 
 let rec try_skip_space_and_comments lexbuf =
-  try
-  skip_space_and_comments lexbuf;
-  try_skip_space_and_comments lexbuf
-  with _ -> ();;
+  match skip_space_and_comments lexbuf with
+  | () -> try_skip_space_and_comments lexbuf
+  | exception Bad_rule -> ()
 
 let _main lexbuf: Parser.token =
   (* 1. skip spaces and comments *)
