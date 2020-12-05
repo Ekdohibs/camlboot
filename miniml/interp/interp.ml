@@ -987,7 +987,7 @@ and eval_expr env expr =
           indent := " " ^ oldindent; print_string (oldindent ^ "[enter] " ^ name ^ "\n"); incr tracecur;
           try (let r = apply fc args in print_string (oldindent ^ "[leave] " ^ name ^ "\n"); indent := oldindent; r)
           with e -> print_string (oldindent ^ "[error] " ^ name ^ " " ^ (obj_to_string e) ^ "\n"); indent := oldindent; raise e
-        else begin
+        end else begin
           let name = match f.pexp_desc with Pexp_ident lident -> longident_flatten lident.txt | _ -> "<unknown>" in
           incr tracecur; print_string ("[enter] " ^ name ^ "\n"); apply fc args
         end
