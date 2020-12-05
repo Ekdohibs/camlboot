@@ -10,16 +10,26 @@ external ( * ) : int -> int -> int = "%112"
 external div : int -> int -> int = "%113"
 external ( = ) : 'a -> 'a -> bool = "caml_equal"
 external raise : exn -> 'a = "%91"
-type bool = false | true
-type t = { a : int ; b : int }
-type 'a list = [] | (::) of 'a * 'a list
-type 'a option = None | Some of 'a
 
 let stdout = caml_ml_open_descriptor_out 1
 
 let print s = caml_ml_output stdout s 0 (caml_ml_bytes_length s)
 
 let print_int n = print (format_int " %d" n)
+
+let _ = print "\nType declarations\n"
+
+(* variants *)
+type bool = false | true
+type 'a list = [] | (::) of 'a * 'a list
+type 'a option = None | Some of 'a
+
+(* records *)
+type t = { a : int ; b : int }
+
+(* synonyms *)
+type 'a t = 'a * int
+
 
 let _ = print "Hello, world!\n"
 
