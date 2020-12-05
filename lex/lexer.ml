@@ -146,7 +146,9 @@ let lex_ident lexbuf =
   end else raise Bad_rule
 
 let decimal_code  c d u =
-  100 * (Char.code c - 48) + 10 * (Char.code d - 48) + (Char.code u - 48)
+  100 * (Char.code c - Char.code '0')
+    + 10 * (Char.code d - Char.code '0')
+    + (Char.code u - Char.code '0')
 
 let lex_char lexbuf =
   let buff = get_next_buff lexbuf 6 in
