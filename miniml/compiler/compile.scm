@@ -1473,8 +1473,14 @@
 (define (compile-args env stacksize l) (compile-expr-list env stacksize (reverse l)))
 
 
-(define (vhash-map proc l) (alist->vhash (map (lambda (kv) (cons (car kv) (proc (car kv) (cdr kv)))) (vlist->list l))))
-(define (vhash-filter-map proc l) (alist->vhash (filter-map (lambda (kv) (let ((r (proc (car kv) (cdr kv)))) (if r (cons (car kv) r) r))) (vlist->list l))))
+(define (vhash-map proc l)
+  (alist->vhash
+   (map (match-lambda ((k . v) (cons k (proc k v))))
+        (vlist->list l))))
+(define (vhash-filter-map proc l)
+  (alist->vhash
+   (filter-map (match-lambda ((k . v) (let ((r (proc k v))) (if r (cons k r) r))))
+               (vlist->list l))))
 (define (vhash-replace key value l) (vhash-cons key value (vhash-delete key l)))
 
 (define vset-empty (alist->vhash #nil))
