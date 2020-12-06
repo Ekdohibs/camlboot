@@ -907,6 +907,15 @@
 (define RERAISE 146)
 (define obj_tag (cdr (prim "caml_obj_tag")))
 
+; bindings store for each name a definition, but also some visibility
+; information, which indicate if this name was defined as "exported"
+; by the current compilation unit ('Export), or is just available locally ('Local).
+; In OCaml, this is the difference between `include M` and `open M`.
+(define (bindings-get-err bindings name)
+  (match (vhash-assoc name bindings)
+    ((k . (viz . v)) v)
+    (#f (errorp "Not found in env: " name))))
+
 (define-immutable-record-type <env>
   (mkenv vars constrs fields modules)
   env?
@@ -914,7 +923,6 @@
   (constrs env-get-constrs env-with-constrs)
   (fields env-get-fields env-with-fields)
   (modules env-get-modules env-with-modules))
-
 
 (define (env-replace-var env k v)
   (env-with-vars env (vhash-replace k v (env-get-vars env))))
@@ -927,17 +935,12 @@
 
 (define empty-env (mkenv vlist-null vlist-null vlist-null vlist-null))
 
-(define (vhash-assoc-err name env)
-  (let ((r (vhash-assoc name env)))
-    (if (pair? r) r (errorp "Not found in env: " name))
-    ))
-
 (define (env-get-module env ld)
   (match ld
     (('Lident v)
-     (cdr (cdr (vhash-assoc-err v (env-get-modules env)))))
+     (bindings-get-err (env-get-modules env) v))
     (('Ldot ld uid)
-     (cdr (cdr (vhash-assoc-err uid (env-get-modules (env-get-module env ld))))))))
+     (bindings-get-err (env-get-modules (env-get-module env ld)) uid))))
 
 (define (env-get-env-li env ld)
   (match ld
@@ -947,14 +950,14 @@
      (cons (env-get-module env ld) uid))))
 
 (define (env-get-var env ld)
-  (let ((envs (env-get-env-li env ld)))
-    (cdr (cdr (vhash-assoc-err (cdr envs) (env-get-vars (car envs)))))))
+  (match-let (((env . v) (env-get-env-li env ld)))
+    (bindings-get-err (env-get-vars env) v)))
 (define (env-get-constr env ld)
-  (let ((envs (env-get-env-li env ld)))
-    (cdr (cdr (vhash-assoc-err (cdr envs) (env-get-constrs (car envs)))))))
+  (match-let (((env . v) (env-get-env-li env ld)))
+    (bindings-get-err (env-get-constrs env) v)))
 (define (env-get-field env ld)
-  (let ((envs (env-get-env-li env ld)))
-    (cdr (cdr (vhash-assoc-err (cdr envs) (env-get-fields (car envs)))))))
+  (match-let (((env . v) (env-get-env-li env ld)))
+    (bindings-get-err (env-get-fields env) v)))
 
 (define-immutable-record-type <var>
   (mkvar location funshape)
