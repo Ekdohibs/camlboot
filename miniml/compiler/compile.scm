@@ -919,6 +919,11 @@
 (define (bindings-replace name def bindings)
   (vhash-replace name (cons 'Export def) bindings))
 
+(define (bindings-filter-map proc bindings)
+  (vhash-filter-map
+   (match-lambda* ((k (viz . v)) (let ((r (proc k v))) (if r (cons viz r) r))))
+   bindings))
+
 (define-immutable-record-type <env>
   (mkenv vars constrs fields modules)
   env?
@@ -1582,13 +1587,13 @@
 (define (compile-fundef-body env arg-names body nfv lab recvars recshapes recoffset)
   (let* ((arity (length arg-names))
          (envoff (* rec-closure-step (- (- (length recvars) 1) recoffset)))
-         (mvars (vhash-filter-map
+         (mvars (bindings-filter-map
                  (lambda (name v)
-                   (if (equal? (car (var-get-location (cdr v))) 'VarGlobal)
+                   (if (equal? (car (var-get-location v)) 'VarGlobal)
                        v
                        (let ((r (vhash-assoc name nfv)))
                          (if (pair? r)
-                             (cons (car v) (mkvar (list 'VarEnv (+ envoff (cdr r))) (var-get-funshape (cdr v))))
+                             (mkvar (list 'VarEnv (+ envoff (cdr r))) (var-get-funshape v))
                              #f))))
                  (env-get-vars env)))
          (rvars (fold (lambda (rec-name shape i vs)
