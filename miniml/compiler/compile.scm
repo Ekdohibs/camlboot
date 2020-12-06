@@ -924,6 +924,20 @@
    (match-lambda* ((k (viz . v)) (let ((r (proc k v))) (if r (cons viz r) r))))
    bindings))
 
+(define (bindings-only-exported bindings)
+  (alist->vhash
+   (filter (match-lambda ((k . (viz . v)) (match viz ('Export #t) ('Local #f))))
+     (vlist->list bindings))))
+
+(define (bindings-make-local bindings)
+  (vhash-map (match-lambda* ((k (viz . v)) (cons 'Local v))) bindings))
+
+(define (bindings-merge b1 b2)
+  ; the binding added last is at the beginning of the list,
+  ; so we fold-right to iterate from older to newer binding
+  (vhash-fold-right vhash-replace b1 b2))
+
+
 (define-immutable-record-type <env>
   (mkenv vars constrs fields modules)
   env?
@@ -942,6 +956,31 @@
   (env-with-modules env (bindings-replace k v (env-get-modules env))))
 
 (define empty-env (mkenv vlist-null vlist-null vlist-null vlist-null))
+
+(define (env-merge env1 env2)
+  (match-let ((($ <env> vars1 constrs1 fields1 modules1) env1)
+              (($ <env> vars2 constrs2 fields2 modules2) env2))
+    (mkenv
+     (bindings-merge vars1 vars2)
+     (bindings-merge constrs1 constrs2)
+     (bindings-merge fields1 fields2)
+     (bindings-merge modules1 modules2))))
+
+(define (env-only-exported env)
+  (match-let ((($ <env> vars constrs fields modules) env))
+    (mkenv
+     (bindings-only-exported vars)
+     (bindings-only-exported constrs)
+     (bindings-only-exported fields)
+     (bindings-only-exported modules))))
+
+(define (env-make-local env)
+  (match-let ((($ <env> vars constrs fields modules) env))
+    (mkenv
+     (bindings-make-local vars)
+     (bindings-make-local constrs)
+     (bindings-make-local fields)
+     (bindings-make-local modules))))
 
 (define (env-get-module env ld)
   (match ld
@@ -1732,16 +1771,7 @@
   (env-replace-constr env name (mkconstr arity exnid (cons -2 -2))))
 
 (define (env-open env menv)
-  (let* ((open-bindings (lambda (e me)
-           (vhash-fold-right (match-lambda*
-               ((k ('Local . v) ne) ne)
-               ((k ('Export . v) ne) (vhash-replace k (cons 'Local v) ne))
-             ) e me)))
-         (nenv-vars (open-bindings (env-get-vars env) (env-get-vars menv)))
-         (nenv-constrs (open-bindings (env-get-constrs env) (env-get-constrs menv)))
-         (nenv-fields (open-bindings (env-get-fields env) (env-get-fields menv)))
-         (nenv-modules (open-bindings (env-get-modules env) (env-get-modules menv))))
-    (mkenv nenv-vars nenv-constrs nenv-fields nenv-modules)))
+  (env-merge env (env-make-local (env-only-exported menv))))
 
 (define (compile-def env d)
   (match d
@@ -1774,14 +1804,9 @@
    (('MTypedef tdefs)
     (fold (lambda (tdef env) (compile-type env (car tdef) (cdr tdef))) env tdefs))
    (('MStruct name l)
-    (let* ((local (lambda (e) (vhash-map (match-lambda* ((k (viz . v)) (cons 'Local v))) e)))
-           (modenv (mkenv (local (env-get-vars env))
-                          (local (env-get-constrs env))
-                          (local (env-get-fields env))
-                          (local (env-get-modules env))))
+    (let* ((modenv (env-make-local env))
            (nenv (compile-defs modenv l)))
-      (env-replace-module env name nenv)
-      ))
+      (env-replace-module env name nenv)))
    (('MExternal name arity primname)
     (match-let* ((shape (make-list arity (list 'Nolabel)))
            ((prim-kind . prim-num) (prim primname))
