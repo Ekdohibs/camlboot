@@ -957,30 +957,27 @@
 
 (define empty-env (mkenv vlist-null vlist-null vlist-null vlist-null))
 
+(define (env-zip-bindings f envs)
+  (mkenv
+   (f (map env-get-vars envs))
+   (f (map env-get-constrs envs))
+   (f (map env-get-fields envs))
+   (f (map env-get-modules envs))))
+
 (define (env-merge env1 env2)
-  (match-let ((($ <env> vars1 constrs1 fields1 modules1) env1)
-              (($ <env> vars2 constrs2 fields2 modules2) env2))
-    (mkenv
-     (bindings-merge vars1 vars2)
-     (bindings-merge constrs1 constrs2)
-     (bindings-merge fields1 fields2)
-     (bindings-merge modules1 modules2))))
+  (env-zip-bindings
+   (match-lambda ((b1 b2) (bindings-merge b1 b2)))
+   (list env1 env2)))
 
 (define (env-only-exported env)
-  (match-let ((($ <env> vars constrs fields modules) env))
-    (mkenv
-     (bindings-only-exported vars)
-     (bindings-only-exported constrs)
-     (bindings-only-exported fields)
-     (bindings-only-exported modules))))
+  (env-zip-bindings
+   (match-lambda ((b) (bindings-only-exported b)))
+   (list env)))
 
 (define (env-make-local env)
-  (match-let ((($ <env> vars constrs fields modules) env))
-    (mkenv
-     (bindings-make-local vars)
-     (bindings-make-local constrs)
-     (bindings-make-local fields)
-     (bindings-make-local modules))))
+  (env-zip-bindings
+   (match-lambda ((b) (bindings-make-local b)))
+   (list env)))
 
 (define (env-get-module env ld)
   (match ld
