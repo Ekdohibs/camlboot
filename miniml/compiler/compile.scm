@@ -916,6 +916,9 @@
     ((k . (viz . v)) v)
     (#f (errorp "Not found in env: " name))))
 
+(define (bindings-replace name def bindings)
+  (vhash-replace name (cons 'Export def) bindings))
+
 (define-immutable-record-type <env>
   (mkenv vars constrs fields modules)
   env?
@@ -925,13 +928,13 @@
   (modules env-get-modules env-with-modules))
 
 (define (env-replace-var env k v)
-  (env-with-vars env (vhash-replace k v (env-get-vars env))))
+  (env-with-vars env (bindings-replace k v (env-get-vars env))))
 (define (env-replace-constr env k v)
-  (env-with-constrs env (vhash-replace k v (env-get-constrs env))))
+  (env-with-constrs env (bindings-replace k v (env-get-constrs env))))
 (define (env-replace-field env k v)
-  (env-with-fields env (vhash-replace k v (env-get-fields env))))
+  (env-with-fields env (bindings-replace k v (env-get-fields env))))
 (define (env-replace-module env k v)
-  (env-with-modules env (vhash-replace k v (env-get-modules env))))
+  (env-with-modules env (bindings-replace k v (env-get-modules env))))
 
 (define empty-env (mkenv vlist-null vlist-null vlist-null vlist-null))
 
@@ -1127,7 +1130,7 @@
              (switch-cons-block sw block)))))))))
 
 (define (localvar-with-shape env var pos shape)
-  (env-replace-var env var (cons 'Export (mkvar (list 'VarStack pos) shape))))
+  (env-replace-var env var (mkvar (list 'VarStack pos) shape)))
 
 (define (localvar env var pos) (localvar-with-shape env var pos #nil))
 
@@ -1554,7 +1557,7 @@
     (expr-fv e (fv-env-pat p env))))
 
 (define (fv-env-var arg env)
-  (env-replace-var env arg (cons 'Export (mkvar (list 'VarGlobal "dummy") "dummy"))))
+  (env-replace-var env arg (mkvar (list 'VarGlobal "dummy") "dummy")))
 
 (define (fv-env-pat p env)
   (match p
@@ -1589,15 +1592,15 @@
                              #f))))
                  (env-get-vars env)))
          (rvars (fold (lambda (rec-name shape i vs)
-                        (vhash-replace
+                        (bindings-replace
                          rec-name
-                         (cons 'Export (mkvar (list 'VarRec (* rec-closure-step (- i recoffset))) shape))
+                         (mkvar (list 'VarRec (* rec-closure-step (- i recoffset))) shape)
                          vs))
                       mvars recvars recshapes (range 0 (length recvars))))
          (nvars (fold (lambda (arg-name i vs)
-                        (vhash-replace
+                        (bindings-replace
                          arg-name
-                         (cons 'Export (mkvar (list 'VarStack (- (- arity 1) i)) #nil))
+                         (mkvar (list 'VarStack (- (- arity 1) i)) #nil)
                          vs))
                       rvars arg-names (range 0 arity)))
          (nenv (env-with-vars env nvars))
@@ -1704,7 +1707,7 @@
             (car (fold (match-lambda* (((name . arity) (e . cur-numtags))
                          (match-let (((next-tag . next-numtags) (numtags-next arity cur-numtags)))
                            (cons
-                            (vhash-replace name (cons 'Export (mkconstr arity next-tag final-numtags)) e)
+                            (bindings-replace name (mkconstr arity next-tag final-numtags) e)
                             next-numtags))))
                        (cons (env-get-constrs env) empty-numtags) l))))
       ; (newline)(display name)(newline)(display numtags)(newline)(newline)
@@ -1712,8 +1715,7 @@
     (('IRecord l)
          (let* ((numfields (length l))
                 (nenv-fields (car (fold (match-lambda* ((name (e . i))
-                                          (cons (vhash-replace name (cons 'Export (mkfield i numfields)) e)
-                                                (+ 1 i))))
+                                          (cons (bindings-replace name (mkfield i numfields) e) (+ 1 i))))
                                         (cons (env-get-fields env) 0) l))))
            (env-with-fields env nenv-fields)))
     (('IRebind)
@@ -1722,7 +1724,7 @@
 (define exnid 0)
 (define (declare-exn name arity env)
   (set! exnid (+ 1 exnid))
-  (env-replace-constr env name (cons 'Export (mkconstr arity exnid (cons -2 -2)))))
+  (env-replace-constr env name (mkconstr arity exnid (cons -2 -2))))
 
 (define (env-open env menv)
   (let* ((open-bindings (lambda (e me)
@@ -1747,8 +1749,8 @@
     (let* ((locations (map (lambda (def) (if (equal? (def-get-name def) "_") #nil (slot-for-global))) bindings))
            (nenv-vars (fold (match-lambda* ((($ <def> name args body) loc e)
                              (if (equal? name "_") e
-                                 (vhash-replace
-                                    name (cons 'Export (mkvar (list 'VarGlobal loc) (map arg-get-label args)))
+                                 (bindings-replace
+                                    name (mkvar (list 'VarGlobal loc) (map arg-get-label args))
                                     e)))
                          ) (env-get-vars env) bindings locations))
                 (nenv (env-with-vars env nenv-vars))
@@ -1773,7 +1775,7 @@
                           (local (env-get-fields env))
                           (local (env-get-modules env))))
            (nenv (compile-defs modenv l)))
-      (env-replace-module env name (cons 'Export nenv))
+      (env-replace-module env name nenv)
       ))
    (('MExternal name arity primname)
     (match-let* ((shape (make-list arity (list 'Nolabel)))
@@ -1815,7 +1817,7 @@
       (bytecode-emit-labref lab2)
       (bytecode-put-u32-le SETGLOBAL)
       (bytecode-put-u32-le pos)
-      (env-replace-var env name (cons 'Export (mkvar (list 'VarGlobal pos) shape)))
+      (env-replace-var env name (mkvar (list 'VarGlobal pos) shape))
       ))
    ))
 
@@ -1827,7 +1829,7 @@
     (compile-defs (compile-def env def) rest))))
 
 (define initial-env
-  (env-replace-constr empty-env "" (cons 'Export (mkconstr -1 0 (cons 0 1)))))
+  (env-replace-constr empty-env "" (mkconstr -1 0 (cons 0 1))))
 
 (define (declare-builtin-exn name arity)
   (set! initial-env (declare-exn name arity initial-env))
