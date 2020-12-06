@@ -862,11 +862,11 @@
 (define nprims 0)
 (define (prim name)
   (if (equal? (string-ref name 0) #\%)
-      (cons #f (string->number (substring name 1)))
+      (cons 'Internal (string->number (substring name 1)))
       (begin
         (set! prims (cons name prims))
         (set! nprims (+ 1 nprims))
-        (cons #t (- nprims 1)))))
+        (cons 'C (- nprims 1)))))
 (define (bytecode-write-prims)
   (for-each (lambda (name) (begin (bytecode-put-string name) (bytecode-put-u8 0))) (reverse prims)))
 
@@ -905,7 +905,7 @@
 (define BNEQ 132)
 (define STOP 143)
 (define RERAISE 146)
-(define obj_tag (prim "caml_obj_tag"))
+(define obj_tag (cdr (prim "caml_obj_tag")))
 
 (define-immutable-record-type <env>
   (mkenv vars constrs fields modules)
@@ -1217,7 +1217,7 @@
                     (bytecode-put-u32-le 0))
                   (begin
                     (bytecode-put-u32-le C_CALL1)
-                    (bytecode-put-u32-le (cdr obj_tag))))
+                    (bytecode-put-u32-le obj_tag)))
               (for-each (match-lambda (($ <switch-block> i _ l e)
                           (let* ((lab (newlabel)))
                             (bytecode-put-u32-le BNEQ)
@@ -1773,8 +1773,8 @@
       (env-replace-module env name (cons 'Export nenv))
       ))
    (('MExternal name arity primname)
-    (let* ((shape (make-list arity (list 'Nolabel)))
-           (primnum (prim primname))
+    (match-let* ((shape (make-list arity (list 'Nolabel)))
+           ((prim-kind . prim-num) (prim primname))
            (lab1 (newlabel))
            (lab2 (newlabel))
            (pos (slot-for-global)))
@@ -1792,7 +1792,9 @@
           (bytecode-put-u32-le PUSH)))
       (bytecode-put-u32-le ACC)
       (bytecode-put-u32-le (- arity 1))
-      (if (car primnum)
+      (match prim-kind
+        ('Internal #f)
+        ('C
           (cond ((= arity 1) (bytecode-put-u32-le C_CALL1))
                 ((= arity 2) (bytecode-put-u32-le C_CALL2))
                 ((= arity 3) (bytecode-put-u32-le C_CALL3))
@@ -1800,8 +1802,8 @@
                 ((= arity 5) (bytecode-put-u32-le C_CALL5))
                 (else (begin
                         (bytecode-put-u32-le C_CALLN)
-                        (bytecode-put-u32-le arity)))))
-      (bytecode-put-u32-le (cdr primnum))
+                        (bytecode-put-u32-le arity))))))
+      (bytecode-put-u32-le prim-num)
       (bytecode-put-u32-le RETURN)
       (bytecode-put-u32-le arity)
       (bytecode-emit-label lab1)
