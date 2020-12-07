@@ -4,10 +4,18 @@ external caml_ml_output : out_channel -> string -> int -> int -> unit = "caml_ml
 external caml_ml_flush : out_channel -> unit = "caml_ml_flush"
 external caml_ml_bytes_length : string -> int = "caml_ml_bytes_length"
 external format_int : string -> int -> string = "caml_format_int"
+external ( ~- ) : int -> int = "%109"
 external ( + ) : int -> int -> int = "%110"
 external ( - ) : int -> int -> int = "%111"
 external ( * ) : int -> int -> int = "%112"
-external div : int -> int -> int = "%113"
+external ( / ) : int -> int -> int = "%113"
+external ( mod ) : int -> int -> int = "%114"
+external ( land ) : int -> int -> int = "%115"
+external ( lor ) : int -> int -> int = "%116"
+external ( lxor ) : int -> int -> int = "%117"
+external ( lsl ) : int -> int -> int = "%118"
+external ( lsr ) : int -> int -> int = "%119"
+external ( asr ) : int -> int -> int = "%120"
 external ( = ) : 'a -> 'a -> bool = "caml_equal"
 external raise : exn -> 'a = "%91"
 
@@ -31,10 +39,27 @@ type t = { a : int ; b : int }
 type 'a t = 'a * int
 
 
-let _ = print "Hello, world!\n"
+let () = print "Hello, world!\n"
 
-let _ = print_int (6 * 7)
+let () = print "Arithmetic:\n"
+
+let () = print_int (6 * 7)
 let () = print_int (17 + 12)
+let () = print_int (7 - 5)
+let () = print_int (19 / 3)
+let () = print_int (- (2) + 3) (* parentheses so that it is not parsed as a negative number *)
+let () = print_int (19 mod 3)
+let () = print_int (3 land 5)
+let () = print_int (3 lor 5)
+let () = print_int (3 lxor 5)
+let () = print_int (7 lsl 1)
+let () = print_int (7 lsr 1)
+let () = print_int (7 asr 1)
+let () = print_int (-1 lsr 1)
+let () = print_int (1 lsl 62 - 1) (* Should be previous number *)
+let () = print_int (-1 asr 1)
+
+let _ = print "\nFunctions:\n"
 
 (* let g x = let z = x * 2 in fun y -> z * 3 *)
 
@@ -267,7 +292,7 @@ let () = run_and_print_exn (fun () -> int_of_string "fqsq")
 let () = run_and_print_exn (fun () -> sys_getenv "fqsq")
 let rec stack_overflow () = 1 + stack_overflow ()
 let () = run_and_print_exn stack_overflow
-let () = run_and_print_exn (fun () -> div 1 0)
+let () = run_and_print_exn (fun () -> 1 / 0)
 
 
 let () = print "\nFunctors:\n"

@@ -68,17 +68,19 @@
            (left: COMMA)
            (right: BARBAR)
            (right: AMPERAMPER)
-           (left: EQ LTGT LT GT LTEQ GTEQ BARGT)
-           (right: CARET AT ATAT)
+           (left: EQ BARGT INFIXOP0)
+           (right: ATAT INFIXOP1)
            (right: COLONCOLON)
-           (left: PLUS MINUS)
-           (left: STAR)
+           (left: MINUS INFIXOP2)
+           (left: STAR INFIXOP3)
+           (right: INFIXOP4)
+           (nonassoc: uminus_prec)
            (nonassoc: label_prec)
            (nonassoc: COLON)
            (nonassoc: dot_prec)
            (nonassoc: DOT)
            (nonassoc: RPAREN)
-           (nonassoc: BANG))
+           (nonassoc: PREFIXOP))
    ;; Rules
    (definitions
      ( ) : #nil
@@ -152,7 +154,7 @@
 
    (letdef
     (LPAREN RPAREN EQ expr) : (mkdef "_" #nil $4)
-    (LIDENT list_labelled_arg EQ expr) : (mkdef $1 $2 $4))
+    (lident_ext list_labelled_arg EQ expr) : (mkdef $1 $2 $4))
 
    (list_labelled_arg
     ( ) : #nil
@@ -241,17 +243,14 @@
    (lident_symb
     (COLONEQ) : ":="
     (EQ) : "="
-    (LTGT) : "<>"
-    (LT) : "<"
-    (GT) : ">"
-    (LTEQ) : "<="
-    (GTEQ) : ">="
-    (CARET) : "^"
-    (AT) : "@"
-    (PLUS) : "+"
     (MINUS) : "-"
     (STAR) : "*"
-    (BANG) : "!")
+    (INFIXOP0) : $1
+    (INFIXOP1) : $1
+    (INFIXOP2) : $1
+    (INFIXOP3) : $1
+    (INFIXOP4) : $1
+    (PREFIXOP) : $1)
 
    (lident_ext
     (LIDENT) : $1
@@ -319,7 +318,7 @@
         (fold-right (lambda (e r) (lid->econstr "::" (list e r))) (lid->econstr "[]" #nil) $2)
     (LBRACKBAR BARRBRACK) : (list 'EVar (list 'Ldot (list 'Lident "Array") "empty_array"))
     (LBRACKBAR semi_separated_expr_list_opt BARRBRACK) : (lid->econstr "" $2)
-    (BANG simple_expr) : (mkapp1 "!" $2)
+    (PREFIXOP simple_expr) : (mkapp1 $1 $2)
     (simple_expr DOT LPAREN expr RPAREN) : (mkapp2 "array_get" $1 $4)
     (simple_expr DOT LBRACK expr RBRACK) : (mkapp2 "string_get" $1 $4))
 
@@ -351,14 +350,14 @@
     (simple_expr DOT longident_field LTMINUS expr_no_semi) : (list 'ESetfield $1 $3 $5)
     (IF expr THEN expr ELSE expr) : (list 'EIf $2 $4 $6)
     (IF expr THEN expr) : (list 'EIf $2 $4 (list 'EConstant (list 'CUnit)))
+    (expr_no_semi INFIXOP0 expr_no_semi) : (mkapp2 $2 $1 $3)
+    (expr_no_semi INFIXOP1 expr_no_semi) : (mkapp2 $2 $1 $3)
+    (expr_no_semi INFIXOP2 expr_no_semi) : (mkapp2 $2 $1 $3)
+    (expr_no_semi INFIXOP3 expr_no_semi) : (mkapp2 $2 $1 $3)
+    (expr_no_semi INFIXOP4 expr_no_semi) : (mkapp2 $2 $1 $3)
     (expr_no_semi EQ expr_no_semi) : (mkapp2 "=" $1 $3)
-    (expr_no_semi LTGT expr_no_semi) : (mkapp2 "<>" $1 $3)
-    (expr_no_semi LT expr_no_semi) : (mkapp2 "<" $1 $3)
-    (expr_no_semi GT expr_no_semi) : (mkapp2 ">" $1 $3)
-    (expr_no_semi LTEQ expr_no_semi) : (mkapp2 "<=" $1 $3)
-    (expr_no_semi GTEQ expr_no_semi) : (mkapp2 ">=" $1 $3)
-    (expr_no_semi PLUS expr_no_semi) : (mkapp2 "+" $1 $3)
     (expr_no_semi MINUS expr_no_semi) : (mkapp2 "-" $1 $3)
+    (MINUS expr_no_semi (prec: uminus_prec)) : (mkapp1 "~-" $2)
     (expr_no_semi STAR expr_no_semi) : (mkapp2 "*" $1 $3)
     (expr_no_semi COLONEQ expr_no_semi) : (mkapp2 ":=" $1 $3)
     (expr_no_semi AMPERAMPER expr_no_semi) : (list 'EIf $1 $3 (list 'EConstant (list 'CInt 0)))
@@ -380,8 +379,6 @@
     (LET OPEN longident_uident IN expr (prec: LET)) : (list 'ELetOpen $3 $5)
     (longident_uident DOT LPAREN expr RPAREN) : (list 'ELetOpen $1 $4)
     (expr_no_semi COLONCOLON expr_no_semi) : (lid->econstr "::" (cons $1 (cons $3 #nil)))
-    (expr_no_semi CARET expr_no_semi) : (mkapp2 "^" $1 $3)
-    (expr_no_semi AT expr_no_semi) : (mkapp2 "@" $1 $3)
     (simple_expr DOT LPAREN expr RPAREN LTMINUS expr_no_semi) : (mkapp3 "array_set" $1 $4 $7)
     (simple_expr DOT LBRACK expr RBRACK LTMINUS expr_no_semi) : (mkapp3 "string_set" $1 $4 $7)
     )
@@ -418,6 +415,7 @@
 
 (define kw (list
     (cons "and" (cons 'AND #f))
+    (cons "asr" (cons 'INFIXOP4 "asr"))
     (cons "begin" (cons 'BEGIN #f))
     (cons "else" (cons 'ELSE #f))
     (cons "end" (cons 'END #f))
@@ -430,7 +428,13 @@
     (cons "if" (cons 'IF #f))
     (cons "in" (cons 'IN #f))
     (cons "let" (cons 'LET #f))
+    (cons "land" (cons 'INFIXOP3 "land"))
+    (cons "lor" (cons 'INFIXOP3 "lor"))
+    (cons "lxor" (cons 'INFIXOP3 "lxor"))
+    (cons "lsl" (cons 'INFIXOP4 "lsl"))
+    (cons "lsr" (cons 'INFIXOP4 "lsr"))
     (cons "match" (cons 'MATCH #f))
+    (cons "mod" (cons 'INFIXOP3 "mod"))
     (cons "module" (cons 'MODULE #f))
     (cons "mutable" (cons 'MUTABLE #f))
     (cons "of" (cons 'OF #f))
@@ -445,6 +449,23 @@
     (cons "val" (cons 'VAL #f))
     (cons "with" (cons 'WITH #f))
     ))
+
+(define operator-kw (list
+   (cons "&&" (cons 'AMPERAMPER #f))
+   (cons "@@" (cons 'ATAT #f))
+   (cons "!=" (cons 'INFIXOP0 "!="))
+   (cons "|" (cons 'BAR #f))
+   (cons "||" (cons 'BARBAR #f))
+   (cons "|>" (cons 'BARGT #f))
+   (cons "=" (cons 'EQ #f))
+   (cons "<-" (cons 'LTMINUS #f))
+   (cons "-" (cons 'MINUS #f))
+   (cons "->" (cons 'MINUSGT #f))
+   (cons "?" (cons 'QUESTION #f))
+   (cons "*" (cons 'STAR #f))
+   (cons "~" (cons 'TILDE #f))
+   ))
+
 
 (define (get-lident s)
   (let ((p (assoc s kw)))
@@ -529,6 +550,30 @@
           (else #nil)
           )))
 
+(define (symbol-char? c)
+  (member c (list #\! #\$ #\% #\& #\* #\+ #\- #\. #\/ #\: #\< #\= #\> #\? #\@ #\^ #\| #\~) char=?))
+
+(define (symbol-chars errorp)
+  (let ((c (peek-char)))
+    (cond ((eof-object? c) #nil)
+          ((symbol-char? c) (begin (read-char) (cons c (symbol-chars errorp))))
+          (else #nil)
+          )))
+
+(define (get-operator name)
+  (let ((p (assoc name operator-kw))
+        (c (string-ref name 0)))
+    (cond (p (cdr p))
+          ((member c (list #\! #\~ #\?) char=?) (cons 'PREFIXOP name))
+          ((member c (list #\= #\< #\> #\| #\& #\$) char=?) (cons 'INFIXOP0 name))
+          ((member c (list #\@ #\^) char=?) (cons 'INFIXOP1 name))
+          ((member c (list #\+ #\-) char=?) (cons 'INFIXOP2 name))
+          ((and (char=? c #\*) (> (string-length name) 1) (char=? (string-ref name 1) #\*)) (cons 'INFIXOP4 name))
+          ((member c (list #\* #\/ #\%) char=?) (cons 'INFIXOP3 name)))))
+
+(define (mksymbol location errorp c)
+  (mktoken location (get-operator (list->string (cons c (symbol-chars errorp))))))
+
 (define (skip-until-newline)
   (let ((c (read-char)))
     (cond ((eof-object? c) '())
@@ -562,49 +607,33 @@
         ((char=? c #\|) (cond
                          ((char=? (peek-char) #\])
                           (read-char) (make-lexical-token 'BARRBRACK location #f))
-                         ((char=? (peek-char) #\|)
-                          (read-char) (make-lexical-token 'BARBAR location #f))
-                         ((char=? (peek-char) #\>)
-                          (read-char) (make-lexical-token 'BARGT location #f))
-                         (else (make-lexical-token 'BAR location #f))))
+                         (else (mksymbol location errorp c))))
         ((char=? c #\;) (if (char=? (peek-char) #\;)
                             (begin (read-char) (make-lexical-token 'SEMICOLONSEMICOLON location #f))
                             (make-lexical-token 'SEMICOLON location #f)))
-        ((char=? c #\=) (make-lexical-token 'EQ location #f))
+        ((char=? c #\=) (mksymbol location errorp c))
         ((char=? c #\.) (make-lexical-token 'DOT location #f))
         ((char=? c #\:) (if (char=? (peek-char) #\:)
                             (begin (read-char) (make-lexical-token 'COLONCOLON location #f))
                             (if (char=? (peek-char) #\=)
                                 (begin (read-char) (make-lexical-token 'COLONEQ location #f))
                                 (make-lexical-token 'COLON location #f))))
-        ((char=? c #\+) (make-lexical-token 'PLUS location #f))
-        ((char=? c #\-) (if (char=? (peek-char) #\>)
-                            (begin (read-char) (make-lexical-token 'MINUSGT location #f))
-                            (if (char-numeric? (peek-char))
-                                (make-lexical-token 'INT location (- (string->number (list->string (number-chars errorp)))))
-                                (make-lexical-token 'MINUS location #f))))
-        ((char=? c #\*) (make-lexical-token 'STAR location #f))
-        ((char=? c #\~) (make-lexical-token 'TILDE location #f))
-        ((char=? c #\@) (cond
-                         ((char=? (peek-char) #\@)
-                          (read-char) (make-lexical-token 'ATAT location #f))
-                         (else (make-lexical-token 'AT location #f))))
-        ((char=? c #\^) (make-lexical-token 'CARET location #f))
-        ((char=? c #\?) (make-lexical-token 'QUESTION location #f))
-        ((char=? c #\!) (make-lexical-token 'BANG location #f))
-        ((char=? c #\&) (if (char=? (peek-char) #\&)
-                            (begin (read-char) (make-lexical-token 'AMPERAMPER location #f))
-                            (errorp "Illegal character: " c)))
-        ((char=? c #\<) (if (char=? (peek-char) #\>)
-                            (begin (read-char) (make-lexical-token 'LTGT location #f))
-                            (if (char=? (peek-char) #\=)
-                                (begin (read-char) (make-lexical-token 'LTEQ location #f))
-                                (if (char=? (peek-char) #\-)
-                                    (begin (read-char) (make-lexical-token 'LTMINUS location #f))
-                                    (make-lexical-token 'LT location #f)))))
-        ((char=? c #\>) (if (char=? (peek-char) #\=)
-                            (begin (read-char) (make-lexical-token 'GTEQ location #f))
-                            (make-lexical-token 'GT location #f)))
+        ((char=? c #\+) (mksymbol location errorp c))
+        ((char=? c #\-) (if (char-numeric? (peek-char))
+                            (make-lexical-token 'INT location (- (string->number (list->string (number-chars errorp)))))
+                            (mksymbol location errorp c)))
+        ((char=? c #\*) (mksymbol location errorp c))
+        ((char=? c #\~) (mksymbol location errorp c))
+        ((char=? c #\@) (mksymbol location errorp c))
+        ((char=? c #\^) (mksymbol location errorp c))
+        ((char=? c #\?) (mksymbol location errorp c))
+        ((char=? c #\!) (mksymbol location errorp c))
+        ((char=? c #\&) (mksymbol location errorp c))
+        ((char=? c #\<) (mksymbol location errorp c))
+        ((char=? c #\>) (mksymbol location errorp c))
+        ((char=? c #\/) (mksymbol location errorp c))
+        ((char=? c #\%) (mksymbol location errorp c))
+        ((char=? c #\$) (mksymbol location errorp c))
         ((char=? c #\") (make-lexical-token 'STRING location (list->string (string-chars errorp))))
         ((char=? c #\') (let ((c (read-char)))
                              (if (char=? c #\\ )
