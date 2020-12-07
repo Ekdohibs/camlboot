@@ -272,15 +272,18 @@ let () = run_and_print_exn (fun () -> div 1 0)
 
 let () = print "\nFunctors:\n"
 
-module X(A : sig val x : int end) = struct
-  let x = 2 * A.x
+module F(X : sig val x : int end) = struct
+  let x = 2 * X.x
 end
 
-module Y = X(struct let x = 21 end)
-module Z = X(struct let x = 12 end)
+module A = F(struct let x = 21 end)
+module B = F(struct let x = 12 end)
+module X = struct let () = print " only once" let x = 16 end
+module C = F(X)
+module D = F(X)
 
 let () =
-  print_int Y.x; print_int Z.x
+  print_int A.x; print_int B.x; if C.x = D.x then print " ok" else print " ko"
 
 
 
