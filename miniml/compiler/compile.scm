@@ -25,6 +25,7 @@
 (define (mknolabelfun arg) (mkarg arg (list 'Nolabel) (list 'None)))
 
 (define (lid->evar v) (list 'EVar (list 'Lident v)))
+(define (lid->lvar v) (list 'LVar (list 'Lident v)))
 (define (lid->pvar v) (list 'PVar v))
 (define (lid->econstr v args) (list 'EConstr (list 'Lident v) args))
 (define (lid->pconstr v args) (list 'PConstr (list 'Lident v) args))
@@ -1426,102 +1427,196 @@
     )))
 
 (define (lower-expr env istail expr)
+  (let ((lower-tail (lambda (e) (lower-expr env istail e)))
+        (lower-notail (lambda (e) (lower-expr env #f e))))
   (match expr
+    (('EVar ld) (list 'LVar ld))
     (('EConstant c)
      (match c
        (('CInt n)
         (list 'LConst n))
        (('CUnit)
         (list 'LConst 0))
-       (('CString id)
-        (list 'LGlobal (newglob id)))))
+       (('CString str)
+        (list 'LGlobal (newglob str)))))
+    (('EIf e1 e2 e3)
+     (list
+      'LIf
+      (lower-notail e1)
+      (lower-tail e2)
+      (lower-tail e3)
+     ))
+    (('EChain e1 e2)
+     (list
+      'LChain
+      (lower-notail e1)
+      (lower-tail e2)
+      ))
     (('EConstr name args)
      (match-let ((($ <constr> arity tag nums) (env-get-constr env name)))
         (if (null? args)
             (begin
               (assert (= arity 0))
               (list 'LConst tag))
-            (let* ((nargs (adjust-econstr-args args arity)))
-              (assert (or (= arity (length nargs)) (= arity -1)))
+            (let* ((args (adjust-econstr-args args arity))
+                   (args (map lower-notail args)))
+              (assert (or (= arity (length args)) (= arity -1)))
               (if (= (car nums) -2)
-                  (list 'LBlock 0 (cons (list 'LConst tag) nargs))
-                  (list 'LBlock tag nargs))))))
+                  (list 'LBlock 0 (cons (list 'LConst tag) args))
+                  (list 'LBlock tag args))))))
     (('EGetfield e f)
-     (list 'LGetfield e (field-get-index (env-get-field env f))))
+     (list
+      'LGetfield
+      (lower-notail e)
+      (lower-field-index env f)
+     ))
     (('ESetfield e1 f e2)
-     (list 'LSetfield e1 (field-get-index (env-get-field env f)) e2))
+     (list
+      'LSetfield
+      (lower-notail e1)
+      (lower-field-index env f)
+      (lower-notail e2)
+     ))
     (('ERecord l)
         (let* ((size (length l))
-               (lf (map (lambda (fe)
-                          (match-let ((($ <field> index numfields) (env-get-field env (car fe))))
-                            (assert (= numfields size))
-                            (cons index (cdr fe)))) l))
+               (lf (map (lambda (fe) (lower-field-def env fe)) l))
                (sf (sort lf (lambda (fe1 fe2) (< (car fe1) (car fe2)))))
                (es (map cdr sf)))
           (for-each (lambda (fe i) (assert (= (car fe) i))) sf (range 0 size))
           (list 'LBlock 0 es)))
     (('ERecordwith e l)
      (let* ((size (field-get-numfields (env-get-field env (car (car l)))))
-            (lf (map (lambda (fe)
-                       (match-let ((($ <field> index numfields) (env-get-field env (car fe))))
-                         (assert (= numfields size))
-                         (cons index (cdr fe)))) l))
+            (e (lower-notail e))
+            (lf (map (lambda (fe) (lower-field-def env fe)) l))
             (var "record#with")
             (es (map (lambda (i)
                        (let* ((p (find (lambda (fe) (= (car fe) i)) lf)))
                          (if (pair? p)
                              (cdr p)
-                             (list 'LGetfield (lid->evar var) i)))
+                             (list 'LGetfield (lid->lvar var) i)))
                        ) (range 0 size)))
             )
        (assert (> size 0))
        (list 'LLet var e (list 'LBlock 0 es))))
     (('EApply f args)
       (match-let* ((($ <var> f-location f-shape) (env-get-var env f))
-                   (args (align-args f-shape args)))
+                   (args (align-args f-shape args))
+                   (args (map lower-notail args)))
        (if istail
-           (list 'LTailApply f-location args)
-           (list 'LApply f-location args))))
-    (('EMatch e m)
-     (list 'LSwitch e (split-pattern-matching env m)))
-    (('ETry e m)
-     (let* ((var "try#exn"))
-       (list 'LCatch e var (list 'EMatch (lid->evar var)
-         (append m (list
-           (cons (list 'PWild) (list 'LReraise (lid->evar var)))))))))
+           (list 'LTailApply f args)
+           (list 'LApply f args))))
+    (('EMatch e h)
+     (let* ((e (lower-notail e))
+            (sw (split-pattern-matching env h))
+            (sw (lower-switch env istail sw)))
+       (list 'LSwitch e sw)))
+    (('ETry e h)
+     (let* ((e (lower-notail e))
+            (var "try#exn"))
+       (list 'LCatch e var
+         (lower-expr (low-local-var env var) istail
+          (list 'EMatch (lid->evar var)
+           (append h (list
+             (cons (list 'PWild) (list 'EReraise (lid->evar var))))))))))
+    (('EReraise e)
+     (list 'LReraise (lower-notail e)))
     (('ELet rec-flag bindings body)
        (if rec-flag
-         (let ((bindings
-                (map (match-lambda
-                      ((('PVar v) . ('ELambda args fun)) (cons v (lower-function args fun)))
-                   ) bindings)))
-           (list 'LLetrecfun bindings body))
-         ; HACK: sequential let!
-         (fold-right (lambda (binding body) (match binding
-           ((('PVar v) . (and e ('ELambda args fun)))
-            (match-let (((args shape fun) (lower-function args fun)))
-            (list 'LLetfun v args shape fun body)))
-           ((('PVar v) . e)
-            (list 'LLet v e body))
-           ((('PWild) . e)
-            (list 'EChain e body))
-           ((p . e)
-            (list 'EMatch e (list (cons p body)))))
-        ) body bindings)))
+         (lower-letrec env istail bindings body)
+         (lower-let env istail bindings body)
+        ))
     (('ELambda args fun)
-     (match-let (((args shape fun) (lower-function args fun)))
-      (list 'LLetfun  "lambda#" args shape fun (lid->evar "lambda#"))))
-    (other other)
-))
+     (match-let* (((args shape fun) (lower-function env args fun)))
+      (list 'LLetfun  "lambda#" args shape fun (lid->lvar "lambda#"))))
+    (('ELetOpen m e)
+       (let* ((menv (env-get-module env m)))
+         (list
+          'LLetOpen m
+          (lower-expr (env-open env menv) istail e))))
+)))
 
-(define (lower-function args body)
+(define (low-local-var-with-shape env v shape)
+  (env-replace-var env v (mkvar (list 'VarLocal v) shape)))
+(define (low-local-var env v)
+  (low-local-var-with-shape env v #nil))
+(define (low-local-vars env vars)
+  (fold (lambda (var env) (low-local-var env var)) env vars))
+
+(define (lower-letrec env istail bindings body)
+  (let* ((bindings
+          (map (match-lambda
+                ((('PVar v) . ('ELambda args fun))
+                 (cons v (lower-function-prelude args fun)))
+             ) bindings))
+         (env
+          (fold (match-lambda*
+              (((v args shape fun) env) (low-local-var-with-shape env v shape))
+            ) env bindings))
+         (bindings
+          (map (match-lambda
+                ((v args shape fun) (list v args shape (lower-function-body env args fun)))
+             ) bindings))
+         (body
+          (lower-expr env istail body)))
+    (list 'LLetrecfun bindings body)))
+
+(define (lower-let env istail bindings body)
+  ; HACK: sequential let!
+  (match bindings
+    (#nil (lower-expr env istail body))
+    ((binding . rest)
+     (let ((lower-rest (lambda (env) (lower-let env istail rest body))))
+       (match binding
+         ((('PVar v) . (and e ('ELambda args fun)))
+          (match-let* (((args shape fun) (lower-function env args fun))
+                       (env (low-local-var-with-shape env v shape)))
+            (list 'LLetfun v args shape fun (lower-rest env))))
+         ((('PVar v) . e)
+          (let* ((e (lower-expr env #f e))
+                 (env (low-local-var env v)))
+            (list 'LLet v e (lower-rest env))))
+         ((('PWild) . e)
+          (let* ((e (lower-expr env #f e)))
+            (list 'LChain e (lower-rest env))))
+         ((p . e)
+          ; here we interrupt binding traversal
+          ; to go back to the general lower-expr
+          (lower-expr env istail
+            (list
+             'EMatch
+             e
+             (list (cons p ('ELet #f bindings body))))))
+      )))
+  ))
+
+(define (lower-field-index env f)
+  (field-get-index (env-get-field env f)))
+
+(define (lower-field-def env fe)
+  (match-let* (((f . e) fe)
+               (($ <field> index numfields) (env-get-field env f)))
+    (cons index (lower-expr env #f e))))
+
+(define (lower-handler env istail h)
+  (map (match-lambda ((p . e) (cons p (lower-expr env istail e)))) h))
+
+(define (lower-function env args body)
+  (match-let* (((args shape body) (lower-function-prelude args body))
+               (body (lower-function-body env args body)))
+    (list args shape body)))
+
+(define (lower-function-body env args body)
+  (let* ((env (low-local-vars env args)))
+  (lower-expr env #t body)))
+
+(define (lower-function-prelude args body)
   (let* ((arity (length args))
          (shape (map arg-get-label args))
          (arg-names (map lower-arg-name args (range 0 arity)))
-         (body (lower-fun-body args arg-names body)))
+         (body (lower-function-prelude-aux args arg-names body)))
     (list arg-names shape body)))
 
-(define (lower-fun-body args arg-names basebody)
+(define (lower-function-prelude-aux args arg-names basebody)
   (fold-right (lambda (arg name body) (match arg
      (($ <arg> pat ('Optional label) ('Some default))
       (lower-arg-default label default body))
@@ -1550,14 +1645,40 @@
    (_
     (list 'EMatch (lid->evar name) (list (cons pat body))))))
 
-(define (compile-expr env stacksize istail expr)
-  (compile-low-expr env stacksize istail
+(define (lower-switch env istail sw)
+  (match-let*
+   ((($ <switch> consts blocks default nums) sw)
+    (consts
+      (map (match-lambda
+            (($ <switch-const> tag rhs)
+             (mkswitch-const tag
+               (lower-expr env istail rhs)))
+         ) consts))
+    (blocks
+      (map (match-lambda
+            (($ <switch-block> tag arity vars rhs)
+             (mkswitch-block tag arity vars
+               (lower-expr (low-local-vars env vars) istail rhs)))
+        ) blocks))
+    (default
+      ((match-lambda
+        (#nil #nil)
+        ((var . rhs) (cons var (lower-expr (low-local-var env var) istail rhs)))
+        ) default)))
+   (mkswitch consts blocks default nums)))
+
+(define (compile-high-expr env istail expr)
+  (compile-expr env 0 istail
     (lower-expr env istail expr)))
 
-(define (compile-low-expr env stacksize istail expr)
-  ; (newline)(show-env env)(newline)(display stacksize)(newline)(display istail)(newline)(display expr)(newline)
+(define (compile-expr env stacksize istail expr)
+  ; (display "compile-expr") (newline)
+  ; (show-env env)(newline)
+  ; (display stacksize)(newline)
+  ; (display istail)(newline)
+  ; (display expr)(newline)
   (match expr
-    (('EVar v)
+    (('LVar v)
      (access-var (var-get-location (env-get-var env v)) stacksize))
     (('LGlobal id)
      (bytecode-put-u32-le GETGLOBAL)
@@ -1585,17 +1706,19 @@
      (compile-expr env (+ 1 stacksize) #f e1)
      (bytecode-put-u32-le SETFIELD)
      (bytecode-put-u32-le i))
-    (('LTailApply f-location args)
-     (let ((nargs (length args)))
+    (('LTailApply f args)
+     (let* ((f-location (var-get-location (env-get-var env f)))
+            (nargs (length args)))
        (compile-args env stacksize args)
        (bytecode-put-u32-le PUSH)
        (access-var f-location (+ stacksize nargs))
        (bytecode-put-u32-le APPTERM)
        (bytecode-put-u32-le nargs)
        (bytecode-put-u32-le (+ stacksize nargs))))
-    (('LApply f-location args)
-     (let ((nargs (length args))
-           (lab (newlabel)))
+    (('LApply f args)
+     (let* ((f-location (var-get-location (env-get-var env f)))
+            (nargs (length args))
+            (lab (newlabel)))
        (bytecode-put-u32-le PUSH_RETADDR)
        (bytecode-emit-labref lab)
        (compile-args env (+ stacksize 3) args)
@@ -1604,7 +1727,7 @@
        (bytecode-put-u32-le APPLY)
        (bytecode-put-u32-le nargs)
        (bytecode-emit-label lab)))
-    (('EIf e1 e2 e3)
+    (('LIf e1 e2 e3)
       (let* ((lab1 (newlabel))
              (lab2 (newlabel)))
         (compile-expr env stacksize #f e1)
@@ -1616,7 +1739,7 @@
         (bytecode-emit-label lab1)
         (compile-expr env stacksize istail e3)
         (bytecode-emit-label lab2)))
-    (('EChain e1 e2)
+    (('LChain e1 e2)
      (compile-expr env stacksize #f e1)
      (compile-expr env stacksize istail e2))
     (('LSwitch e sw)
@@ -1649,9 +1772,10 @@
        (compile-expr nenv (+ stacksize (length bindings)) istail body)
        (bytecode-put-u32-le POP)
        (bytecode-put-u32-le (length bindings))))
-    (('ELetOpen m e)
+    (('LLetOpen m e)
      (let* ((menv (env-get-module env m)))
-       (compile-expr (env-open env menv) stacksize istail e)))))
+       (compile-expr (env-open env menv) stacksize istail e)))
+))
 
 (define (compile-expr-list env stacksize l)
   (if (not (null? l))
@@ -1685,78 +1809,94 @@
 
 (define (expr-fv expr env)
   (match expr
-    (('EVar v)
+    (('LVar v)
      (let* ((loc (var-get-location (env-get-var env v))))
        (if (equal? (car loc) 'VarGlobal)
            vset-empty
            (begin
              (assert (equal? (car v) 'Lident))
              (vset-singleton (car (cdr v)))))))
-    (('EConstant _)
+    (('LGlobal id)
      vset-empty)
-    (('EConstr c args)
-     (vset-list-union (map (lambda (e) (expr-fv e env)) args)))
-    (('EGetfield e f)
+    (('LConst n)
+     vset-empty)
+    (('LBlock c args)
+     (exprs-fv args env))
+    (('LGetfield e f)
      (expr-fv e env))
-    (('ESetfield e1 e2)
+    (('LSetfield e1 e2)
      (vset-union (expr-fv e1 env) (expr-fv e2 env)))
-    (('ERecord args)
-     (vset-list-union (map (lambda (fe) (expr-fv (cdr fe) env)) args)))
-    (('ERecordwith e args)
-     (vset-union (expr-fv e env) (vset-list-union (map (lambda (fe) (expr-fv (cdr fe) env)) args))))
-    (('EApply f args)
-     (vset-union (expr-fv (list 'EVar f) env) (vset-list-union (map (lambda (e) (expr-fv (car e) env)) args))))
-    (('EIf e1 e2 e3)
+    ((or ('LApply f es) ('LTailApply f es))
+     (vset-union
+      (expr-fv (list 'LVar f) env)
+      (exprs-fv es env)))
+    (('LIf e1 e2 e3)
      (vset-union (expr-fv e1 env)
      (vset-union (expr-fv e2 env)
                  (expr-fv e3 env))))
-    (('EChain e1 e2)
+    (('LChain e1 e2)
      (vset-union (expr-fv e1 env) (expr-fv e2 env)))
-    (('EMatch e m)
-     (let* ((fv1 (expr-fv e env))
-            (lfv (map (lambda (b) (branch-fv b env)) m)))
-       (vset-union fv1 (vset-list-union lfv))))
-    (('ETry e m)
-        (let* ((fv1 (expr-fv e env))
-               (lfv (map (lambda (b) (branch-fv b env)) m)))
-          (vset-union fv1 (vset-list-union lfv))))
-    (('ELet rec-flag bindings body)
-     (if rec-flag
-         (let* ((nenv (fold fv-env-pat env (map car bindings))))
-           (vset-union (vset-list-union (map (lambda (b) (expr-fv (cdr b) nenv)) bindings)) (expr-fv body nenv)))
-         (match bindings
-           (#nil
-            (expr-fv body env))
-           (((p . e) . rest)
-            (expr-fv (list 'EMatch e (list (cons p (list 'ELet rec-flag rest body)))) env)))))
-    (('ELetOpen m e)
+    (('LSwitch e sw)
+       (vset-union
+        (expr-fv e env)
+        (switch-fv sw env)))
+    (('LCatch e1 v e2)
+       (vset-union
+        (expr-fv e1 env)
+        (expr-fv e2 (fv-env-low-var v env))))
+    (('LReraise e)
+     (expr-fv e env))
+    (('LLet v e body)
+     (vset-union
+      (expr-fv e env)
+      (expr-fv body (fv-env-low-var v env))))
+    (('LLetfun f args shape fun body)
+     (vset-union
+      (expr-fv fun (fv-env-low-vars args env))
+      (expr-fv body (fv-env-low-var f env))))
+    (('LLetrecfun bindings body)
+     (let* ((vars (map car bindings))
+            (funs (map cadddr bindings))
+            (rec-env (fv-env-low-vars vars env)))
+       (vset-union
+        (exprs-fv funs rec-env)
+        (expr-fv body rec-env))))
+    (('LLetOpen m e)
      (let* ((menv (env-get-module env m)))
        (expr-fv e (env-open env menv))))
-    (('ELambda args body)
-         (let ((pats (map arg-get-pat args)))
-           (expr-fv body (fold fv-env-pat env pats))))))
+  ))
 
-(define (expr-fv-binding expr env args)
-  (expr-fv expr (fold fv-env-var env args)))
+(define (exprs-fv exprs env)
+  (vset-list-union
+   (map (lambda (e) (expr-fv e env)) exprs)))
 
-(define (branch-fv b env)
-  (match-let (((p . e) b))
-    (expr-fv e (fv-env-pat p env))))
+(define (switch-fv sw env)
+  (match-let ((($ <switch> consts blocks default nums) sw))
+    (vset-list-union (append
+      (map (match-lambda
+            (($ <switch-const> tag rhs)
+             (expr-fv rhs env))
+         ) consts)
+      (map (match-lambda
+            (($ <switch-block> tag arity vars rhs)
+             (expr-fv rhs (fv-env-low-vars vars env)))
+        ) blocks)
+      (list ((match-lambda
+              (#nil vset-empty)
+              ((var . rhs) (expr-fv rhs (fv-env-var var env)))
+        ) default))
+  ))))
+
+(define (fv-env-low-vars vars env)
+  (fold fv-env-low-var env vars))
+
+(define (fv-env-low-var var env)
+  (if (null? var)
+    env
+    (fv-env-var var env)))
 
 (define (fv-env-var arg env)
   (env-replace-var env arg (mkvar (list 'VarGlobal "dummy") "dummy")))
-
-(define (fv-env-pat p env)
-  (match p
-   (('PWild)
-    env)
-   (('PVar v)
-    (fv-env-var v env))
-   (('PInt _)
-    env)
-   (('PConstr c l)
-    (fold fv-env-pat env l))))
-
 
 (define (range a b) (if (>= a b) #nil (cons a (range (+ a 1) b))))
 
@@ -1800,12 +1940,12 @@
 (define (make-nfv fv) (fold (lambda (name i nfv) (vhash-replace name i nfv)) vlist-null fv (range 0 (length fv))))
 
 (define (compile-fundef env stacksize args body)
-  (let* ((fv (fv-list (expr-fv-binding body env args)))
+  (let* ((fv (fv-list (expr-fv body (fv-env-low-vars args env))))
          (nfv (make-nfv fv))
          (lab1 (newlabel))
          (lab2 (newlabel))
          )
-    (compile-args env stacksize (map lid->evar fv))
+    (compile-args env stacksize (map lid->lvar fv))
     (bytecode-put-u32-le BRANCH)
     (bytecode-emit-labref lab1)
     (compile-fundef-body env args body nfv lab2 #nil #nil -1)
@@ -1823,14 +1963,14 @@
          (bodies (map cadddr funs))
          (fvenv (fold fv-env-var env names))
          (fv (fv-list (vset-list-union
-                       (map (lambda (body args) (expr-fv-binding body fvenv args)) bodies argss))))
+                (map (lambda (body args) (expr-fv body (fv-env-low-vars args fvenv))) bodies argss))))
          (nfv (make-nfv fv))
          (labs (map (lambda (_) (newlabel)) funs))
          (endlab (newlabel))
          (nenv (fold (lambda (name shape pos env) (localvar-with-shape env name (+ stacksize pos) shape))
                      env names shapes (range 0 numfuns)))
          )
-    (compile-args env stacksize (map lid->evar fv))
+    (compile-args env stacksize (map lid->lvar fv))
     (bytecode-put-u32-le BRANCH)
     (bytecode-emit-labref endlab)
     (for-each (lambda (args body lab pos)
@@ -1917,13 +2057,13 @@
                                       name (mkvar (list 'VarGlobal loc) shape)
                                       e))))
                          ) (env-get-vars env) bindings locations))
-                (nenv (env-with-vars env nenv-vars))
-                (tenv (if rec-flag nenv env)))
+           (nenv (env-with-vars env nenv-vars))
+           (tenv (if rec-flag nenv env)))
       (for-each (match-lambda* ((($ <def> name args body) loc)
                     ; (display "Compiling ") (display name) (newline)
                     (if (null? args)
-                        (compile-expr tenv 0 #f body)
-                        (match-let (((args shape body) (lower-function args body)))
+                        (compile-high-expr tenv #f body)
+                        (match-let* (((args shape body) (lower-function tenv args body)))
                           (compile-fundef tenv 0 args body)))
                     (if (not (null? loc))
                         (begin (bytecode-put-u32-le SETGLOBAL)
