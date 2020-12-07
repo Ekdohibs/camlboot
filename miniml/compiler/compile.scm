@@ -469,7 +469,7 @@
 
 (define (get-lident s)
   (let ((p (assoc s kw)))
-    (if p (cdr p) (cons 'LIDENT s))))
+    (if (pair? p) (cdr p) (cons 'LIDENT s))))
 
 (define (mktoken location tk) (make-lexical-token (car tk) location (cdr tk)))
 
@@ -563,7 +563,7 @@
 (define (get-operator name)
   (let ((p (assoc name operator-kw))
         (c (string-ref name 0)))
-    (cond (p (cdr p))
+    (cond ((pair? p) (cdr p))
           ((string-index "!~?" c) (cons 'PREFIXOP name))
           ((string-index "=<>|&$" c) (cons 'INFIXOP0 name))
           ((string-index "@^" c) (cons 'INFIXOP1 name))
