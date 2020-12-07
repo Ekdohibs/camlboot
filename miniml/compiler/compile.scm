@@ -843,7 +843,7 @@
         (put-u32 bytecode-output-port (cdr section))
      )) (reverse bytecode-sections))
     (put-u32 bytecode-output-port (length bytecode-sections))
-    (put-string bytecode-output-port "Caml1999X025")
+    (put-string bytecode-output-port "Caml1999X023")
     (close-output-port bytecode-output-port)
     (set! bytecode-output-port #nil)
     ))
