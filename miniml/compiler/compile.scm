@@ -1479,11 +1479,16 @@
            (cons (list 'PWild) (list 'LReraise (lid->evar var)))))))))
     (('ELet rec-flag bindings body)
        (if rec-flag
-         (list 'LLetrecfun bindings body)
+         (let ((bindings
+                (map (match-lambda
+                      ((('PVar v) . ('ELambda args fun)) (cons v (lower-function args fun)))
+                   ) bindings)))
+           (list 'LLetrecfun bindings body))
          ; HACK: sequential let!
          (fold-right (lambda (binding body) (match binding
            ((('PVar v) . (and e ('ELambda args fun)))
-            (list 'LLetfun v args fun body))
+            (match-let (((args shape fun) (lower-function args fun)))
+            (list 'LLetfun v args shape fun body)))
            ((('PVar v) . e)
             (list 'LLet v e body))
            ((('PWild) . e)
@@ -1492,9 +1497,17 @@
             (list 'EMatch e (list (cons p body)))))
         ) body bindings)))
     (('ELambda args fun)
-     (list 'LLetfun "lambda#" args fun (lid->evar "lambda#")))
+     (match-let (((args shape fun) (lower-function args fun)))
+      (list 'LLetfun  "lambda#" args shape fun (lid->evar "lambda#"))))
     (other other)
 ))
+
+(define (lower-function args body)
+  (let* ((arity (length args))
+         (shape (map arg-get-label args))
+         (arg-names (map lower-arg-name args (range 0 arity)))
+         (body (lower-fun-body args arg-names body)))
+    (list arg-names shape body)))
 
 (define (compile-expr env stacksize istail expr)
   (compile-low-expr env stacksize istail
@@ -1586,10 +1599,10 @@
     (('LLet var e body)
      (compile-expr env stacksize #f e)
      (compile-bind-var env stacksize istail var body))
-    (('LLetfun f args fun body)
+    (('LLetfun f args shape fun body)
      (compile-fundef env stacksize args fun)
      (compile-bind-var-with-shape
-      env stacksize istail f body (map arg-get-label args)))
+      env stacksize istail f body shape))
     (('LLetrecfun bindings body)
      (let* ((nenv (compile-recfundefs env stacksize bindings)))
        (compile-expr nenv (+ stacksize (length bindings)) istail body)
@@ -1706,16 +1719,16 @@
 
 (define (range a b) (if (>= a b) #nil (cons a (range (+ a 1) b))))
 
-(define (get-fun-body args arg-names basebody)
+(define (lower-fun-body args arg-names basebody)
   (fold-right (lambda (arg name body) (match arg
      (($ <arg> pat ('Optional label) ('Some default))
-      (compile-arg-default label default body))
+      (lower-arg-default label default body))
      (($ <arg> pat _ ('None))
-      (compile-arg-pat pat name body))))
+      (lower-arg-pat pat name body))))
    basebody args arg-names))
 
-(define (compile-fundef-body env arg-names body nfv lab recvars recshapes recoffset)
-  (let* ((arity (length arg-names))
+(define (compile-fundef-body env args body nfv lab recvars recshapes recoffset)
+  (let* ((arity (length args))
          (envoff (* rec-closure-step (- (- (length recvars) 1) recoffset)))
          (mvars (bindings-filter-map
                  (lambda (name v)
@@ -1732,12 +1745,12 @@
                          (mkvar (list 'VarRec (* rec-closure-step (- i recoffset))) shape)
                          vs))
                       mvars recvars recshapes (range 0 (length recvars))))
-         (nvars (fold (lambda (arg-name i vs)
+         (nvars (fold (lambda (arg i vs)
                         (bindings-replace
-                         arg-name
+                         arg
                          (mkvar (list 'VarStack (- (- arity 1) i)) #nil)
                          vs))
-                      rvars arg-names (range 0 arity)))
+                      rvars args (range 0 arity)))
          (nenv (env-with-vars env nvars))
          )
     (assert (> arity 0))
@@ -1753,11 +1766,8 @@
 (define (fv-list fv) (map car (vlist->list fv)))
 (define (make-nfv fv) (fold (lambda (name i nfv) (vhash-replace name i nfv)) vlist-null fv (range 0 (length fv))))
 
-(define (compile-fundef env stacksize args basebody)
-  (let* ((arity (length args))
-         (arg-names (map compile-arg-name args (range 0 arity)))
-         (body (get-fun-body args arg-names basebody))
-         (fv (fv-list (expr-fv-binding body env arg-names)))
+(define (compile-fundef env stacksize args body)
+  (let* ((fv (fv-list (expr-fv-binding body env args)))
          (nfv (make-nfv fv))
          (lab1 (newlabel))
          (lab2 (newlabel))
@@ -1765,7 +1775,7 @@
     (compile-args env stacksize (map lid->evar fv))
     (bytecode-put-u32-le BRANCH)
     (bytecode-emit-labref lab1)
-    (compile-fundef-body env arg-names body nfv lab2 #nil #nil -1)
+    (compile-fundef-body env args body nfv lab2 #nil #nil -1)
     (bytecode-emit-label lab1)
     (bytecode-put-u32-le CLOSURE)
     (bytecode-put-u32-le (length fv))
@@ -1774,15 +1784,13 @@
 
 (define (compile-recfundefs env stacksize funs)
   (let* ((numfuns (length funs))
-         (names (map (match-lambda ((('PVar name) . _) name) (_ (assert #f))) funs))
-         (args (map (match-lambda ((_ . ('ELambda args _)) args) (_ (assert #f))) funs))
-         (shapes (map (lambda (arg) (map arg-get-label arg)) args))
-         (basebodies (map (match-lambda ((_ . ('ELambda _ body)) body) (_ (assert #f))) funs))
-         (arg-names (map (lambda (arg) (map compile-arg-name arg (range 0 (length arg)))) args))
-         (bodies (map get-fun-body args arg-names basebodies))
+         (names  (map car funs))
+         (argss  (map cadr funs))
+         (shapes (map caddr funs))
+         (bodies (map cadddr funs))
          (fvenv (fold fv-env-var env names))
          (fv (fv-list (vset-list-union
-                       (map (lambda (body arg-name) (expr-fv-binding body fvenv arg-name)) bodies arg-names))))
+                       (map (lambda (body args) (expr-fv-binding body fvenv args)) bodies argss))))
          (nfv (make-nfv fv))
          (labs (map (lambda (_) (newlabel)) funs))
          (endlab (newlabel))
@@ -1792,9 +1800,9 @@
     (compile-args env stacksize (map lid->evar fv))
     (bytecode-put-u32-le BRANCH)
     (bytecode-emit-labref endlab)
-    (for-each (lambda (arg-name body lab pos)
-                (compile-fundef-body env arg-name body nfv lab names shapes pos))
-              arg-names bodies labs (range 0 numfuns))
+    (for-each (lambda (args body lab pos)
+                (compile-fundef-body env args body nfv lab names shapes pos))
+              argss bodies labs (range 0 numfuns))
     (bytecode-emit-label endlab)
     (bytecode-put-u32-le CLOSUREREC)
     (bytecode-put-u32-le numfuns)
@@ -1804,21 +1812,21 @@
     nenv
   ))
 
-(define (compile-arg-name a i)
+(define (lower-arg-name a i)
   (match (arg-get-pat a)
      (('PVar v)
       v)
      (_
       (string-append "arg#" (number->string i)))))
 
-(define (compile-arg-default name default body)
+(define (lower-arg-default name default body)
   (let* ((noneline (cons (lid->pconstr "None" #nil) default))
          (someline (cons (lid->pconstr "Some" (list (lid->pvar name)))
                          (lid->evar name)))
          (default-expr (list 'EMatch (lid->evar name) (list noneline someline))))
     (list 'ELet #f (list (cons (lid->pvar name) default-expr)) body)))
 
-(define (compile-arg-pat pat name body)
+(define (lower-arg-pat pat name body)
   (match pat
    (('PVar _)
     body)
@@ -1891,10 +1899,11 @@
    (('MLet rec-flag bindings)
     (let* ((locations (map (lambda (def) (if (equal? (def-get-name def) "_") #nil (slot-for-global))) bindings))
            (nenv-vars (fold (match-lambda* ((($ <def> name args body) loc e)
-                             (if (equal? name "_") e
-                                 (bindings-replace
-                                    name (mkvar (list 'VarGlobal loc) (map arg-get-label args))
-                                    e)))
+                             (let ((shape (map arg-get-label args)))
+                               (if (equal? name "_") e
+                                   (bindings-replace
+                                      name (mkvar (list 'VarGlobal loc) shape)
+                                      e))))
                          ) (env-get-vars env) bindings locations))
                 (nenv (env-with-vars env nenv-vars))
                 (tenv (if rec-flag nenv env)))
@@ -1902,7 +1911,8 @@
                     ; (display "Compiling ") (display name) (newline)
                     (if (null? args)
                         (compile-expr tenv 0 #f body)
-                        (compile-fundef tenv 0 args body))
+                        (match-let (((args shape body) (lower-function args body)))
+                          (compile-fundef tenv 0 args body)))
                     (if (not (null? loc))
                         (begin (bytecode-put-u32-le SETGLOBAL)
                                (bytecode-put-u32-le loc)))
