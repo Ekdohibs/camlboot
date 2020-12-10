@@ -1509,6 +1509,35 @@
          (body (lower-fun-body args arg-names body)))
     (list arg-names shape body)))
 
+(define (lower-fun-body args arg-names basebody)
+  (fold-right (lambda (arg name body) (match arg
+     (($ <arg> pat ('Optional label) ('Some default))
+      (lower-arg-default label default body))
+     (($ <arg> pat _ ('None))
+      (lower-arg-pat pat name body))))
+   basebody args arg-names))
+
+(define (lower-arg-name a i)
+  (match (arg-get-pat a)
+     (('PVar v)
+      v)
+     (_
+      (string-append "arg#" (number->string i)))))
+
+(define (lower-arg-default name default body)
+  (let* ((noneline (cons (lid->pconstr "None" #nil) default))
+         (someline (cons (lid->pconstr "Some" (list (lid->pvar name)))
+                         (lid->evar name)))
+         (default-expr (list 'EMatch (lid->evar name) (list noneline someline))))
+    (list 'ELet #f (list (cons (lid->pvar name) default-expr)) body)))
+
+(define (lower-arg-pat pat name body)
+  (match pat
+   (('PVar _)
+    body)
+   (_
+    (list 'EMatch (lid->evar name) (list (cons pat body))))))
+
 (define (compile-expr env stacksize istail expr)
   (compile-low-expr env stacksize istail
     (lower-expr env istail expr)))
@@ -1719,14 +1748,6 @@
 
 (define (range a b) (if (>= a b) #nil (cons a (range (+ a 1) b))))
 
-(define (lower-fun-body args arg-names basebody)
-  (fold-right (lambda (arg name body) (match arg
-     (($ <arg> pat ('Optional label) ('Some default))
-      (lower-arg-default label default body))
-     (($ <arg> pat _ ('None))
-      (lower-arg-pat pat name body))))
-   basebody args arg-names))
-
 (define (compile-fundef-body env args body nfv lab recvars recshapes recoffset)
   (let* ((arity (length args))
          (envoff (* rec-closure-step (- (- (length recvars) 1) recoffset)))
@@ -1811,27 +1832,6 @@
       (for-each (lambda (lab) (bytecode-emit-labref-with-pos lab basepos)) labs))
     nenv
   ))
-
-(define (lower-arg-name a i)
-  (match (arg-get-pat a)
-     (('PVar v)
-      v)
-     (_
-      (string-append "arg#" (number->string i)))))
-
-(define (lower-arg-default name default body)
-  (let* ((noneline (cons (lid->pconstr "None" #nil) default))
-         (someline (cons (lid->pconstr "Some" (list (lid->pvar name)))
-                         (lid->evar name)))
-         (default-expr (list 'EMatch (lid->evar name) (list noneline someline))))
-    (list 'ELet #f (list (cons (lid->pvar name) default-expr)) body)))
-
-(define (lower-arg-pat pat name body)
-  (match pat
-   (('PVar _)
-    body)
-   (_
-    (list 'EMatch (lid->evar name) (list (cons pat body))))))
 
 (define empty-numtags (cons 0 0))
 (define (numtags-next arity numtags)
