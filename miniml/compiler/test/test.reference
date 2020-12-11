@@ -1,0 +1,30 @@
+
+Type declarations
+Hello, world!
+Arithmetic:
+ 42 29 2 6 1 1 1 7 6 14 3 3 4611686018427387903 4611686018427387903 -1
+Functions:
+ 3 3 3 42 42 65536 42 17 42 42 45 20 25 17 42 10 9 8 7 6 5 4 3 2 1
+Pattern-matching:
+ 2 3 4 5
+Lists:
+[ 1 2 3 4 5 6 7 8 9][ 2 3 4 5 6 7 8 9 10][ 2 4 6]
+Arguments:
+ 2 2 2 201 203 205 206 208 1 2 3 4 0 1 2 3
+Records:
+ 5 7 7 5 5 7 42 7 5 16
+Exceptions:
+ ok ok ok ok ok ok ok ok ok E1 (E2 7) <unknown> <unknown>
+let open:
+ 42 42 42
+Infix operators treated as sugar:
+ 2 3
+Externally raised exceptions:
+0[4 "compare: functional value"] Invalid_argument "compare: functional value"
+0[3 "int_of_string"] Failure "int_of_string"
+7 Not_found
+9 Stack overflow
+6 Division_by_zero
+
+Functors:
+ only once 42 24 ok

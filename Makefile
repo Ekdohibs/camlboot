@@ -1,6 +1,7 @@
 BOOT=_boot
 OCAMLSRC=ocaml-src
 CONFIG=$(OCAMLSRC)/config/Makefile
+OCAMLRUN=_boot/byterun/ocamlrun
 
 .PHONY: configure-ocaml
 configure-ocaml:
@@ -80,6 +81,11 @@ COPY_TARGETS=\
 .PHONY: copy
 copy: $(COPY_TARGETS)
 
+.PHONY: ocamlrun
+ocamlrun: $(OCAMLRUN)
+
+$(OCAMLRUN): $(BOOT)/byterun
+
 $(BOOT)/ocamlc: $(COPY_TARGETS)
 	make -C $(OCAMLSRC)/yacc all
 	make -C miniml/compiler miniml
@@ -87,3 +93,11 @@ $(BOOT)/ocamlc: $(COPY_TARGETS)
 	cd $(BOOT)/stdlib && ../../compile_stdlib.sh
 	mkdir -p $(BOOT)/compilerlibs
 	cd $(BOOT) && ../compile_ocamlc.sh
+
+.PHONY: test-compiler
+test-compiler: $(OCAMLRUN)
+	make -s -C miniml/compiler/test all OCAMLRUN=../../../$(OCAMLRUN)
+
+.PHONY: test-compiler-promote
+test-compiler-promote: $(OCAMLRUN)
+	make -C miniml/compiler/test promote OCAMLRUN=../../../$(OCAMLRUN)
