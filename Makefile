@@ -96,7 +96,7 @@ $(BOOT)/ocamlc: $(COPY_TARGETS)
 
 .PHONY: test-compiler
 test-compiler: $(OCAMLRUN)
-	make -s -C miniml/compiler/test all OCAMLRUN=../../../$(OCAMLRUN)
+	make -C miniml/compiler/test all OCAMLRUN=../../../$(OCAMLRUN)
 
 .PHONY: test-compiler-promote
 test-compiler-promote: $(OCAMLRUN)

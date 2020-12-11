@@ -1,4 +1,3 @@
-OCAMLRUN_CMD=$(or $(OCAMLRUN),$(error $(ERRMSG)))
 define ERRMSG
 Fatal error:
 This Makefile depends on an OCAMLRUN variable pointing to an
@@ -16,22 +15,45 @@ make OCAMLRUN=../../../_boot/byterun/ocamlrun
 
 endef
 
-
+OCAMLRUN_CMD=$(or $(OCAMLRUN),$(error $(ERRMSG)))
 COMPILE_CMD=GUILE_WARN_DEPRECATED=detailed guile ../compile.scm
 COMPILE_DEPS=../compile.scm
 
+TESTS=\
+	empty \
+	arith \
+	functions \
+	patterns \
+	lists \
+	labels \
+	records \
+	exceptions \
+	let_open \
+	infix_sugar \
+	functors \
+	external_exceptions
+
 .PHONY: all
-all:
-	$(MAKE) clean
-	$(MAKE) test.output
-	diff -u --report-identical-files test.{reference,output}
+all: $(addprefix test-,$(TESTS))
 
-test.output: $(COMPILE_DEPS) test.ml
-	$(COMPILE_CMD) test.ml -o test.byte
-	$(OCAMLRUN_CMD) test.byte > test.output
+.PHONY: promote
+promote: $(addprefix promote-,$(TESTS))
 
-promote: test.output
-	cp test.output test.reference
-
+.PHONY: clean
 clean:
-	rm -f test.byte test.output
+	rm -f *.byte *.output *.info
+
+test-%: %.byte %.output
+	diff -u --report-identical-files $*.output.reference $*.output
+
+promote-%: %.byte %.output
+	cp $*.output $*.output.reference
+
+.PHONY: always-rerun
+always-rerun:
+
+%.byte: always-rerun %.ml $(COMPILE_DEPS) lib.ml
+	$(COMPILE_CMD) lib.ml --open Lib $*.ml -o $*.byte
+
+%.output: always-rerun %.byte
+	$(OCAMLRUN_CMD) $*.byte > $*.output

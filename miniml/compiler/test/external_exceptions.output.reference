@@ -1,0 +1,7 @@
+Externally raised exceptions:
+0[4 "compare: functional value"] Invalid_argument "compare: functional value"
+0[3 "int_of_string"] Failure "int_of_string"
+7 Not_found
+9 Stack overflow
+6 Division_by_zero
+
