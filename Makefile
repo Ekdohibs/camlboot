@@ -1,7 +1,9 @@
 BOOT=_boot
 OCAMLSRC=ocaml-src
+CONFIG=$(OCAMLSRC)/config/Makefile
 
-configure-ocaml: $(OCAMLSRC)
+.PHONY: configure-ocaml
+configure-ocaml:
 	cd $(OCAMLSRC) && bash configure
 	make -C $(OCAMLSRC) ocamlyacc && cp $(OCAMLSRC)/yacc/ocamlyacc $(OCAMLSRC)/boot 
 	make -C $(OCAMLSRC)/stdlib sys.ml
@@ -11,7 +13,17 @@ configure-ocaml: $(OCAMLSRC)
 	make -C $(OCAMLSRC) bytecomp/runtimedef.ml
 	make -C $(OCAMLSRC) CAMLLEX=ocamllex CAMLRUN=ocamlrun CAMLC=ocamlc bytecomp/opcodes.ml
 
-$(BOOT)/driver: $(OCAMLSRC)/driver $(OCAMLSRC)/otherlibs/dynlink configure-ocaml
+.PHONY: clean-ocaml-config
+clean-ocaml-config:
+	cd $(OCAMLSRC) && make distclean
+
+# this dependency is fairly coarse-grained, so feel free to
+# use clean-ocaml-config if make a small change to $(OCAMLSRC)
+# that you believe does require re-configuring.
+$(CONFIG): $(OCAMLSRC)/VERSION
+	make configure-ocaml
+
+$(BOOT)/driver: $(OCAMLSRC)/driver $(OCAMLSRC)/otherlibs/dynlink $(CONFIG)
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
@@ -19,36 +31,36 @@ $(BOOT)/driver: $(OCAMLSRC)/driver $(OCAMLSRC)/otherlibs/dynlink configure-ocaml
 	grep -v 'REMOVE_ME for ../../debugger/dynlink.ml' \
 	     $(OCAMLSRC)/otherlibs/dynlink/dynlink.ml > $@/compdynlink.mlbyte
 
-$(BOOT)/byterun: $(OCAMLSRC)/byterun configure-ocaml
+$(BOOT)/byterun: $(OCAMLSRC)/byterun $(CONFIG)
 	make -C $(OCAMLSRC)/byterun all
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
 
-$(BOOT)/bytecomp: $(OCAMLSRC)/bytecomp configure-ocaml
+$(BOOT)/bytecomp: $(OCAMLSRC)/bytecomp $(CONFIG)
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
 
-$(BOOT)/typing: $(OCAMLSRC)/typing configure-ocaml
+$(BOOT)/typing: $(OCAMLSRC)/typing $(CONFIG)
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
 
-$(BOOT)/parsing: $(OCAMLSRC)/parsing configure-ocaml patches/parsetree.patch
+$(BOOT)/parsing: $(OCAMLSRC)/parsing $(CONFIG) patches/parsetree.patch
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
 	patch $(BOOT)/parsing/parsetree.mli patches/parsetree.patch
 
-$(BOOT)/utils: $(OCAMLSRC)/utils configure-ocaml patches/disable-profiling.patch
+$(BOOT)/utils: $(OCAMLSRC)/utils $(CONFIG) patches/disable-profiling.patch
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
 	cp $(BOOT)/utils/profile.ml $(BOOT)/utils/profile.ml.noprof
 	patch $(BOOT)/utils/profile.ml.noprof patches/disable-profiling.patch
 
-$(BOOT)/stdlib: $(OCAMLSRC)/stdlib configure-ocaml patches/compflags.patch
+$(BOOT)/stdlib: $(OCAMLSRC)/stdlib $(CONFIG) patches/compflags.patch
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
@@ -56,9 +68,19 @@ $(BOOT)/stdlib: $(OCAMLSRC)/stdlib configure-ocaml patches/compflags.patch
 	awk -f $(BOOT)/stdlib/expand_module_aliases.awk < $(BOOT)/stdlib/stdlib.mli > $(BOOT)/stdlib/stdlib.pp.mli
 	awk -f $(BOOT)/stdlib/expand_module_aliases.awk < $(BOOT)/stdlib/stdlib.ml > $(BOOT)/stdlib/stdlib.pp.ml
 
-copy: $(BOOT)/driver $(BOOT)/bytecomp $(BOOT)/byterun $(BOOT)/typing $(BOOT)/parsing $(BOOT)/utils $(BOOT)/stdlib
+COPY_TARGETS=\
+	$(BOOT)/bytecomp \
+	$(BOOT)/byterun \
+	$(BOOT)/driver \
+	$(BOOT)/parsing \
+	$(BOOT)/stdlib \
+	$(BOOT)/typing \
+	$(BOOT)/utils
 
-$(BOOT)/ocamlc: copy
+.PHONY: copy
+copy: $(COPY_TARGETS)
+
+$(BOOT)/ocamlc: $(COPY_TARGETS)
 	make -C $(OCAMLSRC)/yacc all
 	make -C miniml/compiler miniml
 	make -C miniml/interp interp
