@@ -1,6 +1,7 @@
 (use-modules (system base lalr)
              (srfi srfi-1) (srfi srfi-9 gnu)
              (rnrs base)
+             (ice-9 q)
              (ice-9 binary-ports) (ice-9 vlist) (ice-9 match))
 
 
@@ -46,7 +47,14 @@
 (define (mkfunctor args body)
   (fold-right (lambda (arg b) (list 'MEFunctor arg b)) body args))
 
-(define ml-parser
+; note: ml-parser is a procedure rather than a variable, because we were not able
+; to call the same lalr-parser on several input files in a reliable way.
+; (There is no documentation about this, or in general very little
+; documentation about lalr-parser.) The bug we would observe
+; is that calling (ml-parser lexer errorp) a second time after changing
+; the default input port would return an empty document. There seems
+; to be some per-parser global state that we don't know how to (re)initialize.
+(define (ml-parser)
   (lalr-parser
    (expect: 0)
    ;; Token definitions
@@ -1996,7 +2004,23 @@
 (declare-builtin-exn "Assert_failure" 1)
 (declare-builtin-exn "Undefined_recursive_module" 1)
 
-(define input-file "")
+(define (parse-input-file file)
+  (call-with-input-file file (lambda (port)
+    (set-current-input-port port)
+    ((ml-parser) (lambda () (token errorp)) errorp))))
+
+(define (input-file->module-name file)
+  (string-capitalize (basename file ".ml")))
+
+(define (parse-files input-files)
+  (map (lambda (file)
+       (list
+        'MModule
+        (input-file->module-name file)
+        (list 'MEStruct (parse-input-file file)))
+     ) input-files))
+
+(define input-files-q (make-q))
 (define output-file "out.byte")
 (define (usage-and-exit)
   (display "Usage: guile compile.scm input.ml -o output\n")
@@ -2007,13 +2031,14 @@
          (#nil '())
          (("-h" . rest) (usage-and-exit))
          (("-o" outfile . rest) (set! output-file outfile) (process-args rest))
-         ((infile . rest) (set! input-file infile) (process-args rest))
+         ((infile . rest) (enq! input-files-q infile) (process-args rest))
   ))
 (if (null? (cdr (program-arguments))) (usage-and-exit))
 (process-args (cdr (program-arguments)))
 
-(set-current-input-port (open-input-file input-file))
-(define prog (ml-parser (lambda () (token errorp)) errorp))
+(define (queue->list q)
+  (unfold q-empty? deq! (lambda (q) q) q))
+(define prog (parse-files (queue->list input-files-q)))
 
 (bytecode-open-output output-file)
 
