@@ -1,5 +1,5 @@
 19,20c19
 <       echo ' -nopervasives -no-alias-deps -w -49' \
-<            ' -pp "$AWK -f expand_module_aliases.awk"';;
+<            ' -pp "$AWK -f ./expand_module_aliases.awk"';;
 ---
 >       echo ' -nopervasives -no-alias-deps -w -49';;
