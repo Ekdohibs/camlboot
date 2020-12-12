@@ -25,7 +25,7 @@
 (define (mknolabelfun arg) (mkarg arg (list 'Nolabel) (list 'None)))
 
 (define (lid->evar v) (list 'EVar (list 'Lident v)))
-(define (lid->lvar v) (list 'LVar (list 'Lident v)))
+(define (lid->lvar v) (list 'LVar v))
 (define (lid->pvar v) (list 'PVar v))
 (define (lid->econstr v args) (list 'EConstr (list 'Lident v) args))
 (define (lid->pconstr v args) (list 'PConstr (list 'Lident v) args))
@@ -1152,9 +1152,7 @@
     (('VarRec pos)
      (bytecode-put-u32-le OFFSETCLOSURE)
      (bytecode-put-u32-le pos))
-    (('VarGlobal id)
-     (bytecode-put-u32-le GETGLOBAL)
-     (bytecode-put-u32-le id))))
+  ))
 
 (define (adjust-econstr-args args arity)
   (cond ((and (= arity 1) (> (length args) 1))
@@ -1430,7 +1428,14 @@
   (let ((lower-tail (lambda (e) (lower-expr env istail e)))
         (lower-notail (lambda (e) (lower-expr env #f e))))
   (match expr
-    (('EVar ld) (list 'LVar ld))
+    (('EVar ld)
+     (match (var-get-location (env-get-var env ld))
+        (('VarLocal v)
+         (assert (equal? ld (list 'Lident v)))
+         (list 'LVar v))
+        (('VarGlobal id)
+         (list 'LGlobal id))
+      ))
     (('EConstant c)
      (match c
        (('CInt n)
@@ -1680,7 +1685,7 @@
   ; (display expr)(newline)
   (match expr
     (('LVar v)
-     (access-var (var-get-location (env-get-var env v)) stacksize))
+     (access-var (var-get-location (env-get-var env (list 'Lident v))) stacksize))
     (('LGlobal id)
      (bytecode-put-u32-le GETGLOBAL)
      (bytecode-put-u32-le id))
@@ -1809,12 +1814,10 @@
 (define (expr-fv expr env)
   (match expr
     (('LVar v)
-     (let* ((loc (var-get-location (env-get-var env v))))
-       (if (equal? (car loc) 'VarGlobal)
-           vset-empty
-           (begin
-             (assert (equal? (car v) 'Lident))
-             (vset-singleton (car (cdr v)))))))
+     (match (var-get-location (env-get-var env (list 'Lident v)))
+       (('VarBound) vset-empty)
+       (_ (vset-singleton v))
+     ))
     (('LGlobal id)
      vset-empty)
     (('LConst n)
@@ -1895,7 +1898,7 @@
     (fv-env-var var env)))
 
 (define (fv-env-var arg env)
-  (env-replace-var env arg (mkvar (list 'VarGlobal "dummy") "dummy")))
+  (env-replace-var env arg (mkvar (list 'VarBound) "dummy")))
 
 (define (range a b) (if (>= a b) #nil (cons a (range (+ a 1) b))))
 
