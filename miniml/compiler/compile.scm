@@ -5,6 +5,8 @@
              (ice-9 binary-ports) (ice-9 vlist) (ice-9 match))
 
 
+(define error-code-syntax 3)
+
 (define-immutable-record-type <def>
   (mkdef_ name args body)
   def?
@@ -682,7 +684,8 @@
                         (display (+ 1 column))
                         (display ")")))))))
         (for-each display args))
-    (newline))))
+    (newline)
+    (exit error-code-syntax))))
 
 (define bytecode-output-port #nil)
 (define bytecode-sections #nil)
