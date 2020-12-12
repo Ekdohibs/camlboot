@@ -4,18 +4,19 @@ This Makefile depends on an OCAMLRUN variable pointing to an
 ocamlrun binary compatible with the bytecode produced by the
 compiler.
 
+Running 'make ocamlrun' at the root of this repository will
+populate ../../_boot/byterun with a compatible 'ocamlrun',
+which is used by default.
+
 A standard way to invoke this testsuite is by using the
-'test-compiler' target of the root makefile, which defines OCAMLRUN
-automatically, using the ocamlrun of ocaml-src in _boot/.
-
-If you have already run 'make ocamlrun' at the root, you may use the following:
-
-make OCAMLRUN=../../../_boot/byterun/ocamlrun
-
-
+'test-compiler' target of the root makefile.
 endef
 
-OCAMLRUN_CMD=$(or $(OCAMLRUN),$(error $(ERRMSG)))
+OCAMLRUN?=../../../_boot/byterun/ocamlrun
+ifeq "$(wildcard $(OCAMLRUN))" ""
+$(error $(ERRMSG))
+endif
+
 COMPILE_CMD=GUILE_WARN_DEPRECATED=detailed guile ../compile.scm
 COMPILE_DEPS=../compile.scm
 
@@ -56,4 +57,4 @@ always-rerun:
 	$(COMPILE_CMD) lib.ml --open Lib $*.ml -o $*.byte
 
 %.output: always-rerun %.byte
-	$(OCAMLRUN_CMD) $*.byte > $*.output
+	$(OCAMLRUN) $*.byte > $*.output
