@@ -2012,15 +2012,15 @@
 (define (input-file->module-name file)
   (string-capitalize (basename file ".ml")))
 
-(define (parse-files input-files)
-  (map (lambda (file)
-       (list
-        'MModule
-        (input-file->module-name file)
-        (list 'MEStruct (parse-input-file file)))
-     ) input-files))
+(define (parse-phrases input-phrases)
+  (map (match-lambda
+     (('Module modname file)
+       (list 'MModule modname (list 'MEStruct (parse-input-file file))))
+     (('Open modname)
+       (list 'MOpen (list 'Lident modname)))
+     ) input-phrases))
 
-(define input-files-q (make-q))
+(define input-phrases-q (make-q))
 (define output-file "out.byte")
 (define (usage-and-exit)
   (display "Usage: guile compile.scm input.ml -o output\n")
@@ -2030,15 +2030,22 @@
   (match args
          (#nil '())
          (("-h" . rest) (usage-and-exit))
-         (("-o" outfile . rest) (set! output-file outfile) (process-args rest))
-         ((infile . rest) (enq! input-files-q infile) (process-args rest))
+         (("-o" outfile . rest)
+          (set! output-file outfile)
+          (process-args rest))
+         (("--open" modname . rest)
+          (enq! input-phrases-q (list 'Open modname))
+          (process-args rest))
+         ((infile . rest)
+          (enq! input-phrases-q (list 'Module (input-file->module-name infile) infile))
+          (process-args rest))
   ))
 (if (null? (cdr (program-arguments))) (usage-and-exit))
 (process-args (cdr (program-arguments)))
 
 (define (queue->list q)
   (unfold q-empty? deq! (lambda (q) q) q))
-(define prog (parse-files (queue->list input-files-q)))
+(define prog (parse-phrases (queue->list input-phrases-q)))
 
 (bytecode-open-output output-file)
 
