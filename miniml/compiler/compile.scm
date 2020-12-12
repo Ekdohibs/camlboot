@@ -685,6 +685,7 @@
                         (display ")")))))))
         (for-each display args))
     (newline)
+    (backtrace)
     (exit error-code-syntax))))
 
 (define bytecode-output-port #nil)
