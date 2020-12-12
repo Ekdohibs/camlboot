@@ -44,11 +44,13 @@ promote: $(addprefix promote-,$(TESTS))
 clean:
 	rm -f *.byte *.output *.info
 
-test-%: %.byte %.output
+test-%: %.byte %.output %.info
 	diff -u --report-identical-files $*.output.reference $*.output
+	diff -u --report-identical-files $*.info.reference $*.info
 
-promote-%: %.byte %.output
+promote-%: %.byte %.output %.info
 	cp $*.output $*.output.reference
+	cp $*.info $*.info.reference
 
 .PHONY: always-rerun
 always-rerun:
@@ -58,3 +60,7 @@ always-rerun:
 
 %.output: always-rerun %.byte
 	$(OCAMLRUN) $*.byte > $*.output
+
+%.info: always-rerun %.byte
+	rm -f $*.info
+	stat --printf="Bytecode size: %7s bytes\n" $*.byte >> $*.info
