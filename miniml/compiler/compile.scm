@@ -1515,8 +1515,20 @@
         ) default)))
    (mkswitch consts blocks default nums)))
 
+(define-immutable-record-type <compenv>
+  (mkcompenv vars)
+  compenv?
+  (vars compenv-get-vars compenv-with-vars))
+
+(define compenv-empty (mkcompenv vlist-null))
+(define (compenv-replace-var env k v)
+  (compenv-with-vars env (vhash-replace k v (compenv-get-vars env))))
+(define (compenv-get-var env var)
+  (match (vhash-assoc var (compenv-get-vars env))
+     ((_ . pos) pos)))
+
 (define (compile-high-expr env istail expr)
-  (compile-expr env 0
+  (compile-expr compenv-empty 0
     (lower-expr env istail expr)))
 
 (define (compile-expr env stacksize expr)
@@ -1527,7 +1539,7 @@
   ; (display expr)(newline)
   (match expr
     (('LVar v)
-     (access-var (var-get-location (env-get-var env (list 'Lident v))) stacksize))
+     (access-var (compenv-get-var env v) stacksize))
     (('LGlobal id)
      (bytecode-put-u32-le GETGLOBAL)
      (bytecode-put-u32-le id))
@@ -1631,15 +1643,15 @@
 
 (define (compile-args env stacksize l) (compile-expr-list env stacksize (reverse l)))
 
-(define (localvar env var pos)
-  (env-replace-var env var (mkvar (list 'VarStack pos) #nil)))
+(define (stack-var env var pos)
+  (compenv-replace-var env var (list 'VarStack pos)))
 
 (define (compile-bind-fields env stacksize vars e)
   (match-let (((i j env) (fold
              (match-lambda* ((var (i j env))
                (if (null? var)
                    (list (+ i 1) j env)
-                   (let* ((nenv (localvar env var (+ stacksize j))))
+                   (let* ((nenv (stack-var env var (+ stacksize j))))
                      (bytecode-put-u32-le ACC)
                      (bytecode-put-u32-le j)
                      (bytecode-put-u32-le GETFIELD)
@@ -1657,7 +1669,7 @@
       (compile-expr env stacksize e)
       (begin
         (bytecode-put-u32-le PUSH)
-        (compile-expr (localvar env var stacksize) (+ stacksize 1) e)
+        (compile-expr (stack-var env var stacksize) (+ stacksize 1) e)
         (bytecode-put-u32-le POP)
         (bytecode-put-u32-le 1))))
 
@@ -1668,7 +1680,7 @@
         (bytecode-put-u32-le 1)
         (compile-expr env (- stacksize 1) e))
       (begin
-        (compile-expr (localvar env var (- stacksize 1)) stacksize e)
+        (compile-expr (stack-var env var (- stacksize 1)) stacksize e)
         (bytecode-put-u32-le POP)
         (bytecode-put-u32-le 1))))
 
@@ -1884,28 +1896,26 @@
 (define (compile-fundef-body env args body nfv lab recvars recoffset)
   (let* ((arity (length args))
          (envoff (* rec-closure-step (- (- (length recvars) 1) recoffset)))
-         (mvars (bindings-filter-map
+         (mvars (vhash-filter-map
                  (lambda (name v)
-                   (if (equal? (car (var-get-location v)) 'VarGlobal)
-                       v
-                       (let ((r (vhash-assoc name nfv)))
-                         (if (pair? r)
-                             (mkvar (list 'VarEnv (+ envoff (cdr r))) #nil)
-                             #f))))
-                 (env-get-vars env)))
+                   (let ((r (vhash-assoc name nfv)))
+                     (if (pair? r)
+                         (list 'VarEnv (+ envoff (cdr r)))
+                         #f)))
+                 (compenv-get-vars env)))
          (rvars (fold (lambda (rec-name i vs)
-                        (bindings-replace
+                        (vhash-replace
                          rec-name
-                         (mkvar (list 'VarRec (* rec-closure-step (- i recoffset))) #nil)
+                         (list 'VarRec (* rec-closure-step (- i recoffset)))
                          vs))
                       mvars recvars (range 0 (length recvars))))
          (nvars (fold (lambda (arg i vs)
-                        (bindings-replace
+                        (vhash-replace
                          arg
-                         (mkvar (list 'VarStack (- (- arity 1) i)) #nil)
+                         (list 'VarStack (- (- arity 1) i))
                          vs))
                       rvars args (range 0 arity)))
-         (nenv (env-with-vars env nvars))
+         (nenv (compenv-with-vars env nvars))
          )
     (assert (> arity 0))
     (bytecode-put-u32-le RESTART)
@@ -1947,7 +1957,7 @@
          (nfv (make-nfv fv))
          (labs (map (lambda (_) (newlabel)) funs))
          (endlab (newlabel))
-         (nenv (fold (lambda (name pos env) (localvar env name (+ stacksize pos)))
+         (nenv (fold (lambda (name pos env) (stack-var env name (+ stacksize pos)))
                      env names (range 0 numfuns)))
          )
     (compile-args env stacksize (map lid->lvar fv))
@@ -2044,7 +2054,7 @@
                     (if (null? args)
                         (compile-high-expr tenv #f body)
                         (match-let* (((args shape body) (lower-function tenv args body)))
-                          (compile-fundef tenv 0 args body)))
+                          (compile-fundef compenv-empty 0 args body)))
                     (if (not (null? loc))
                         (begin (bytecode-put-u32-le SETGLOBAL)
                                (bytecode-put-u32-le loc)))
