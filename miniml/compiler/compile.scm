@@ -1380,9 +1380,7 @@
       (list 'LLetfun  "lambda#" args shape fun (lid->lvar "lambda#"))))
     (('ELetOpen m e)
        (let* ((menv (env-get-module env m)))
-         (list
-          'LLetOpen m
-          (lower-expr (env-open env menv) istail e))))
+         (lower-expr (env-open env menv) istail e)))
 )))
 
 (define (low-local-var-with-shape env v shape)
@@ -1620,9 +1618,6 @@
        (compile-expr nenv (+ stacksize (length bindings)) body)
        (bytecode-put-u32-le POP)
        (bytecode-put-u32-le (length bindings))))
-    (('LLetOpen m e)
-     (let* ((menv (env-get-module env m)))
-       (compile-expr (env-open env menv) stacksize e)))
 ))
 
 (define (compile-expr-list env stacksize l)
@@ -1863,9 +1858,6 @@
        (vset-union
         (exprs-fv funs rec-env)
         (expr-fv body rec-env))))
-    (('LLetOpen m e)
-     (let* ((menv (env-get-module env m)))
-       (expr-fv e (env-open env menv))))
   ))
 
 (define (exprs-fv exprs env)
