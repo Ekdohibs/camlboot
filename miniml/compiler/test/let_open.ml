@@ -11,4 +11,12 @@ let () =
   let open M in
   print_int (f 21)
 
+module N = struct
+  let f ~x ?(y=2) p = p (x * y)
+end
+
+let () =
+  let open N in
+  f ~x:21 print_int
+
 let () = print_newline ()
