@@ -83,7 +83,7 @@
            (right: ATAT INFIXOP1)
            (right: COLONCOLON)
            (left: MINUS INFIXOP2)
-           (left: STAR INFIXOP3)
+           (left: STAR PERCENT INFIXOP3)
            (right: INFIXOP4)
            (nonassoc: uminus_prec)
            (nonassoc: label_prec)
@@ -256,6 +256,7 @@
     (EQ) : "="
     (MINUS) : "-"
     (STAR) : "*"
+    (PERCENT) : "%"
     (INFIXOP0) : $1
     (INFIXOP1) : $1
     (INFIXOP2) : $1
@@ -377,6 +378,7 @@
     (expr_no_semi EQ expr_no_semi) : (mkapp2 "=" $1 $3)
     (expr_no_semi MINUS expr_no_semi) : (mkapp2 "-" $1 $3)
     (MINUS expr_no_semi (prec: uminus_prec)) : (mkapp1 "~-" $2)
+    (expr_no_semi PERCENT expr_no_semi) : (mkapp2 "%" $1 $3)
     (expr_no_semi STAR expr_no_semi) : (mkapp2 "*" $1 $3)
     (expr_no_semi COLONEQ expr_no_semi) : (mkapp2 ":=" $1 $3)
     (expr_no_semi AMPERAMPER expr_no_semi) : (list 'EIf $1 $3 (list 'EConstant (list 'CInt 0)))
@@ -400,7 +402,13 @@
     (expr_no_semi COLONCOLON expr_no_semi) : (lid->econstr "::" (cons $1 (cons $3 #nil)))
     (simple_expr DOT LPAREN expr RPAREN LTMINUS expr_no_semi) : (mkapp3 "array_set" $1 $4 $7)
     (simple_expr DOT LBRACK expr RBRACK LTMINUS expr_no_semi) : (mkapp3 "string_set" $1 $4 $7)
+    (LET percent_exit llet llet_ands IN expr (prec: LET)) : (list 'ELetExits (cons $3 $4) $6)
+    (LBRACK percent_exit RBRACK LIDENT list_labelled_simple_expr) : (list 'EExit $4 $5)
     )
+
+   (percent_exit
+    (PERCENT LIDENT) : (if (equal? $2 "exit") #nil
+                           (errorp "expected the %exit extension")))
 
    (expr
     (expr_no_semi) : $1
@@ -483,6 +491,7 @@
    (cons "?" (cons 'QUESTION #f))
    (cons "*" (cons 'STAR #f))
    (cons "~" (cons 'TILDE #f))
+   (cons "%" (cons 'PERCENT #f))
    ))
 
 
@@ -492,8 +501,11 @@
 
 (define (mktoken location tk) (make-lexical-token (car tk) location (cdr tk)))
 
+(define (current-location)
+  (make-source-location "*stdin*" (port-line (current-input-port)) (port-column (current-input-port)) -1 -1))
+
 (define (comment errorp)
-  (let* ((location (make-source-location "*stdin*" (port-line (current-input-port)) (port-column (current-input-port)) -1 -1))
+  (let* ((location (current-location))
          (c (read-char)))
     (cond ((eof-object? c) (errorp "Unterminated comment"))
           ((char=? c #\*) (if (char=? (peek-char) #\)) (begin (read-char) #f) (comment errorp)))
@@ -507,7 +519,7 @@
         ((and (char>=? c #\A) (char<=? c #\F)) (+ 10 (- (char->integer c) (char->integer #\A))))))
 
 (define (escape-sequence errorp)
-  (let* ((location (make-source-location "*stdin*" (port-line (current-input-port)) (port-column (current-input-port)) -1 -1))
+  (let* ((location (current-location))
          (c (read-char)))
     (cond ((eof-object? c) (errorp "Unterminated escape sequence"))
           ((char=? c #\\ ) #\\ )
@@ -542,7 +554,7 @@
 (define (space-or-tab? c) (or (char=? c #\space) (char=? c #\tab)))
 
 (define (string-chars errorp)
-  (let* ((location (make-source-location "*stdin*" (port-line (current-input-port)) (port-column (current-input-port)) -1 -1))
+  (let* ((location (current-location))
          (c (read-char)))
     (cond ((eof-object? c) (errorp "Unterminated string"))
           ((char=? c #\") #nil)
@@ -601,7 +613,7 @@
     )))
 
 (define (token errorp)
-  (let* ((location (make-source-location "*stdin*" (port-line (current-input-port)) (port-column (current-input-port)) -1 -1))
+  (let* ((location (current-location))
          (c (read-char)))
     (token-dispatch errorp location c)))
 
@@ -1388,6 +1400,24 @@
     (('ELetOpen m e)
        (let* ((menv (env-get-module env m)))
          (lower-expr (env-open env menv) istail e)))
+    (('ELetExits bindings body)
+     (list
+      'LLetexits
+      (map (match-lambda
+            ((('PVar exit) . ('ELambda args fun))
+             (let ((vars (map (match-lambda ((= arg-get-pat ('PVar arg)) arg)) args)))
+             (list exit vars (lower-expr (local-vars env vars) istail fun))))
+            ((('PVar exit) . e)
+             (list exit #nil (lower-tail e)))
+       ) bindings)
+      (lower-tail body)))
+    (('EExit id args)
+     (list
+      'LExit
+      id
+      (map (match-lambda ((arg . ('Nolabel))
+             (lower-notail arg)
+        )) args)))
 )))
 
 (define (local-var-with-shape env v shape)

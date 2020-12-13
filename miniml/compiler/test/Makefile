@@ -32,6 +32,7 @@ TESTS=\
 	let_open \
 	infix_sugar \
 	functors \
+	exits \
 	external_exceptions
 
 .PHONY: all
