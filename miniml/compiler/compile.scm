@@ -1364,7 +1364,7 @@
      (let* ((e (lower-notail e))
             (var "try#exn"))
        (list 'LCatch e var
-         (lower-expr (low-local-var env var) istail
+         (lower-expr (local-var env var) istail
           (list 'EMatch (lid->evar var)
            (append h (list
              (cons (list 'PWild) (list 'EReraise (lid->evar var))))))))))
@@ -1383,12 +1383,12 @@
          (lower-expr (env-open env menv) istail e)))
 )))
 
-(define (low-local-var-with-shape env v shape)
+(define (local-var-with-shape env v shape)
   (env-replace-var env v (mkvar (list 'VarLocal v) shape)))
-(define (low-local-var env v)
-  (low-local-var-with-shape env v #nil))
-(define (low-local-vars env vars)
-  (fold (lambda (var env) (low-local-var env var)) env vars))
+(define (local-var env v)
+  (local-var-with-shape env v #nil))
+(define (local-vars env vars)
+  (fold (lambda (var env) (local-var env var)) env vars))
 
 (define (lower-letrec env istail bindings body)
   (let* ((bindings
@@ -1398,7 +1398,7 @@
              ) bindings))
          (env
           (fold (match-lambda*
-              (((v args shape fun) env) (low-local-var-with-shape env v shape))
+              (((v args shape fun) env) (local-var-with-shape env v shape))
             ) env bindings))
          (bindings
           (map (match-lambda
@@ -1417,11 +1417,11 @@
        (match binding
          ((('PVar v) . (and e ('ELambda args fun)))
           (match-let* (((args shape fun) (lower-function env args fun))
-                       (env (low-local-var-with-shape env v shape)))
+                       (env (local-var-with-shape env v shape)))
             (list 'LLetfun v args fun (lower-rest env))))
          ((('PVar v) . e)
           (let* ((e (lower-expr env #f e))
-                 (env (low-local-var env v)))
+                 (env (local-var env v)))
             (list 'LLet v e (lower-rest env))))
          ((('PWild) . e)
           (let* ((e (lower-expr env #f e)))
@@ -1454,7 +1454,7 @@
     (list args shape body)))
 
 (define (lower-function-body env args body)
-  (let* ((env (low-local-vars env args)))
+  (let* ((env (local-vars env args)))
   (lower-expr env #t body)))
 
 (define (lower-function-prelude args body)
@@ -1506,12 +1506,12 @@
       (map (match-lambda
             (($ <switch-block> tag arity vars rhs)
              (mkswitch-block tag arity vars
-               (lower-expr (low-local-vars env vars) istail rhs)))
+               (lower-expr (local-vars env vars) istail rhs)))
         ) blocks))
     (default
       ((match-lambda
         (#nil #nil)
-        ((var . rhs) (cons var (lower-expr (low-local-var env var) istail rhs)))
+        ((var . rhs) (cons var (lower-expr (local-var env var) istail rhs)))
         ) default)))
    (mkswitch consts blocks default nums)))
 
@@ -1807,7 +1807,7 @@
 (define (vset-difference s1 s2) (vhash-fold (lambda (k v s) (vhash-delete k s)) s1 s2))
 (define (vset-list-union l) (fold vset-union vset-empty l))
 
-(define (expr-fv expr bv)
+(define (fv-expr expr bv)
   (match expr
     (('LVar v)
      (if (vset-mem v bv)
@@ -1818,66 +1818,66 @@
     (('LConst n)
      vset-empty)
     (('LBlock c args)
-     (exprs-fv args bv))
+     (fv-expr-list args bv))
     (('LGetfield e f)
-     (expr-fv e bv))
+     (fv-expr e bv))
     (('LSetfield e1 e2)
-     (vset-union (expr-fv e1 bv) (expr-fv e2 bv)))
+     (vset-union (fv-expr e1 bv) (fv-expr e2 bv)))
     ((or ('LApply e es) ('LTailApply e es))
      (vset-union
-      (expr-fv e bv)
-      (exprs-fv es bv)))
+      (fv-expr e bv)
+      (fv-expr-list es bv)))
     (('LIf e1 e2 e3)
-     (vset-union (expr-fv e1 bv)
-     (vset-union (expr-fv e2 bv)
-                 (expr-fv e3 bv))))
+     (vset-union (fv-expr e1 bv)
+     (vset-union (fv-expr e2 bv)
+                 (fv-expr e3 bv))))
     (('LChain e1 e2)
-     (vset-union (expr-fv e1 bv) (expr-fv e2 bv)))
+     (vset-union (fv-expr e1 bv) (fv-expr e2 bv)))
     (('LSwitch e sw)
        (vset-union
-        (expr-fv e bv)
-        (switch-fv sw bv)))
+        (fv-expr e bv)
+        (fv-switch sw bv)))
     (('LCatch e1 v e2)
        (vset-union
-        (expr-fv e1 bv)
-        (expr-fv e2 (bv-add-var v bv))))
+        (fv-expr e1 bv)
+        (fv-expr e2 (bv-add-var v bv))))
     (('LReraise e)
-     (expr-fv e bv))
+     (fv-expr e bv))
     (('LLet v e body)
      (vset-union
-      (expr-fv e bv)
-      (expr-fv body (bv-add-var v bv))))
+      (fv-expr e bv)
+      (fv-expr body (bv-add-var v bv))))
     (('LLetfun f args fun body)
      (vset-union
-      (expr-fv fun (bv-add-vars args bv))
-      (expr-fv body (bv-add-var f bv))))
+      (fv-expr fun (bv-add-vars args bv))
+      (fv-expr body (bv-add-var f bv))))
     (('LLetrecfun bindings body)
      (let* ((vars (map car bindings))
             (funs (map cadddr bindings))
             (rec-bv (bv-add-vars vars bv)))
        (vset-union
-        (exprs-fv funs rec-bv)
-        (expr-fv body rec-bv))))
+        (fv-expr-list funs rec-bv)
+        (fv-expr body rec-bv))))
   ))
 
-(define (exprs-fv exprs bv)
+(define (fv-expr-list exprs bv)
   (vset-list-union
-   (map (lambda (e) (expr-fv e bv)) exprs)))
+   (map (lambda (e) (fv-expr e bv)) exprs)))
 
-(define (switch-fv sw bv)
+(define (fv-switch sw bv)
   (match-let ((($ <switch> consts blocks default nums) sw))
     (vset-list-union (append
       (map (match-lambda
             (($ <switch-const> tag rhs)
-             (expr-fv rhs bv))
+             (fv-expr rhs bv))
          ) consts)
       (map (match-lambda
             (($ <switch-block> tag arity vars rhs)
-             (expr-fv rhs (bv-add-vars vars bv)))
+             (fv-expr rhs (bv-add-vars vars bv)))
         ) blocks)
       (list ((match-lambda
               (#nil vset-empty)
-              ((var . rhs) (expr-fv rhs (bv-add-var var bv)))
+              ((var . rhs) (fv-expr rhs (bv-add-var var bv)))
         ) default))
   ))))
 
@@ -1931,7 +1931,7 @@
 (define (make-nfv fv) (fold (lambda (name i nfv) (vhash-replace name i nfv)) vlist-null fv (range 0 (length fv))))
 
 (define (compile-fundef env stacksize args body)
-  (let* ((fv (fv-list (expr-fv body (bv-add-vars args bv-empty))))
+  (let* ((fv (fv-list (fv-expr body (bv-add-vars args bv-empty))))
          (nfv (make-nfv fv))
          (lab1 (newlabel))
          (lab2 (newlabel))
@@ -1953,7 +1953,7 @@
          (bodies (map caddr funs))
          (fvenv (bv-add-vars names bv-empty))
          (fv (fv-list (vset-list-union
-                (map (lambda (body args) (expr-fv body (bv-add-vars args fvenv))) bodies argss))))
+                (map (lambda (body args) (fv-expr body (bv-add-vars args fvenv))) bodies argss))))
          (nfv (make-nfv fv))
          (labs (map (lambda (_) (newlabel)) funs))
          (endlab (newlabel))
