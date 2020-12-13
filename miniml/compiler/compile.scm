@@ -1377,7 +1377,7 @@
         ))
     (('ELambda args fun)
      (match-let* (((args shape fun) (lower-function env args fun)))
-      (list 'LLetfun  "lambda#" args shape fun (lid->lvar "lambda#"))))
+      (list 'LLetfun  "lambda#" args fun (lid->lvar "lambda#"))))
     (('ELetOpen m e)
        (let* ((menv (env-get-module env m)))
          (lower-expr (env-open env menv) istail e)))
@@ -1402,7 +1402,7 @@
             ) env bindings))
          (bindings
           (map (match-lambda
-                ((v args shape fun) (list v args shape (lower-function-body env args fun)))
+                ((v args shape fun) (list v args (lower-function-body env args fun)))
              ) bindings))
          (body
           (lower-expr env istail body)))
@@ -1418,7 +1418,7 @@
          ((('PVar v) . (and e ('ELambda args fun)))
           (match-let* (((args shape fun) (lower-function env args fun))
                        (env (low-local-var-with-shape env v shape)))
-            (list 'LLetfun v args shape fun (lower-rest env))))
+            (list 'LLetfun v args fun (lower-rest env))))
          ((('PVar v) . e)
           (let* ((e (lower-expr env #f e))
                  (env (low-local-var env v)))
@@ -1609,10 +1609,9 @@
     (('LLet var e body)
      (compile-expr env stacksize e)
      (compile-bind-var env stacksize var body))
-    (('LLetfun f args shape fun body)
+    (('LLetfun f args fun body)
      (compile-fundef env stacksize args fun)
-     (compile-bind-var-with-shape
-      env stacksize f body shape))
+     (compile-bind-var env stacksize f body))
     (('LLetrecfun bindings body)
      (let* ((nenv (compile-recfundefs env stacksize bindings)))
        (compile-expr nenv (+ stacksize (length bindings)) body)
@@ -1632,10 +1631,8 @@
 
 (define (compile-args env stacksize l) (compile-expr-list env stacksize (reverse l)))
 
-(define (localvar-with-shape env var pos shape)
-  (env-replace-var env var (mkvar (list 'VarStack pos) shape)))
-
-(define (localvar env var pos) (localvar-with-shape env var pos #nil))
+(define (localvar env var pos)
+  (env-replace-var env var (mkvar (list 'VarStack pos) #nil)))
 
 (define (compile-bind-fields env stacksize vars e)
   (match-let (((i j env) (fold
@@ -1661,15 +1658,6 @@
       (begin
         (bytecode-put-u32-le PUSH)
         (compile-expr (localvar env var stacksize) (+ stacksize 1) e)
-        (bytecode-put-u32-le POP)
-        (bytecode-put-u32-le 1))))
-
-(define (compile-bind-var-with-shape env stacksize var e shape)
-  (if (null? var)
-      (compile-expr env stacksize e)
-      (begin
-        (bytecode-put-u32-le PUSH)
-        (compile-expr (localvar-with-shape env var stacksize shape) (+ stacksize 1) e)
         (bytecode-put-u32-le POP)
         (bytecode-put-u32-le 1))))
 
@@ -1847,7 +1835,7 @@
      (vset-union
       (expr-fv e bv)
       (expr-fv body (bv-add-var v bv))))
-    (('LLetfun f args shape fun body)
+    (('LLetfun f args fun body)
      (vset-union
       (expr-fv fun (bv-add-vars args bv))
       (expr-fv body (bv-add-var f bv))))
@@ -1893,7 +1881,7 @@
 
 (define (range a b) (if (>= a b) #nil (cons a (range (+ a 1) b))))
 
-(define (compile-fundef-body env args body nfv lab recvars recshapes recoffset)
+(define (compile-fundef-body env args body nfv lab recvars recoffset)
   (let* ((arity (length args))
          (envoff (* rec-closure-step (- (- (length recvars) 1) recoffset)))
          (mvars (bindings-filter-map
@@ -1902,15 +1890,15 @@
                        v
                        (let ((r (vhash-assoc name nfv)))
                          (if (pair? r)
-                             (mkvar (list 'VarEnv (+ envoff (cdr r))) (var-get-funshape v))
+                             (mkvar (list 'VarEnv (+ envoff (cdr r))) #nil)
                              #f))))
                  (env-get-vars env)))
-         (rvars (fold (lambda (rec-name shape i vs)
+         (rvars (fold (lambda (rec-name i vs)
                         (bindings-replace
                          rec-name
-                         (mkvar (list 'VarRec (* rec-closure-step (- i recoffset))) shape)
+                         (mkvar (list 'VarRec (* rec-closure-step (- i recoffset))) #nil)
                          vs))
-                      mvars recvars recshapes (range 0 (length recvars))))
+                      mvars recvars (range 0 (length recvars))))
          (nvars (fold (lambda (arg i vs)
                         (bindings-replace
                          arg
@@ -1941,7 +1929,7 @@
     (compile-args env stacksize (map lid->lvar fv))
     (bytecode-put-u32-le BRANCH)
     (bytecode-emit-labref lab1)
-    (compile-fundef-body env args body nfv lab2 #nil #nil -1)
+    (compile-fundef-body env args body nfv lab2 #nil -1)
     (bytecode-emit-label lab1)
     (bytecode-put-u32-le CLOSURE)
     (bytecode-put-u32-le (length fv))
@@ -1952,22 +1940,21 @@
   (let* ((numfuns (length funs))
          (names  (map car funs))
          (argss  (map cadr funs))
-         (shapes (map caddr funs))
-         (bodies (map cadddr funs))
+         (bodies (map caddr funs))
          (fvenv (bv-add-vars names bv-empty))
          (fv (fv-list (vset-list-union
                 (map (lambda (body args) (expr-fv body (bv-add-vars args fvenv))) bodies argss))))
          (nfv (make-nfv fv))
          (labs (map (lambda (_) (newlabel)) funs))
          (endlab (newlabel))
-         (nenv (fold (lambda (name shape pos env) (localvar-with-shape env name (+ stacksize pos) shape))
-                     env names shapes (range 0 numfuns)))
+         (nenv (fold (lambda (name pos env) (localvar env name (+ stacksize pos)))
+                     env names (range 0 numfuns)))
          )
     (compile-args env stacksize (map lid->lvar fv))
     (bytecode-put-u32-le BRANCH)
     (bytecode-emit-labref endlab)
     (for-each (lambda (args body lab pos)
-                (compile-fundef-body env args body nfv lab names shapes pos))
+                (compile-fundef-body env args body nfv lab names pos))
               argss bodies labs (range 0 numfuns))
     (bytecode-emit-label endlab)
     (bytecode-put-u32-le CLOSUREREC)
