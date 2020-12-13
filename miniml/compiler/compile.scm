@@ -1516,16 +1516,21 @@
    (mkswitch consts blocks default nums)))
 
 (define-immutable-record-type <compenv>
-  (mkcompenv vars)
+  (mkcompenv vars traps)
   compenv?
-  (vars compenv-get-vars compenv-with-vars))
+  (vars compenv-get-vars compenv-with-vars)
+  (traps compenv-get-traps compenv-with-traps)
+)
 
-(define compenv-empty (mkcompenv vlist-null))
+(define compenv-empty (mkcompenv vlist-null #nil))
 (define (compenv-replace-var env k v)
   (compenv-with-vars env (vhash-replace k v (compenv-get-vars env))))
 (define (compenv-get-var env var)
   (match (vhash-assoc var (compenv-get-vars env))
      ((_ . pos) pos)))
+
+(define (compenv-push-trap env pos)
+  (compenv-with-traps env (cons pos (compenv-get-traps env))))
 
 (define (compile-high-expr env istail expr)
   (compile-expr compenv-empty 0
@@ -1611,7 +1616,7 @@
             (lab2 (newlabel)))
        (bytecode-put-u32-le PUSHTRAP)
        (bytecode-emit-labref lab1)
-       (compile-expr env (+ stacksize 4) body)
+       (compile-expr (compenv-push-trap env stacksize) (+ stacksize 4) body)
        (bytecode-put-u32-le POPTRAP)
        (bytecode-put-u32-le BRANCH)
        (bytecode-emit-labref lab2)
