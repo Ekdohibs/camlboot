@@ -1915,7 +1915,7 @@
                          (list 'VarStack (- (- arity 1) i))
                          vs))
                       rvars args (range 0 arity)))
-         (nenv (compenv-with-vars env nvars))
+         (nenv (compenv-with-vars compenv-empty nvars))
          )
     (assert (> arity 0))
     (bytecode-put-u32-le RESTART)
