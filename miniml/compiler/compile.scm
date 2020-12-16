@@ -957,29 +957,42 @@
 (define (bytecode-write-prims)
   (for-each (lambda (name) (begin (bytecode-put-string name) (bytecode-put-u8 0))) (reverse prims)))
 
+; Compression for the typical scheme where
+; a few contiguous specializations are followed by the generic opcode.
+; For example,
+;    OP1, OP2, OP3, OP
+; would use (bytecode-compressed-opcode 1 3 OP arg).
+(define (bytecode-compressed-opcode range-start range-stop opcode arg)
+  (if (and (<= range-start arg) (<= arg range-stop))
+    (let* ((last-specialized-opcode (- opcode 1)))
+      (bytecode-put-u32-le (+ last-specialized-opcode (- arg range-stop))))
+    (begin
+      (bytecode-put-u32-le opcode)
+      (bytecode-put-u32-le arg)
+    ))
+)
+
+
 (define (bytecode-CONSTINT n)
-  (bytecode-put-u32-le CONSTINT)
-  (bytecode-put-u32-le n))
+  (bytecode-compressed-opcode 0 3 CONSTINT n))
 
 (define (bytecode-ACC n)
-  (bytecode-put-u32-le ACC)
-  (bytecode-put-u32-le n))
+  (bytecode-compressed-opcode 0 7 ACC n))
 
 (define (bytecode-ENVACC n)
-  (bytecode-put-u32-le ENVACC)
-  (bytecode-put-u32-le n))
+  (bytecode-compressed-opcode 1 4 ENVACC n))
 
+; The compression scheme for OFFSETCLOSURE is complex and
+; changed in OCaml 4.12. Do try to compress it.
 (define (bytecode-OFFSETCLOSURE n)
   (bytecode-put-u32-le OFFSETCLOSURE)
   (bytecode-put-u32-le n))
 
 (define (bytecode-GETFIELD n)
-  (bytecode-put-u32-le GETFIELD)
-  (bytecode-put-u32-le n))
+  (bytecode-compressed-opcode 0 3 GETFIELD n))
 
 (define (bytecode-SETFIELD n)
-  (bytecode-put-u32-le SETFIELD)
-  (bytecode-put-u32-le n))
+  (bytecode-compressed-opcode 0 3 SETFIELD n))
 
 (define (bytecode-POP n)
   (bytecode-put-u32-le POP)
@@ -994,10 +1007,16 @@
   (bytecode-put-u32-le BRANCH)
   (bytecode-emit-labref label))
 
+; this one does not follow the standard compression scheme, it uses
+; MAKEBLOCK, MAKEBLOCK1, MAKEBLOCK2, MAKEBLOCK3
 (define (bytecode-MAKEBLOCK arity tag)
-  (bytecode-put-u32-le MAKEBLOCK)
-  (bytecode-put-u32-le arity)
-  (bytecode-put-u32-le tag))
+  (if (and (<= 1 arity) (<= arity 3))
+      (bytecode-put-u32-le (+ MAKEBLOCK arity))
+      (begin
+        (bytecode-put-u32-le MAKEBLOCK)
+        (bytecode-put-u32-le arity)))
+  (bytecode-put-u32-le tag)
+)
 
 (define ACC 8)
 (define PUSH 9)
@@ -1029,7 +1048,6 @@
 (define C_CALL4 96)
 (define C_CALL5 97)
 (define C_CALLN 98)
-(define CONST0 99)
 (define CONSTINT 103)
 (define ISINT 129)
 (define BNEQ 132)
@@ -1898,7 +1916,7 @@
     ; Jumping to one of the exits leaves the scope were those exits are available,
     ; so we will jump to at most one of these exit.
     ; We reserve overlapping space for their arguments, of size max-arity.
-    (bytecode-put-u32-le CONST0)
+    (bytecode-CONSTINT 0)
     (for-each (lambda (i)
         (bytecode-put-u32-le PUSH)
       ) (range 0 max-arity))
