@@ -54,10 +54,17 @@ let () =
   print_int (sum1 0); print_int (sum2 0)
 
 let () = print_newline ()
-let () = print "stack tests: "
+let () = print "let-binding tests: "
 
 let () = print_int (let a = 17 in let b = 42 in if (let x = 2 in true) then a else b)
 let () = print_int (let a = 17 in let b = 42 in if (let x = 2 in false) then a else b)
+
+(* this ensures that the 'let' are not substituted away... as long as we don't support constant-folding *)
+let () = print_int (let a = 16+1 in let b = 41+1 in if (let x = 1+1 in true) then a else b)
+let () = print_int (let a = 16+1 in let b = 41+1 in if (let x = 1+1 in false) then a else b)
+
+(* regression test for an infinite loop in 'Subst unfolding *)
+let () = print_int (let x = 21 in let y = x in let x = y in x + y)
 
 let () = print_newline ()
 let () = print "more recursion: "

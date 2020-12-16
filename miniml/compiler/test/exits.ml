@@ -87,7 +87,7 @@ let () =
   try
     let%exit ex n = raise (Foo (n + 2)) in
     try
-      let v = 1 in
+      let v = 1+0 in
       [%exit] ex v
     with Foo n -> print_int (2 * n)
   with Foo n -> print_int n

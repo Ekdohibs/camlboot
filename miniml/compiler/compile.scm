@@ -1650,6 +1650,21 @@
   (compile-expr compenv-empty 0
     (lower-expr env istail expr)))
 
+(define (substituable? expr)
+  (match expr
+   (((or 'LVar 'LGlobal 'LConst) . _)
+    #t)
+   (((or 'LBlock
+        'LGetfield 'Setfield
+        'LApply 'LTailApply
+        'LIf 'LChain 'LSwitch
+        'LReraise 'LCatch
+        'LLet 'LLetfun 'LLetrecfun
+        'LLetexits 'LExit
+     ) . _)
+    #f)
+))
+
 (define (compile-expr env stacksize expr)
   ; (display "compile-expr") (newline)
   ; (show-env env)(newline)
@@ -1658,7 +1673,11 @@
   ; (display expr)(newline)
   (match expr
     (('LVar v)
-     (access-var (compenv-get-var env v) stacksize))
+     (match (compenv-get-var env v)
+        (('VarSubst env expr)
+         (compile-expr env stacksize expr))
+        (loc
+         (access-var loc stacksize))))
     (('LGlobal id)
      (bytecode-put-u32-le GETGLOBAL)
      (bytecode-put-u32-le id))
@@ -1735,8 +1754,13 @@
        (compile-bind-var env stacksize exnvar handler)
        (bytecode-emit-label lab2)))
     (('LLet var e body)
-     (compile-expr env stacksize e)
-     (compile-bind-var env stacksize var body))
+     (if (substituable? e)
+         (compile-expr
+          (compenv-replace-var env var (list 'VarSubst env e))
+          stacksize body)
+         (begin
+           (compile-expr env stacksize e)
+           (compile-bind-var env stacksize var body))))
     (('LLetfun f args fun body)
      (compile-fundef env stacksize args fun)
      (compile-bind-var env stacksize f body))
