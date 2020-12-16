@@ -83,7 +83,7 @@
            (right: ATAT INFIXOP1)
            (right: COLONCOLON)
            (left: MINUS INFIXOP2)
-           (left: STAR INFIXOP3)
+           (left: STAR PERCENT INFIXOP3)
            (right: INFIXOP4)
            (nonassoc: uminus_prec)
            (nonassoc: label_prec)
@@ -256,6 +256,7 @@
     (EQ) : "="
     (MINUS) : "-"
     (STAR) : "*"
+    (PERCENT) : "%"
     (INFIXOP0) : $1
     (INFIXOP1) : $1
     (INFIXOP2) : $1
@@ -377,6 +378,7 @@
     (expr_no_semi EQ expr_no_semi) : (mkapp2 "=" $1 $3)
     (expr_no_semi MINUS expr_no_semi) : (mkapp2 "-" $1 $3)
     (MINUS expr_no_semi (prec: uminus_prec)) : (mkapp1 "~-" $2)
+    (expr_no_semi PERCENT expr_no_semi) : (mkapp2 "%" $1 $3)
     (expr_no_semi STAR expr_no_semi) : (mkapp2 "*" $1 $3)
     (expr_no_semi COLONEQ expr_no_semi) : (mkapp2 ":=" $1 $3)
     (expr_no_semi AMPERAMPER expr_no_semi) : (list 'EIf $1 $3 (list 'EConstant (list 'CInt 0)))
@@ -400,7 +402,13 @@
     (expr_no_semi COLONCOLON expr_no_semi) : (lid->econstr "::" (cons $1 (cons $3 #nil)))
     (simple_expr DOT LPAREN expr RPAREN LTMINUS expr_no_semi) : (mkapp3 "array_set" $1 $4 $7)
     (simple_expr DOT LBRACK expr RBRACK LTMINUS expr_no_semi) : (mkapp3 "string_set" $1 $4 $7)
+    (LET percent_exit llet llet_ands IN expr (prec: LET)) : (list 'ELetExits (cons $3 $4) $6)
+    (LBRACK percent_exit RBRACK LIDENT list_labelled_simple_expr) : (list 'EExit $4 $5)
     )
+
+   (percent_exit
+    (PERCENT LIDENT) : (if (equal? $2 "exit") #nil
+                           (errorp "expected the %exit extension")))
 
    (expr
     (expr_no_semi) : $1
@@ -483,6 +491,7 @@
    (cons "?" (cons 'QUESTION #f))
    (cons "*" (cons 'STAR #f))
    (cons "~" (cons 'TILDE #f))
+   (cons "%" (cons 'PERCENT #f))
    ))
 
 
@@ -492,8 +501,11 @@
 
 (define (mktoken location tk) (make-lexical-token (car tk) location (cdr tk)))
 
+(define (current-location)
+  (make-source-location "*stdin*" (port-line (current-input-port)) (port-column (current-input-port)) -1 -1))
+
 (define (comment errorp)
-  (let* ((location (make-source-location "*stdin*" (port-line (current-input-port)) (port-column (current-input-port)) -1 -1))
+  (let* ((location (current-location))
          (c (read-char)))
     (cond ((eof-object? c) (errorp "Unterminated comment"))
           ((char=? c #\*) (if (char=? (peek-char) #\)) (begin (read-char) #f) (comment errorp)))
@@ -507,7 +519,7 @@
         ((and (char>=? c #\A) (char<=? c #\F)) (+ 10 (- (char->integer c) (char->integer #\A))))))
 
 (define (escape-sequence errorp)
-  (let* ((location (make-source-location "*stdin*" (port-line (current-input-port)) (port-column (current-input-port)) -1 -1))
+  (let* ((location (current-location))
          (c (read-char)))
     (cond ((eof-object? c) (errorp "Unterminated escape sequence"))
           ((char=? c #\\ ) #\\ )
@@ -542,7 +554,7 @@
 (define (space-or-tab? c) (or (char=? c #\space) (char=? c #\tab)))
 
 (define (string-chars errorp)
-  (let* ((location (make-source-location "*stdin*" (port-line (current-input-port)) (port-column (current-input-port)) -1 -1))
+  (let* ((location (current-location))
          (c (read-char)))
     (cond ((eof-object? c) (errorp "Unterminated string"))
           ((char=? c #\") #nil)
@@ -601,7 +613,7 @@
     )))
 
 (define (token errorp)
-  (let* ((location (make-source-location "*stdin*" (port-line (current-input-port)) (port-column (current-input-port)) -1 -1))
+  (let* ((location (current-location))
          (c (read-char)))
     (token-dispatch errorp location c)))
 
@@ -949,6 +961,7 @@
 (define ACC 8)
 (define PUSH 9)
 (define POP 19)
+(define ASSIGN 20)
 (define ENVACC 25)
 (define PUSH_RETADDR 31)
 (define APPLY 32)
@@ -975,6 +988,7 @@
 (define C_CALL4 96)
 (define C_CALL5 97)
 (define C_CALLN 98)
+(define CONST0 99)
 (define CONSTINT 103)
 (define ISINT 129)
 (define BNEQ 132)
@@ -1141,11 +1155,16 @@
 
 (define rec-closure-step 2)
 
+; Bytecode instructions expect "stack-relative" addresses,
+; with 0 being the last slot on the stack.
+(define (stack-relative stacksize absolute-pos)
+  (- (- stacksize 1) absolute-pos))
+
 (define (access-var location stacksize)
   (match location
     (('VarStack pos)
      (bytecode-put-u32-le ACC)
-     (bytecode-put-u32-le (- (- stacksize pos) 1)))
+     (bytecode-put-u32-le (stack-relative stacksize pos)))
     (('VarEnv pos)
      (bytecode-put-u32-le ENVACC)
      (bytecode-put-u32-le (+ 1 pos)))
@@ -1381,6 +1400,24 @@
     (('ELetOpen m e)
        (let* ((menv (env-get-module env m)))
          (lower-expr (env-open env menv) istail e)))
+    (('ELetExits bindings body)
+     (list
+      'LLetexits
+      (map (match-lambda
+            ((('PVar exit) . ('ELambda args fun))
+             (let ((vars (map (match-lambda ((= arg-get-pat ('PVar arg)) arg)) args)))
+             (list exit vars (lower-expr (local-vars env vars) istail fun))))
+            ((('PVar exit) . e)
+             (list exit #nil (lower-tail e)))
+       ) bindings)
+      (lower-tail body)))
+    (('EExit id args)
+     (list
+      'LExit
+      id
+      (map (match-lambda ((arg . ('Nolabel))
+             (lower-notail arg)
+        )) args)))
 )))
 
 (define (local-var-with-shape env v shape)
@@ -1516,16 +1553,42 @@
    (mkswitch consts blocks default nums)))
 
 (define-immutable-record-type <compenv>
-  (mkcompenv vars)
+  (mkcompenv vars traps exits)
   compenv?
-  (vars compenv-get-vars compenv-with-vars))
+  (vars compenv-get-vars compenv-with-vars)
+  (traps compenv-get-traps compenv-with-traps)
+  (exits compenv-get-exits compenv-with-exits)
+)
 
-(define compenv-empty (mkcompenv vlist-null))
+(define compenv-empty (mkcompenv vlist-null #nil vlist-null))
+
 (define (compenv-replace-var env k v)
   (compenv-with-vars env (vhash-replace k v (compenv-get-vars env))))
 (define (compenv-get-var env var)
   (match (vhash-assoc var (compenv-get-vars env))
      ((_ . pos) pos)))
+
+(define (compenv-push-trap env stacksize-before stacksize-after)
+  (compenv-with-traps env
+   (cons (list stacksize-before stacksize-after)
+    (compenv-get-traps env))))
+
+(define (compenv-add-exit env exit exit-info)
+  (compenv-with-exits env
+    (vhash-replace exit exit-info
+      (compenv-get-exits env))))
+(define (compenv-get-exit env exit)
+  (match (vhash-assoc exit (compenv-get-exits env))
+     ((_ . info) info)))
+
+(define-immutable-record-type <exit-info>
+  (make-exit-info label arity compenv stacksize)
+  exit?
+  (label exit-info-get-label)
+  (arity exit-info-get-arity)
+  (compenv exit-info-get-compenv)
+  (stacksize exit-info-get-stacksize)
+)
 
 (define (compile-high-expr env istail expr)
   (compile-expr compenv-empty 0
@@ -1608,10 +1671,15 @@
      (bytecode-put-u32-le RERAISE))
     (('LCatch body exnvar handler)
      (let* ((lab1 (newlabel))
-            (lab2 (newlabel)))
+            (lab2 (newlabel))
+            (stacksize-before-trap stacksize)
+            (stacksize-after-trap (+ stacksize 4))
+            )
        (bytecode-put-u32-le PUSHTRAP)
        (bytecode-emit-labref lab1)
-       (compile-expr env (+ stacksize 4) body)
+       (compile-expr
+        (compenv-push-trap env stacksize-before-trap stacksize-after-trap)
+        stacksize-after-trap body)
        (bytecode-put-u32-le POPTRAP)
        (bytecode-put-u32-le BRANCH)
        (bytecode-emit-labref lab2)
@@ -1629,6 +1697,10 @@
        (compile-expr nenv (+ stacksize (length bindings)) body)
        (bytecode-put-u32-le POP)
        (bytecode-put-u32-le (length bindings))))
+    (('LLetexits exit-defs body)
+     (compile-letexits env stacksize exit-defs body))
+    (('LExit exit args)
+     (compile-exit env stacksize exit args))
 ))
 
 (define (compile-expr-list env stacksize l)
@@ -1788,6 +1860,100 @@
               ))
     )))
 
+(define (compile-letexits env stacksize exit-defs body)
+  (let* (
+      (endlab (newlabel))
+      (exit-labels (map (lambda (def) (newlabel)) exit-defs))
+      (exit-names (map car exit-defs))
+      (exit-varss (map cadr exit-defs))
+      (exit-bodies (map caddr exit-defs))
+      (exit-infos
+       (map (lambda (exit-label exit-vars)
+               (compute-exit-info env stacksize exit-label exit-vars)
+         ) exit-labels exit-varss))
+      (body-env
+       (fold (lambda (name info env) (compenv-add-exit env name info))
+           env exit-names exit-infos))
+      (max-arity
+       (fold (lambda (info max-arity) (max (exit-info-get-arity info) max-arity))
+           0 exit-infos))
+    )
+    ; Each exit needs an "argument space" of size exit-arity reserved on the stack.
+    ; Jumping to one of the exits leaves the scope were those exits are available,
+    ; so we will jump to at most one of these exit.
+    ; We reserve overlapping space for their arguments, of size max-arity.
+    (bytecode-put-u32-le CONST0)
+    (for-each (lambda (i)
+        (bytecode-put-u32-le PUSH)
+      ) (range 0 max-arity))
+    (compile-expr body-env (+ stacksize max-arity) body)
+    (bytecode-put-u32-le POP)
+    (bytecode-put-u32-le max-arity)
+    (bytecode-put-u32-le BRANCH)
+    (bytecode-emit-labref endlab)
+    (for-each (match-lambda* ((($ <exit-info> exit-label exit-arity exit-env exit-stacksize) exit-body)
+         (bytecode-emit-label exit-label)
+         (compile-expr exit-env exit-stacksize exit-body)
+         (bytecode-put-u32-le POP)
+         (bytecode-put-u32-le exit-arity)
+         (assert (equal? exit-arity (- exit-stacksize stacksize)))
+         (bytecode-put-u32-le BRANCH)
+         (bytecode-emit-labref endlab)
+       )) exit-infos exit-bodies)
+    (bytecode-emit-label endlab)
+  ))
+
+(define (compute-exit-info env stacksize exit-label exit-vars)
+  (let* (
+    (arity
+     (length exit-vars))
+    (exit-env
+     (fold (lambda (var i env)
+             (stack-var env var (+ stacksize i))
+       ) env exit-vars (range 0 arity)))
+    (exit-stacksize (+ stacksize arity))
+    )
+    (make-exit-info exit-label arity exit-env exit-stacksize)))
+
+(define (compile-exit env stacksize exit args)
+  (match-let*
+     ((($ <exit-info> exit-label arity exit-env exit-stacksize) (compenv-get-exit env exit))
+      ; this exit has a reserved "argument space" of the stack of size arity,
+      ; placed immediately *before* exit-stacksize, to which the exit arguments
+      ; must be assigned.
+      (argspace-start (- exit-stacksize arity)))
+  (assert (equal? arity (length args)))
+  ; fill the argument space
+  ; (this should go first, before we change the traps or stack, as it runs arbitrary code)
+  (for-each (lambda (arg i)
+       (compile-expr env stacksize arg)
+       (bytecode-put-u32-le ASSIGN)
+       (bytecode-put-u32-le (stack-relative stacksize (+ argspace-start i)))
+     ) args (range 0 arity))
+  ; pop the stack, including trap handlers
+  (let* (
+    (pop (lambda (stacksize desired-stacksize)
+           (assert (<= desired-stacksize stacksize))
+           (if (< desired-stacksize stacksize)
+               (begin
+                 (bytecode-put-u32-le POP)
+                 (bytecode-put-u32-le (- stacksize desired-stacksize))))))
+    (exit-traps (compenv-get-traps exit-env))
+  )
+  (let walk-the-stack ((stacksize stacksize) (traps (compenv-get-traps env)))
+     (assert (<= (length exit-traps) (length traps)))
+     (if (< (length exit-traps) (length traps))
+         (match-let ((((stacksize-before-trap stacksize-after-trap) . traps-rest) traps))
+           (pop stacksize stacksize-after-trap)
+           (bytecode-put-u32-le POPTRAP)
+           (walk-the-stack stacksize-before-trap traps-rest))
+         (begin
+           (assert (equal? traps exit-traps))
+           (pop stacksize exit-stacksize))))
+  ; and jump!
+  (bytecode-put-u32-le BRANCH)
+  (bytecode-emit-labref exit-label)
+)))
 
 (define (vhash-map proc l)
   (alist->vhash
@@ -1858,6 +2024,15 @@
        (vset-union
         (fv-expr-list funs rec-bv)
         (fv-expr body rec-bv))))
+    (('LLetexits defs body)
+     ; exit names live in a separate namespace, they are not (free) variables
+     (vset-union
+      (vset-list-union (map (match-lambda ((exit-name exit-vars exit-body)
+           (fv-expr exit-body (bv-add-vars exit-vars bv))
+         )) defs))
+      (fv-expr body bv)))
+    (('LExit exit args)
+     (fv-expr-list args bv))
   ))
 
 (define (fv-expr-list exprs bv)
@@ -1915,7 +2090,7 @@
                          (list 'VarStack (- (- arity 1) i))
                          vs))
                       rvars args (range 0 arity)))
-         (nenv (compenv-with-vars env nvars))
+         (nenv (compenv-with-vars compenv-empty nvars))
          )
     (assert (> arity 0))
     (bytecode-put-u32-le RESTART)
