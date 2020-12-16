@@ -1338,23 +1338,41 @@
 ; are used during the transformation at higher arities
 ; (4 for non-empty rows, 5 for non-empty rows with beheaded simple first pattern)
 ; and cons-pairs quickly become inconvenient at higher arities.
-
+;
+; Note: in practice we do not use expressions as actions during matrix decomposition,
+; we represent each action by just its index in the initial clauses. This lets us
+; detect which actions are duplicated by the matching process, and turn those into exits
+; to avoid code duplication.
 (define (lower-match env istail arg h)
-  (let* (
-     (h
-      (map (match-lambda ((p . e)
-             (cons p (lower-expr (local-vars env (pat-vars p)) istail e))
-       )) h))
+  (match-let* (
+     (patterns (map car h))
+     (actions (map cdr h))
+     (pattern-vars (map pat-vars patterns))
+     (actions
+      (map (lambda (pat-vars e)
+             (lower-expr (local-vars env pat-vars) istail e)
+       ) pattern-vars actions))
+     (action-numbers (range 0 (length actions)))
      (args (list arg))
      (matrix
       ; a list of clauses is turned into a matrix of arity 1
-      (map (match-lambda ((p . e) (list (list p) #nil e))) h))
+      (map (lambda (p action-number) (list (list p) #nil action-number)) patterns action-numbers))
      (matching-tree
       (match-decompose-matrix env args matrix))
+     (action-frequencies
+      (compute-action-frequencies action-numbers matching-tree))
+     ((exit-defs . dedup-actions)
+      (deduplicate-actions
+       (map
+        (lambda (vars e freq) (list vars e freq))
+         pattern-vars actions action-frequencies)))
      (code
-      (lower-matching-tree env matching-tree))
+      (lower-matching-tree env matching-tree dedup-actions))
   )
-  code))
+  (if (null? exit-defs)
+      code
+      (list 'LLetexits exit-defs code))
+))
 
 (define (pat-vars p)
   (let loop ((p p) (acc #nil))
@@ -1491,10 +1509,40 @@
      ) groups)
 ))
 
-(define (lower-matching-tree env matching-tree)
+(define (compute-action-frequencies action-numbers matching-tree)
+  (assert (equal? action-numbers (range 0 (length action-numbers))))
+  (let ((freqs (make-vector (length action-numbers) 0)))
+  (let iter ((matching-tree matching-tree))
+    (match matching-tree
+      (('MTFailure) #f)
+      (('MTAction bindings act)
+       (vector-set! freqs act (+ 1 (vector-ref freqs act))))
+      (('MTSwitch arg groups)
+       (vlist-for-each (match-lambda ((h . (vars . group-tree)) (iter group-tree))) groups))
+  ))
+  (vector->list freqs)
+))
+
+(define (deduplicate-actions actions)
+  (fold-right (lambda (action i acc)
+      (match-let* (
+         ((vars e freq) action)
+         ((exit-defs . actions) acc)
+      )
+      (if (or (<= freq 1) (substituable? e))
+        (cons exit-defs (cons e actions))
+        (let* (
+           (exit (string-append "act#" (number->string i)))
+           (exit-def (list exit vars e))
+           (exit-action (list 'LExit exit (map lid->lvar vars)))
+         )
+         (cons (cons exit-def exit-defs) (cons exit-action actions)))
+    ))) (cons #nil #nil) actions (range 0 (length actions))))
+
+(define (lower-matching-tree env matching-tree actions)
   (match matching-tree
     (('MTFailure) (list 'LMatchFailure))
-    (('MTAction bindings e)
+    (('MTAction bindings action-number)
      ; bindings were accumulated into a list during decomposition,
      ; so the earliest binding is at the end of the list. We use 'fold' so that
      ; it ends up at the beginning of the resulting expression.
@@ -1502,11 +1550,11 @@
              ; note: this Let is a variable rebinding (let x = y in ...),
              ; with special support in the code generator
              (list 'LLet v (lid->lvar arg) e)
-        )) e bindings))
-    (('MTSwitch arg groups) (lower-match-groups env arg groups))
+        )) (list-ref actions action-number) bindings))
+    (('MTSwitch arg groups) (lower-match-groups env arg groups actions))
 ))
 
-(define (lower-match-groups env arg groups)
+(define (lower-match-groups env arg groups actions)
   (let* (; separate the wildcard group from the groups with strong heads
          (default-matching-tree
            (let ((r (vhash-assoc #nil groups)))
@@ -1518,10 +1566,10 @@
          (sw (if (null? default-matching-tree)
                  empty-switch
                  (switch-with-default empty-switch (cons #nil
-                   (lower-matching-tree env default-matching-tree)))))
+                   (lower-matching-tree env default-matching-tree actions)))))
          (sw (vhash-fold (lambda (h group sw)
                 (match-let* (((group-vars . group-matching-tree) group)
-                             (group-code (lower-matching-tree env group-matching-tree)))
+                             (group-code (lower-matching-tree env group-matching-tree actions)))
                 (match h
                   (('HPInt n)
                    (switch-cons-const sw (mkswitch-const n group-code)))
@@ -1863,7 +1911,6 @@
   ; (display "compile-expr") (newline)
   ; (show-env env)(newline)
   ; (display stacksize)(newline)
-  ; (display istail)(newline)
   ; (display expr)(newline)
   (match expr
     (('LVar v)
