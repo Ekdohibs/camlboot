@@ -38,7 +38,12 @@ let test_nested_patterns =
   | Node((Leaf(0)), (Node (_, (Node (_, (Node _)))))) -> 2
   | Node((Leaf(0)), (Node ((Leaf x), (Node ((Leaf y), Empty))))) -> x - y
   | Node((Leaf(0)), (Node (_, Empty))) -> 4
-  | Node (_, _) -> 5
+  | Node (a, b) ->
+    (match Node (a, b) with
+     | Node (Empty, _) -> 0
+     | Node (_, Empty) -> 0
+     | Node ((Leaf _), (Leaf _)) -> 1
+     | _ -> 2)
 
 let () = print_int test_nested_patterns
 
