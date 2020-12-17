@@ -288,13 +288,9 @@
    (record_item_expr
     (longident_field EQ expr_no_semi) : (cons $1 $3))
 
-   (pattern_constr_args
-    (simple_pattern) : (cons $1 #nil)
-    (simple_pattern COMMA pattern_constr_args) : (cons $1 $3))
-
-   (comma_separated_list2_pattern_lident
-    (pattern_lident COMMA pattern_lident) : (cons $3 (cons $1 #nil))
-    (comma_separated_list2_pattern_lident COMMA pattern_lident) : (cons $3 $1))
+   (comma_separated_list2_pattern
+    (pattern COMMA pattern) : (cons $3 (cons $1 #nil))
+    (comma_separated_list2_pattern COMMA pattern) : (cons $3 $1))
 
    (comma_separated_list2_expr
     (expr_no_semi COMMA expr_no_semi) : (cons $3 (cons $1 #nil))
@@ -302,27 +298,18 @@
 
    (pattern
     (simple_pattern) : $1
-    (longident_constr pattern_lident) : (list 'PConstr $1 (cons $2 #nil))
-    (longident_constr LPAREN pattern_constr_args RPAREN) : (list 'PConstr $1 $3)
-    (comma_separated_list2_pattern_lident) :
-      ; For now we keep this production which is a bit out of touch with other constructs
-      ; that accept patterns rather than ident. A good plan would be to remove it entirely,
-      ; as it is a major source of conflicts, and just require that users
-      ; parenthesize their toplevel tuple patterns.
-      (lid->pconstr "" (reverse $1))
-    (simple_pattern COLONCOLON simple_pattern) : (lid->pconstr "::" (cons $1 (cons $3 #nil))))
+    (longident_constr simple_pattern) : (list 'PConstr $1 (cons $2 #nil))
+    (comma_separated_list2_pattern (prec: comma_prec)) : (lid->pconstr "" (reverse $1))
+    (pattern COLONCOLON pattern) : (lid->pconstr "::" (cons $1 (cons $3 #nil))))
 
    (simple_pattern
-    (pattern_lident) : $1
+    (lident_ext) : (if (equal? $1 "_") (list 'PWild) (list 'PVar $1))
     (longident_constr) : (list 'PConstr $1 #nil)
     (LBRACK RBRACK) : (lid->pconstr "[]" #nil)
     (LPAREN pattern COLON type_ignore RPAREN) : $2
     (LPAREN RPAREN) : (list 'PInt 0)
     (LPAREN pattern RPAREN) : $2
     (INT) : (list 'PInt $1))
-
-   (pattern_lident
-    (lident_ext) : (if (equal? $1 "_") (list 'PWild) (list 'PVar $1)))
 
    (simple_expr
     (longident_lident) : (list 'EVar $1)
