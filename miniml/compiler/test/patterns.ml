@@ -1,5 +1,7 @@
 let () = print_endline "Pattern-matching:"
 
+let () = print "simple: "
+
 let () =
   print_int (match [] with [] -> 2 | x :: l -> 3)
 
@@ -27,6 +29,16 @@ let () =
     | Leaf _ -> 4
     | Node _ -> 5 (* note: a single wildcard for several arguments *)
   )
+
+let () = print_newline ()
+let () = print "irrefutable patterns in let-bindings: "
+
+let () = print_int (
+  let (a, b) = (2, 3) in b - a
+)
+
+let () = print_newline ()
+let () = print "nested patterns: "
 
 let test_nested_patterns =
   match Node(Leaf 0, Node(Leaf 8, Node(Leaf 2, Empty))) with
