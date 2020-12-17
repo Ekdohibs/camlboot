@@ -60,3 +60,12 @@ let test_nested_patterns =
 let () = print_int test_nested_patterns
 
 let () = print_newline ()
+let () = print "as-patterns: "
+
+let () = print_int (match (2, 3) with
+  | (_ as a, _) as p ->
+    let (_, b) = p in
+    b - a
+)
+
+let () = print_newline ()

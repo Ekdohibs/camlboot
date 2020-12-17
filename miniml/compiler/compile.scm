@@ -67,7 +67,7 @@
            MUTABLE OF OPEN REC SIG STRUCT TRY TYPE VAL WITH
            EOF STRING LIDENT UIDENT INT
            (right: MINUSGT)
-           (left: BAR)
+           (left: BAR AS)
            (nonassoc: annot_prec)
            (nonassoc: LET MATCH)
            (right: SEMICOLON)
@@ -300,7 +300,9 @@
     (simple_pattern) : $1
     (longident_constr simple_pattern) : (list 'PConstr $1 (cons $2 #nil))
     (comma_separated_list2_pattern (prec: comma_prec)) : (lid->pconstr "" (reverse $1))
-    (pattern COLONCOLON pattern) : (lid->pconstr "::" (cons $1 (cons $3 #nil))))
+    (pattern COLONCOLON pattern) : (lid->pconstr "::" (cons $1 (cons $3 #nil)))
+    (pattern AS LIDENT) : (list 'PAs $1 $3)
+   )
 
    (simple_pattern
     (lident_ext) : (if (equal? $1 "_") (list 'PWild) (list 'PVar $1))
@@ -430,6 +432,7 @@
 
 (define kw (list
     (cons "and" (cons 'AND #f))
+    (cons "as" (cons 'AS #f))
     (cons "asr" (cons 'INFIXOP4 "asr"))
     (cons "begin" (cons 'BEGIN #f))
     (cons "else" (cons 'ELSE #f))

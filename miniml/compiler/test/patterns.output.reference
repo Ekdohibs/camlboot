@@ -2,3 +2,4 @@ Pattern-matching:
 simple:  2 3 4 5
 irrefutable patterns in let-bindings:  1
 nested patterns:  6
+as-patterns:  1
