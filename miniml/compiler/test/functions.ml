@@ -12,6 +12,7 @@ let () = print_int (g 6 3)
 let () = print_int (h 3)
 
 let () = print_newline ()
+let () = print "currified: "
 
 let f1 = fun x -> fun y -> x * y
 let f2 = f1 6

@@ -1,6 +1,6 @@
 Functions:
 simple:  3 3 3
- 42
+currified:  42
 higher-order:  42 65536 42 17 42
 local:  42
 recursive:  45 20 25
