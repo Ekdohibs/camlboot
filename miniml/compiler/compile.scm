@@ -1746,7 +1746,7 @@
             (list
              'EMatch
              e
-             (list (cons p ('ELet #f bindings body))))))
+             (list (cons p (list 'ELet #f rest body))))))
       )))
   ))
 
