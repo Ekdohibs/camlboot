@@ -1231,13 +1231,17 @@
   ))
 
 (define (adjust-econstr-args args arity)
-  (cond ((and (= arity 1) (> (length args) 1))
-         (list 'EConstr (list 'Lident "") args))
-        ((and (> arity 1) (= (length args) 1))
-         (match args
-           ((('EConstr ('Lident "") args)) args)
-           (_ args)))
-        (else args)))
+  (cond
+   ((null? args)
+    (assert (= arity 0))
+    #nil)
+   ((and (= arity 1) (> (length args) 1))
+    (list (list 'EConstr (list 'Lident "") args)))
+   ((and (> arity 1) (= (length args) 1))
+    (match args
+       ((('EConstr ('Lident "") args)) args)
+       (_ args)))
+   (else args)))
 
 ; Note: currently we only use this adjust function to turn (Cons _)
 ; into (Cons (_, _)), so only the wildcard-expansion logic is
@@ -1246,14 +1250,18 @@
 ; pattern, disambiguated (if K is a binary constructor) when arity
 ; information is available. This is still TODO.
 (define (adjust-pconstr-args args arity)
-  (cond ((and (= arity 1) (> (length args) 1))
-         (list 'PConstr (list 'Lident "") args))
-        ((and (> arity 1) (= (length args) 1))
-         (match args
-           ((('PWild)) (make-list arity (list 'PWild)))
-           ((('PConstr ('Lident "") args)) args)
-           (_ args)))
-        (else args)))
+  (cond
+   ((null? args)
+    (assert (= arity 0))
+    #nil)
+   ((and (= arity 1) (> (length args) 1))
+    (list (list 'PConstr (list 'Lident "") args)))
+   ((and (> arity 1) (= (length args) 1))
+    (match args
+       ((('PWild)) (make-list arity (list 'PWild)))
+       ((('PConstr ('Lident "") args)) args)
+       (_ args)))
+   (else args)))
 
 (define (show-env env)
   (display "Vars: ")
@@ -1430,26 +1438,10 @@
     (('PInt n)
      (list (list 'HPInt n) #nil ps bindings e))
     (('PConstr c l)
-     (let* ((arity (pconstr-arity env c l))
-            (l (adjust-pconstr-args l arity)))
-       (list (list 'HPConstr c (pconstr-arity env c l)) l ps bindings e))))))
-
-; two things may go wrong here:
-; - the environment may not know the arity of the declaration,
-;   in which case we trust the pattern itself
-; - the pattern may use a single wildcard for several wildcards,
-;   in which case we trust the environment (if available)
-(define (pconstr-arity env c l)
-  (let* ((cdef (env-get-constr env c))
-         (env-arity (constr-get-arity cdef))
-         (l-arity (length l)))
-    (if (= env-arity -1) l-arity
-      (match l
-        ((('PWild))
-         env-arity)
-        (_
-         (assert (equal? l-arity env-arity))
-         l-arity)))))
+     (let* ((arity (constr-get-arity (env-get-constr env c)))
+            (l (adjust-pconstr-args l arity))
+            (arity (length l)))
+       (list (list 'HPConstr c arity) l ps bindings e))))))
 
 (define (omegas-for-pattern-head h)
   (match h
@@ -1621,17 +1613,16 @@
       (lower-tail e2)
       ))
     (('EConstr name args)
-     (match-let ((($ <constr> arity tag nums) (env-get-constr env name)))
-        (if (null? args)
-            (begin
-              (assert (= arity 0))
-              (list 'LConst tag))
-            (let* ((args (adjust-econstr-args args arity))
-                   (args (map lower-notail args)))
-              (assert (or (= arity (length args)) (= arity -1)))
-              (if (= (car nums) -2)
-                  (list 'LBlock 0 (cons (list 'LConst tag) args))
-                  (list 'LBlock tag args))))))
+     (match-let* ((($ <constr> arity tag nums) (env-get-constr env name))
+                  (args (adjust-econstr-args args arity))
+                  (args (map lower-notail args)))
+       (cond
+        ((null? args)
+         (list 'LConst tag))
+        ((= (car nums) -2)
+         (list 'LBlock 0 (cons (list 'LConst tag) args)))
+        (else
+         (list 'LBlock tag args)))))
     (('EGetfield e f)
      (list
       'LGetfield
