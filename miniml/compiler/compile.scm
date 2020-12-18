@@ -112,6 +112,7 @@
      (EXCEPTION constr_decl) : (list 'MException (car $2) (cdr $2))
      (OPEN longident_uident) : (list 'MOpen $2)
      (MODULE UIDENT functor_args EQ module_expr) : (list 'MModule $2 (mkfunctor $3 $5))
+     (MODULE TYPE UIDENT EQ module_type) : (list 'MModuleType $3 $5)
      (EXTERNAL lident_ext COLON type_count_arrows EQ STRING) : (list 'MExternal $2 $4 $6))
 
    (module_expr
@@ -2283,6 +2284,8 @@
     (fold (lambda (tdef env) (compile-type env (car tdef) (cdr tdef))) env tdefs))
    (('MModule name mod)
     (env-replace-module env name (compile-module env mod)))
+   (('MModuleType name ())
+    env)
    (('MExternal name arity primname)
     (match-let* ((shape (make-list arity (list 'Nolabel)))
            ((prim-kind . prim-num) (prim primname))
