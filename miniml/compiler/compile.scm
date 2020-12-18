@@ -67,7 +67,8 @@
            MUTABLE OF OPEN REC SIG STRUCT TRY TYPE VAL WITH
            EOF STRING LIDENT UIDENT INT
            (right: MINUSGT)
-           (left: BAR AS)
+           (left: BAR)
+           (left: AS)
            (nonassoc: annot_prec)
            (nonassoc: LET MATCH)
            (right: SEMICOLON)
@@ -300,6 +301,7 @@
     (simple_pattern) : $1
     (longident_constr simple_pattern) : (list 'PConstr $1 (cons $2 #nil))
     (comma_separated_list2_pattern (prec: comma_prec)) : (lid->pconstr "" (reverse $1))
+    (pattern BAR pattern) : (list 'POr $1 $3)
     (pattern COLONCOLON pattern) : (lid->pconstr "::" (cons $1 (cons $3 #nil)))
     (pattern AS LIDENT) : (list 'PAs $1 $3)
    )
@@ -1380,6 +1382,12 @@
       (('PWild) acc)
       (('PInt _) acc)
       (('PConstr c ps) (fold-right loop acc ps))
+      (('POr p1 p2)
+       (let* ((vars1 (loop p1 #nil))
+              (vars2 (loop p2 #nil)))
+         (assert (equal? (sort vars1 <=) (sort vars2 <=)))
+         (append vars1 acc)
+       ))
 )))
 
 (define (match-decompose-matrix env args m)
@@ -1407,13 +1415,20 @@
     ))
 
 (define (simplify-matrix env arg m)
-  (map (lambda (row) (simplify-row env arg row)) m))
+  (append-map (lambda (row) (simplify-row env arg row)) m))
 
-; rows of a "simplified (non-empty) matrix" are of the form
+; Rows of a "simplified (non-empty) matrix" are of the form
 ; (head head-subpatterns other-patterns bindings action)
 ;
-; a head is either #nil, for the wildcard pattern, or a "strong head"
+; A head is either #nil, for the wildcard pattern, or a "strong head"
 ; representing the head constructor of the values being matched.
+;
+; This function returns a list of rows, as or-patterns may simplify
+; into several-rows. For example,
+;   ((Nil | Cons (_, _)) ps bindings e
+; simplifies into two rows
+;   Nil #nil    ps bindings e
+;   Cons (_ _) ps bindings e
 (define (simplify-row env arg row)
   (match-let (((p ps bindings e) row))
    (match p
@@ -1424,14 +1439,19 @@
      (let* ((bindings (cons (cons v arg) bindings)))
      (simplify-row env arg (list p ps bindings e))))
     (('PWild)
-     (list #nil #nil ps bindings e))
+     (list (list #nil #nil ps bindings e)))
     (('PInt n)
-     (list (list 'HPInt n) #nil ps bindings e))
+     (list (list (list 'HPInt n) #nil ps bindings e)))
     (('PConstr c l)
      (let* ((arity (constr-get-arity (env-get-constr env c)))
             (l (adjust-pconstr-args l arity))
             (arity (length l)))
-       (list (list 'HPConstr c arity) l ps bindings e))))))
+       (list (list (list 'HPConstr c arity) l ps bindings e))))
+    (('POr p1 p2)
+     (append
+      (simplify-row env arg (list p1 ps bindings e))
+      (simplify-row env arg (list p2 ps bindings e))))
+)))
 
 (define (omegas-for-pattern-head h)
   (match h

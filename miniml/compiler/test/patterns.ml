@@ -69,3 +69,37 @@ let () = print_int (match (2, 3) with
 )
 
 let () = print_newline ()
+let () = print "or-patterns: "
+
+(* toplevel ors, no parentheses *)
+let () = print_int (match 1 with
+  | 0 | 1 | 2 -> 1 (* no parentheses *)
+  | 3 | 4 -> 2
+  | 5 | _ -> 3
+)
+
+(* toplevel ors, with parentheses *)
+let () = print_int (match 3 with
+  | (0 | 1 | 2) -> 1
+  | (3 | 4) -> 2 (* parentheses *)
+  | 5 | _ -> 3
+)
+
+(* in-depth ors *)
+let () = print_int (match (2, 3) with
+  | ((0 | 1), _) -> 1
+  | (2, (0 | 1)) -> 2
+  | (2, (2 | 3)) -> 3
+  | ((3 | 4), _) -> 4
+  | _ -> 5
+)
+
+(* oring constant and non-constant patterns *)
+let () = print_int (match Node (Empty, Empty) with
+  | Empty | Leaf _ -> 0
+  | Node ((Empty | Leaf _), Node _) -> 1
+  | Node (_, (Empty | Leaf _)) -> 4
+  | Node (Node _, Node _) -> 12
+)
+
+let () = print_newline ()
