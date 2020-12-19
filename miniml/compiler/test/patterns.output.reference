@@ -4,3 +4,4 @@ irrefutable patterns in let-bindings:  1
 nested patterns:  6
 as-patterns:  1
 or-patterns:  1 2 3 4
+record patterns 1

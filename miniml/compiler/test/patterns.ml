@@ -103,3 +103,13 @@ let () = print_int (match Node (Empty, Empty) with
 )
 
 let () = print_newline ()
+let () = print "record patterns"
+
+type ('a, 'b) t = { a : 'a; b : 'b }
+let () = print_int (match { a = Empty; b = Leaf 1 } with
+  | { a = (Leaf _ | Node _) } -> 0
+  | { b = (Empty | Node _) } -> 2
+  | { a = Empty; b = Leaf n } -> n
+)
+
+let () = print_newline ()

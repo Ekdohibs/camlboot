@@ -289,6 +289,13 @@
    (record_item_expr
     (longident_field EQ expr_no_semi) : (cons $1 $3))
 
+   (record_list_pattern
+    (record_item_pattern) : (cons $1 #nil)
+    (record_list_pattern SEMICOLON record_item_pattern) : (cons $3 $1))
+
+   (record_item_pattern
+    (longident_field EQ pattern) : (cons $1 $3))
+
    (comma_separated_list2_pattern
     (pattern COMMA pattern) : (cons $3 (cons $1 #nil))
     (comma_separated_list2_pattern COMMA pattern) : (cons $3 $1))
@@ -313,6 +320,7 @@
     (LPAREN pattern COLON type_ignore RPAREN) : $2
     (LPAREN RPAREN) : (list 'PInt 0)
     (LPAREN pattern RPAREN) : $2
+    (LBRACE record_list_pattern option_semicolon RBRACE) : (list 'PRecord (reverse $2))
     (INT) : (list 'PInt $1))
 
    (simple_expr
@@ -1249,6 +1257,14 @@
        (_ args)))
    (else args)))
 
+(define (expand-record-pat env field-defs)
+  (let* ((indexed-fields (map (lambda (fd) (index-field-def env fd)) field-defs))
+         (numfields (fields-numfields env field-defs)))
+    (map (lambda (index)
+        (or (assoc-ref indexed-fields index) (list 'PWild))
+      ) (range 0 numfields))
+  ))
+
 (define (show-env env)
   (display "Vars: ")
   (display (vlist->list (env-get-vars env)))
@@ -1382,6 +1398,10 @@
          (assert (equal? (sort vars1 <=) (sort vars2 <=)))
          (append vars1 acc)
        ))
+      (('PRecord field-defs)
+       (fold-right loop acc (map cdr field-defs)))
+      (('PFullRecord field-pats)
+       (fold-right loop acc field-pats))
 )))
 
 (define (match-decompose-matrix env args m)
@@ -1432,6 +1452,9 @@
     (('PAs p v)
      (let* ((bindings (cons (cons v arg) bindings)))
      (simplify-row env arg (list p ps bindings e))))
+    (('PRecord field-defs)
+     (let* ((p (list 'PFullRecord (expand-record-pat env field-defs))))
+     (simplify-row env arg (list p ps bindings e))))
     (('PWild)
      (list (list #nil #nil ps bindings e)))
     (('PInt n)
@@ -1441,6 +1464,8 @@
             (l (adjust-pconstr-args l arity))
             (arity (length l)))
        (list (list (list 'HPConstr c arity) l ps bindings e))))
+    (('PFullRecord field-pats)
+     (list (list (list 'HPRecord (length field-pats)) field-pats ps bindings e)))
     (('POr p1 p2)
      (append
       (simplify-row env arg (list p1 ps bindings e))
@@ -1452,6 +1477,7 @@
     (#nil 0)
     (('HPInt _) 0)
     (('HPConstr c arity) arity)
+    (('HPRecord arity) arity)
   ))
 
 (define (omegas-for-pattern-head h)
@@ -1568,6 +1594,8 @@
                 (match h
                   (('HPInt n)
                    (switch-cons-const sw (mkswitch-const n group-code)))
+                  (('HPRecord arity)
+                   (switch-cons-block sw (mkswitch-block 0 arity group-vars group-code)))
                   (('HPConstr c arity)
                    ; TODO: instead of passing argument variables to the switch compiler,
                    ; we could lower the field-access logic by binding the new-args
@@ -1647,7 +1675,7 @@
           (for-each (lambda (fe i) (assert (= (car fe) i))) sf (range 0 size))
           (list 'LBlock 0 es)))
     (('ERecordwith e l)
-     (let* ((size (field-get-numfields (env-get-field env (car (car l)))))
+     (let* ((size (fields-numfields env l))
             (e (lower-notail e))
             (lf (map (lambda (fe) (lower-field-def env fe)) l))
             (var "record#with")
@@ -1769,10 +1797,19 @@
 (define (lower-field-index env f)
   (field-get-index (env-get-field env f)))
 
-(define (lower-field-def env fe)
+(define (lower-field-def env field-def)
+  (match-let* (((index . expr) (index-field-def env field-def)))
+    (cons index (lower-expr env #f expr))))
+
+(define (index-field-def env fe)
   (match-let* (((f . e) fe)
                (($ <field> index numfields) (env-get-field env f)))
-    (cons index (lower-expr env #f e))))
+    (cons index e)))
+
+(define (fields-numfields env fes)
+  (match-let* (((f . e) (car fes))
+               (($ <field> index numfields) (env-get-field env f)))
+    numfields))
 
 (define (lower-handler env istail h)
   (map (match-lambda ((p . e) (cons p (lower-expr env istail e)))) h))
