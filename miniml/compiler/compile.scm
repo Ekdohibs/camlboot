@@ -1447,20 +1447,19 @@
       (simplify-row env arg (list p2 ps bindings e))))
 )))
 
-(define (omegas-for-pattern-head h)
+(define (pattern-head-arity h)
   (match h
-   (#nil #nil)
-   (('HPInt n) #nil)
-   (('HPConstr c arity) (make-list arity (list 'PWild)))))
+    (#nil 0)
+    (('HPInt _) 0)
+    (('HPConstr c arity) arity)
+  ))
+
+(define (omegas-for-pattern-head h)
+  (make-list (pattern-head-arity h) (list 'PWild)))
 
 (define (args-for-pattern-head arg h)
-  (match h
-   (#nil #nil)
-   (('HPInt n) #nil)
-   (('HPConstr c arity)
-    (map (lambda (i) (string-append arg "#" (number->string i))
-       ) (range 0 arity)))
-))
+  (map (lambda (i) (string-append arg "#" (number->string i))
+     ) (range 0 (pattern-head-arity h))))
 
 (define (split-matrix-in-groups env simplified-matrix)
   (let*
