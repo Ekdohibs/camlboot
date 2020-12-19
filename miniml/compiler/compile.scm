@@ -1235,12 +1235,6 @@
        (_ args)))
    (else args)))
 
-; Note: currently we only use this adjust function to turn (Cons _)
-; into (Cons (_, _)), so only the wildcard-expansion logic is
-; relevant. But the code would allow us to simplify our parsing of
-; patterns, parsing "K(x,y)" as a single-argument K with a tuple
-; pattern, disambiguated (if K is a binary constructor) when arity
-; information is available. This is still TODO.
 (define (adjust-pconstr-args args arity)
   (cond
    ((null? args)
