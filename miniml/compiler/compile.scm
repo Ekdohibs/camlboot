@@ -83,7 +83,7 @@
            (left: EQ BARGT INFIXOP0)
            (right: ATAT INFIXOP1)
            (right: COLONCOLON)
-           (left: MINUS INFIXOP2)
+           (left: PLUS MINUS INFIXOP2)
            (left: STAR PERCENT INFIXOP3)
            (right: INFIXOP4)
            (nonassoc: uminus_prec)
@@ -256,6 +256,7 @@
    (lident_symb
     (COLONEQ) : ":="
     (EQ) : "="
+    (PLUS) : "+"
     (MINUS) : "-"
     (STAR) : "*"
     (PERCENT) : "%"
@@ -368,6 +369,7 @@
     (expr_no_semi INFIXOP3 expr_no_semi) : (mkapp2 $2 $1 $3)
     (expr_no_semi INFIXOP4 expr_no_semi) : (mkapp2 $2 $1 $3)
     (expr_no_semi EQ expr_no_semi) : (mkapp2 "=" $1 $3)
+    (expr_no_semi PLUS expr_no_semi) : (mkapp2 "+" $1 $3)
     (expr_no_semi MINUS expr_no_semi) : (mkapp2 "-" $1 $3)
     (MINUS expr_no_semi (prec: uminus_prec)) : (mkapp1 "~-" $2)
     (expr_no_semi PERCENT expr_no_semi) : (mkapp2 "%" $1 $3)
@@ -478,6 +480,7 @@
    (cons "||" (cons 'BARBAR #f))
    (cons "|>" (cons 'BARGT #f))
    (cons "=" (cons 'EQ #f))
+   (cons "+" (cons 'PLUS #f))
    (cons "<-" (cons 'LTMINUS #f))
    (cons "-" (cons 'MINUS #f))
    (cons "->" (cons 'MINUSGT #f))
