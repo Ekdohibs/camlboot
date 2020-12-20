@@ -151,8 +151,18 @@
 
    (type_name_with_args
     (LIDENT) : $1
-    (QUOTE LIDENT LIDENT) : $3
+    (variance QUOTE LIDENT LIDENT) : $4
     (LPAREN type_ignore RPAREN LIDENT) : $4)
+
+   (variance
+    (nonempty_variance) : '()
+    ( ) : '()
+   )
+
+   (nonempty_variance
+    (PLUS) : '()
+    (MINUS) : '()
+   )
 
    (typedef
     (type_name_with_args) : (cons $1 (list 'IRebind))
@@ -222,6 +232,7 @@
     (STAR type_ignore) : '()
     (COMMA type_ignore) : '()
     (MINUSGT type_ignore) : '()
+    (nonempty_variance type_ignore) : '()
     (QUOTE type_ignore) : '()
     (longident_field type_ignore) : '()
     (LPAREN type_ignore RPAREN type_ignore) : '())
