@@ -11,6 +11,27 @@ let print_list l =
 
 let () = print_list [1; 2; 3; 4; 5; 6; 7; 8; 9]
 
+let () = print_newline ()
+
+let rec iter_sep f sep l =
+  match l with
+  | [] -> ()
+  | [x] ->
+    f x
+  (* this function is an excuse to test literral patterns
+     [p1; p2; ...; pn] *)
+  | [x0; x1] ->
+    f x0; sep (); f x1
+  | x :: l ->
+    f x; sep (); iter_sep f sep l
+
+let print_list l =
+  print "["; iter_sep print_int (fun () -> print ";") l; print "]"
+
+let () = print_list [1; 2; 3; 4; 5; 6; 7; 8; 9]
+
+let () = print_newline ()
+
 let rec map f l =
   match l with
   | [] -> []

@@ -204,6 +204,14 @@
     (expr_no_semi) : (cons $1 #nil)
     (semi_separated_expr_list SEMICOLON expr_no_semi) : (cons $3 $1))
 
+   (semi_separated_pattern_list_opt
+    (semi_separated_pattern_list) : (reverse $1)
+    (semi_separated_pattern_list SEMICOLON) : (reverse $1))
+
+   (semi_separated_pattern_list
+    (pattern) : (cons $1 #nil)
+    (semi_separated_pattern_list SEMICOLON pattern) : (cons $3 $1))
+
    (type_ignore
     ( ) : '()
     (STAR type_ignore) : '()
@@ -310,6 +318,8 @@
     (lident_ext) : (if (equal? $1 "_") (list 'PWild) (list 'PVar $1))
     (longident_constr) : (list 'PConstr $1 #nil)
     (LBRACK RBRACK) : (lid->pconstr "[]" #nil)
+    (LBRACK semi_separated_pattern_list_opt RBRACK) :
+        (fold-right (lambda (p r) (lid->pconstr "::" (list p r))) (lid->pconstr "[]" #nil) $2)
     (LPAREN pattern COLON type_ignore RPAREN) : $2
     (LPAREN RPAREN) : (list 'PInt 0)
     (LPAREN pattern RPAREN) : $2
