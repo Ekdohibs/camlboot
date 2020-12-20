@@ -158,8 +158,11 @@
     (type_name_with_args) : (cons $1 (list 'IRebind))
     (type_name_with_args EQ separated_nonempty_list_bar_constr_decl) : (cons $1 (list 'ISum $3))
     (type_name_with_args EQ BAR separated_nonempty_list_bar_constr_decl) : (cons $1 (list 'ISum $4))
-    (type_name_with_args EQ LBRACE separated_semi_opt_field_decl RBRACE) : (cons $1 (list 'IRecord $4))
+    (type_name_with_args EQ record_def) : (cons $1 (list 'IRecord $3))
     (type_name_with_args EQ type_ignore) : (cons $1 (list 'IRebind)))
+
+   (record_def
+    (LBRACE separated_semi_opt_field_decl RBRACE) : $2)
 
    (let_ands
     ( ) : #nil
@@ -184,8 +187,10 @@
     (QUESTION LPAREN LIDENT EQ expr RPAREN) : (mkarg (list 'PVar $3) (list 'Optional $3) (list 'Some $5)))
 
    (constr_decl
-    (uident_ext) : (cons $1 0)
-    (uident_ext OF type_count_stars) : (cons $1 (+ 1 $3)))
+    (uident_ext) : (cons $1 (list 'VariantTuple 0))
+    (uident_ext OF type_count_stars) : (cons $1 (list 'VariantTuple (+ 1 $3)))
+    (uident_ext OF record_def) : (cons $1 (list 'VariantRecord $3))
+   )
 
    (separated_nonempty_list_bar_constr_decl
     (constr_decl) : (cons $1 #nil)
@@ -2479,22 +2484,50 @@
        (cons block-count (cons const-count (+ 1 block-count)))
        (cons const-count (cons (+ 1 const-count) block-count)))))
 
-(define (compile-type env name tdef)
+(define (expand-constr-def env type-name constr-def)
+  (match constr-def
+    ((constr-name . ('VariantTuple arity))
+     (cons env (cons constr-name arity)))
+    ((constr-name . ('VariantRecord record-def))
+     ; inline records are expanded naively:
+     ;     type t = A of { x : int }
+     ; becomes
+     ;     type t = A of t#A
+     ;     and t#A = { x : int }
+     ; (type parameters are ignored, as for other type declarations)
+     ;
+     ; Note: this representation is incompatible with OCaml, so FFI or mixed compilation
+     ; across interfaces that use inline records would not work.
+    (cons
+     (compile-type env (string-append type-name "#" constr-name) (list 'IRecord record-def))
+     (cons constr-name 1)))
+  ))
+
+(define (compile-type env type-name tdef)
   (match tdef
-   (('ISum l)
-    (let* ((final-numtags
+   (('ISum constrs)
+    (match-let* (
+           ((env . constrs)
+            (fold-right (lambda (constr-def acc)
+                (match-let* (
+                  ((env . expanded-constrs) acc)
+                  ((env . expanded-constr) (expand-constr-def env type-name constr-def))
+                 ) (cons env (cons expanded-constr expanded-constrs)))
+              ) (cons env #nil) constrs))
+           (final-numtags
             (fold (match-lambda* (((name . arity) cur-numtags)
                     (match-let (((next-tag . next-numtags) (numtags-next arity cur-numtags)))
                       next-numtags)))
-                  empty-numtags l))
+                  empty-numtags constrs))
            (nenv-constrs
             (car (fold (match-lambda* (((name . arity) (e . cur-numtags))
                          (match-let (((next-tag . next-numtags) (numtags-next arity cur-numtags)))
                            (cons
                             (bindings-replace name (mkconstr arity next-tag final-numtags) e)
                             next-numtags))))
-                       (cons (env-get-constrs env) empty-numtags) l))))
-      ; (newline)(display name)(newline)(display numtags)(newline)(newline)
+                       (cons (env-get-constrs env) empty-numtags) constrs)))
+      )
+      ; (newline)(display type-name)(newline)(display numtags)(newline)(newline)
       (env-with-constrs env nenv-constrs)))
     (('IRecord l)
          (let* ((numfields (length l))
@@ -2533,8 +2566,10 @@
    (('MOpen m)
     (let* ((menv (env-get-module env m)))
       (env-open env menv)))
-   (('MException name arity)
-    (declare-exn name arity env))
+   (('MException name constr-info)
+    (match-let* (
+     ((env . (name . arity)) (expand-constr-def env "exn" (cons name constr-info)))
+    ) (declare-exn name arity env)))
    (('MLet rec-flag bindings)
     (let* ((locations (map (lambda (def) (if (equal? (def-get-name def) "_") #nil (slot-for-global))) bindings))
            (nenv-vars (fold (match-lambda* ((($ <def> name args body) loc e)
