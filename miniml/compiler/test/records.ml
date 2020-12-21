@@ -31,3 +31,23 @@ let () =
   | {a; b} -> print_int a; print_int b
 
 let () = print_newline ()
+let () = print "inline records: "
+
+type t =
+  | A of { x : int; y : int; u : int }
+  | B of { z : int }
+
+let print_t = function
+  | A { x; u } -> print_int x; print_int u (* note: field y is ignored *)
+  | B { z = name } -> print_int name
+
+let rec loop = function
+| [] -> ()
+| t :: ts -> print_t t; loop ts
+
+let () = let z = 3 in loop [
+  A { x = 1; y = 0; u = 2 };
+  B { z; }
+]
+
+let () = print_newline ()

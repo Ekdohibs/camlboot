@@ -4,6 +4,7 @@ exception E1
 exception E2 of int
 exception E3
 exception E4 of int
+exception E5 of { x : int }
 
 let show_exn e =
   match e with
@@ -36,5 +37,6 @@ let () = print " "; show_exn E1
 let () = print " "; show_exn (E2 7)
 let () = print " "; show_exn E3
 let () = print " "; show_exn (E4 7)
+let () = try raise (E5 { x = 8 }) with E5 { x } -> print_int x
 
 let () = print_newline ()
