@@ -2454,7 +2454,7 @@
       (fv-expr body (bv-add-var f bv))))
     (('LLetrecfun bindings body)
      (let* ((vars (map car bindings))
-            (funs (map cadddr bindings))
+            (funs (map caddr bindings))
             (rec-bv (bv-add-vars vars bv)))
        (vset-union
         (fv-expr-list funs rec-bv)
