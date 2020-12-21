@@ -17,7 +17,18 @@ external ( lsl ) : int -> int -> int = "%118"
 external ( lsr ) : int -> int -> int = "%119"
 external ( asr ) : int -> int -> int = "%120"
 external ( = ) : 'a -> 'a -> bool = "caml_equal"
+external ( <> ) : 'a -> 'a -> bool = "caml_notequal"
+external ( > ) : 'a -> 'a -> bool = "caml_greaterthan"
+external ( >= ) : 'a -> 'a -> bool = "caml_greaterequal"
+external ( < ) : 'a -> 'a -> bool = "caml_lessthan"
+external ( <= ) : 'a -> 'a -> bool = "caml_lessequal"
 external raise : exn -> 'a = "%91"
+
+let failwith s = raise (Failure s)
+let invalid_arg s = raise (Invalid_argument s)
+let assert b = if b then () else raise (Assert_failure ("", 0, 0))
+let fst (a, b) = a
+let snd (a, b) = b
 
 let stdout = caml_ml_open_descriptor_out 1
 
