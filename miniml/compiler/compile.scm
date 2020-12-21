@@ -1535,8 +1535,33 @@
                        ) vlist-null groups))
                    ))
                ) groups simplified-matrix))
+       (strong-groups (vhash-delete #nil groups))
+       (groups
+        ; if the strong groups are complete, no need for the default group
+        (if (complete-groups? env strong-groups) strong-groups groups))
        )
     groups))
+
+; A set of strong groups is "complete" if all possible constructors
+; for values of this type are covered.
+(define (complete-groups? env strong-groups)
+  (let* (
+    (group-width
+     (if (vlist-null? strong-groups) #nil
+       (match (car (vlist-head strong-groups))
+         (('HPInt _) #nil)
+         (('HPRecord arity) 1)
+         (('HPConstr c arity)
+          (match-let* (
+             (cdef (env-get-constr env c))
+             ((numconsts . numblocks) (constr-get-numconstrs cdef))
+           ) (if (< numconsts 0) #nil
+                 (+ numconsts numblocks))
+           ))
+       )))
+  ) (and (not (null? group-width))
+         (equal? group-width (vlist-length strong-groups)))
+))
 
 (define (match-decompose-groups env arg args groups)
   (list
