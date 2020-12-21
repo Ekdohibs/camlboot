@@ -6,10 +6,10 @@ module M = struct
 end
 
 let () =
-  print_int M.x;
-  M.(print_int x);
+  show_int M.x;
+  M.(show_int x);
   let open M in
-  print_int (f 21)
+  show_int (f 21)
 
 module N = struct
   let f ~x ?(y=2) p = p (x * y)
@@ -17,6 +17,6 @@ end
 
 let () =
   let open N in
-  f ~x:21 print_int
+  f ~x:21 show_int
 
 let () = print_newline ()

@@ -34,17 +34,17 @@ let stdout = caml_ml_open_descriptor_out 1
 
 let flush () = caml_ml_flush stdout
 
-let print s = caml_ml_output stdout s 0 (caml_ml_bytes_length s)
-
-let print_int n = print (format_int " %d" n)
+let print_string s = caml_ml_output stdout s 0 (caml_ml_bytes_length s)
+let print_int n = print_string (format_int "%d" n)
+let show_int n = print_string " "; print_int n
 
 let print_newline () =
-  print "\n";
+  print_string "\n";
   flush ()
 
 let print_endline s =
-  print s ;
-  print "\n" ;
+  print_string s ;
+  print_string "\n" ;
   flush ()
 
 (* various types used in the tests *)

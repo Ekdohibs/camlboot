@@ -7,7 +7,7 @@ let rec iter f l =
     f x; iter f l
 
 let print_list l =
-  print "["; iter print_int l; print "]"
+  print_string "["; iter show_int l; print_string "]"
 
 let () = print_list [1; 2; 3; 4; 5; 6; 7; 8; 9]
 
@@ -26,7 +26,7 @@ let rec iter_sep f sep l =
     f x; sep (); iter_sep f sep l
 
 let print_list l =
-  print "["; iter_sep print_int (fun () -> print ";") l; print "]"
+  print_string "["; iter_sep show_int (fun () -> print_string ";") l; print_string "]"
 
 let () = print_list [1; 2; 3; 4; 5; 6; 7; 8; 9]
 
