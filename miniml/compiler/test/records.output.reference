@@ -1,2 +1,4 @@
 Records:
- 5 7 7 5 5 7 42 7 5 16
+simple:  5 7 7 5
+with:  5 7 42 7 5 16
+record field punning:  1 2

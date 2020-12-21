@@ -287,14 +287,18 @@
     (record_list_expr SEMICOLON record_item_expr) : (cons $3 $1))
 
    (record_item_expr
-    (longident_field EQ expr_no_semi) : (cons $1 $3))
+    (longident_field EQ expr_no_semi) : (cons $1 $3)
+    (LIDENT) : (cons (list 'Lident $1) (lid->evar $1))
+   )
 
    (record_list_pattern
     (record_item_pattern) : (cons $1 #nil)
     (record_list_pattern SEMICOLON record_item_pattern) : (cons $3 $1))
 
    (record_item_pattern
-    (longident_field EQ pattern) : (cons $1 $3))
+    (longident_field EQ pattern) : (cons $1 $3)
+    (LIDENT) : (cons (list 'Lident $1) (lid->pvar $1))
+   )
 
    (comma_separated_list2_pattern
     (pattern COMMA pattern) : (cons $3 (cons $1 #nil))
