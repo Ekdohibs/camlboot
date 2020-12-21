@@ -6,35 +6,35 @@ external obj_field : Obj.t -> int -> Obj.t = "%80"
 
 let rec print_obj x =
   let t = obj_tag x in
-  if t = 1000 then print (format_int "%d" x)
-  else if t = 1001 then print "<out of heap>"
-  else if t = 1002 then print "<unaligned>"
-  else if t = 252 then (print "\""; print x; print "\"")
-  else (print (format_int "%d" t); print "["; print_obj_fields x 0; print "]")
+  if t = 1000 then print_string (format_int "%d" x)
+  else if t = 1001 then print_string "<out of heap>"
+  else if t = 1002 then print_string "<unaligned>"
+  else if t = 252 then (print_string "\""; print_string x; print_string "\"")
+  else (print_string (format_int "%d" t); print_string "["; print_obj_fields x 0; print_string "]")
 
 and print_obj_fields x i =
   if i = obj_size x then ()
   else if i = obj_size x - 1 then print_obj (obj_field x i)
-  else (print_obj (obj_field x i); print " "; print_obj_fields x (i + 1))
+  else (print_obj (obj_field x i); print_string " "; print_obj_fields x (i + 1))
 
 let print_exn e =
   match e with
-  | Out_of_memory -> print "Out_of_memory"
-  | Sys_error s -> print "Sys_error \""; print s; print "\""
-  | Failure s -> print "Failure \""; print s; print "\""
-  | Invalid_argument s -> print "Invalid_argument \""; print s; print "\""
-  | End_of_file -> print "End_of_file"
-  | Division_by_zero -> print "Division_by_zero"
-  | Not_found -> print "Not_found"
-  | Match_failure _ -> print "Match_failure _"
-  | Stack_overflow -> print "Stack overflow"
-  | Sys_blocked_io -> print "Sys_blocked_io"
-  | Assert_failure _ -> print "Assert_failure _"
-  | Undefined_recursive_module _ -> print "Undefined_recursive_module _"
-  | _ -> print "<unknown>"
+  | Out_of_memory -> print_string "Out_of_memory"
+  | Sys_error s -> print_string "Sys_error \""; print_string s; print_string "\""
+  | Failure s -> print_string "Failure \""; print_string s; print_string "\""
+  | Invalid_argument s -> print_string "Invalid_argument \""; print_string s; print_string "\""
+  | End_of_file -> print_string "End_of_file"
+  | Division_by_zero -> print_string "Division_by_zero"
+  | Not_found -> print_string "Not_found"
+  | Match_failure _ -> print_string "Match_failure _"
+  | Stack_overflow -> print_string "Stack overflow"
+  | Sys_blocked_io -> print_string "Sys_blocked_io"
+  | Assert_failure _ -> print_string "Assert_failure _"
+  | Undefined_recursive_module _ -> print_string "Undefined_recursive_module _"
+  | _ -> print_string "<unknown>"
 
 let run_and_print_exn f =
-  try f (); print "no exception\n" with e -> (print_obj e; print " "; print_exn e; print "\n")
+  try f (); print_string "no exception\n" with e -> (print_obj e; print_string " "; print_exn e; print_string "\n")
 
 external int_of_string : string -> int = "caml_int_of_string"
 external sys_getenv : string -> string = "caml_sys_getenv"

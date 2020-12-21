@@ -6,11 +6,11 @@ end
 
 module A = F(struct let x = 21 end)
 module B = F(struct let x = 12 end)
-module X = struct let () = print " only once" let x = 16 end
+module X = struct let () = print_string " only once" let x = 16 end
 module C = F(X)
 module D = F(X)
 
 let () =
-  print_int A.x; print_int B.x; if C.x = D.x then print " ok" else print " ko"
+  show_int A.x; show_int B.x; if C.x = D.x then print_string " ok" else print_string " ko"
 
 let () = print_newline ()

@@ -1,12 +1,12 @@
 let () = print_endline "Pattern-matching:"
 
-let () = print "simple: "
+let () = print_string "simple: "
 
 let () =
-  print_int (match [] with [] -> 2 | x :: l -> 3)
+  show_int (match [] with [] -> 2 | x :: l -> 3)
 
 let () =
-  print_int (match 1 :: [] with
+  show_int (match 1 :: [] with
     | [] -> 2 (* note: leading bar *)
     | _ :: _ -> 3
   )
@@ -16,7 +16,7 @@ let test_function = function
   | x :: _ -> x + 1 (* note: one of the pattern arguments is a wildcard *)
 
 let () =
-  print_int (test_function (3 :: []))
+  show_int (test_function (3 :: []))
 
 type 'a tree =
 | Empty
@@ -24,21 +24,21 @@ type 'a tree =
 | Node of 'a tree * 'a tree
 
 let () =
-  print_int (match Node (Leaf 1, Leaf 2) with
+  show_int (match Node (Leaf 1, Leaf 2) with
     | Empty -> 4
     | Leaf _ -> 4
     | Node _ -> 5 (* note: a single wildcard for several arguments *)
   )
 
 let () = print_newline ()
-let () = print "irrefutable patterns in let-bindings: "
+let () = print_string "irrefutable patterns in let-bindings: "
 
-let () = print_int (
+let () = show_int (
   let (a, b) = (2, 3) in b - a
 )
 
 let () = print_newline ()
-let () = print "nested patterns: "
+let () = print_string "nested patterns: "
 
 let test_nested_patterns =
   match Node(Leaf 0, Node(Leaf 8, Node(Leaf 2, Empty))) with
@@ -57,36 +57,36 @@ let test_nested_patterns =
      | Node (Leaf _, Leaf _) -> 1
      | _ -> 2)
 
-let () = print_int test_nested_patterns
+let () = show_int test_nested_patterns
 
 let () = print_newline ()
-let () = print "as-patterns: "
+let () = print_string "as-patterns: "
 
-let () = print_int (match (2, 3) with
+let () = show_int (match (2, 3) with
   | (_ as a, _) as p ->
     let (_, b) = p in
     b - a
 )
 
 let () = print_newline ()
-let () = print "or-patterns: "
+let () = print_string "or-patterns: "
 
 (* toplevel ors, no parentheses *)
-let () = print_int (match 1 with
+let () = show_int (match 1 with
   | 0 | 1 | 2 -> 1 (* no parentheses *)
   | 3 | 4 -> 2
   | 5 | _ -> 3
 )
 
 (* toplevel ors, with parentheses *)
-let () = print_int (match 3 with
+let () = show_int (match 3 with
   | (0 | 1 | 2) -> 1
   | (3 | 4) -> 2 (* parentheses *)
   | 5 | _ -> 3
 )
 
 (* in-depth ors *)
-let () = print_int (match (2, 3) with
+let () = show_int (match (2, 3) with
   | ((0 | 1), _) -> 1
   | (2, (0 | 1)) -> 2
   | (2, (2 | 3)) -> 3
@@ -95,7 +95,7 @@ let () = print_int (match (2, 3) with
 )
 
 (* oring constant and non-constant patterns *)
-let () = print_int (match Node (Empty, Empty) with
+let () = show_int (match Node (Empty, Empty) with
   | Empty | Leaf _ -> 0
   | Node ((Empty | Leaf _), Node _) -> 1
   | Node (_, (Empty | Leaf _)) -> 4
@@ -103,21 +103,21 @@ let () = print_int (match Node (Empty, Empty) with
 )
 
 let () = print_newline ()
-let () = print "record patterns"
+let () = print_string "record patterns"
 
 type ('a, 'b) t = { a : 'a; b : 'b }
-let () = print_int (match { a = Empty; b = Leaf 1 } with
+let () = show_int (match { a = Empty; b = Leaf 1 } with
   | { a = (Leaf _ | Node _) } -> 0
   | { b = (Empty | Node _) } -> 2
   | { a = Empty; b = Leaf n } -> n
 )
 
 let () = print_newline ()
-let () = print "when-guards"
+let () = print_string "when-guards"
 
-let () = print_int (match Node (Leaf 2, Leaf 2) with
-  | Node _ when (print_int 1; false) -> 0
-  | Node (Leaf n, (Leaf _ | Empty)) when (print_int n; false) -> 0
+let () = show_int (match Node (Leaf 2, Leaf 2) with
+  | Node _ when (show_int 1; false) -> 0
+  | Node (Leaf n, (Leaf _ | Empty)) when (show_int n; false) -> 0
   | Node _ -> 3
   | _ -> 4
 )
