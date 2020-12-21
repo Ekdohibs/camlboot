@@ -113,3 +113,13 @@ let () = print_int (match { a = Empty; b = Leaf 1 } with
 )
 
 let () = print_newline ()
+let () = print "when-guards"
+
+let () = print_int (match Node (Leaf 2, Leaf 2) with
+  | Node _ when (print_int 1; false) -> 0
+  | Node (Leaf n, (Leaf _ | Empty)) when (print_int n; false) -> 0
+  | Node _ -> 3
+  | _ -> 4
+)
+
+let () = print_newline ()

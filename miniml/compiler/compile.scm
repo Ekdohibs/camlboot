@@ -64,7 +64,7 @@
    (LPAREN LBRACE RBRACE QUOTE TILDE
            QUESTION SEMICOLONSEMICOLON LBRACK RBRACK LBRACKBAR BARRBRACK
            AND BEGIN END EXCEPTION EXTERNAL FUN FUNCTION FUNCTOR IF IN MODULE
-           MUTABLE OF OPEN REC SIG STRUCT TRY TYPE VAL WITH
+           MUTABLE OF OPEN REC SIG STRUCT TRY TYPE VAL WHEN WITH
            EOF STRING LIDENT UIDENT INT
            (right: MINUSGT)
            (left: BAR)
@@ -463,7 +463,9 @@
     (clause BAR clauses_without_bar) : (cons $1 $3))
 
    (clause
-    (pattern MINUSGT expr) : (cons $1 $3))
+    (pattern MINUSGT expr) : (list $1 #nil $3)
+    (pattern WHEN expr MINUSGT expr) : (list $1 $3 $5)
+   )
 
    (field_decl
     (LIDENT COLON type_ignore) : $1
@@ -507,6 +509,7 @@
     (cons "try" (cons 'TRY #f))
     (cons "type" (cons 'TYPE #f))
     (cons "val" (cons 'VAL #f))
+    (cons "when" (cons 'WHEN #f))
     (cons "with" (cons 'WITH #f))
     ))
 
@@ -1354,19 +1357,22 @@
 ; Pattern-matching compilation is done using "matrix decomposition".
 ; A matrix represents an ordered list of pattern-matching clauses that
 ; simultaneously match on several argument variables (rather than arbitrary expressions).
-; The right-hand-side of each clause is not only an expression, but also a list
-; of bindings of pattern variables to argument variables.
+;
+; Each row of the matrix contains
+; - one pattern for each column of the matrix
+; - a list of bindings of pattern variables to argument variables
+; - the "action", containing the when-guard (if any) and the right-hand-side body of the clause
 ;
 ; One matrix corresponding to
 ;   match x,  y,  z with
-;      |  p1 as v, q1, r1 -> e1
+;      |  p1 as v, q1, r1 when g -> e1
 ;      |  p2,      q2 as w, r2 -> e2
 ; has the "arguments" list (args)
 ;   (list x y z)
 ; and the "matrix" of clauses (m)
 ;   (list
-;    (list (list p1 q1 r1) (list (cons v x)) e1)
-;    (list (list p2 q2 r2) (list (cons w y)) e2))
+;    (list (list p1 q1 r1) (list (cons v x)) (cons g e1))
+;    (list (list p2 q2 r2) (list (cons w y)) (cons #nil e2)))
 ; The "arity" of a matrix is the size of its (args)
 ; list, and the number of columns of the matrix --
 ; the two quantities always remain equal.
@@ -1375,46 +1381,48 @@
 ; (constructors use the 'MT prefix), which is itself turned
 ; into lower code by the lower-matching-tree function.
 ;
-; Note: matrix rows are represented as fixed-sized lists
-; (one element for the patterns, one for bindings, one for the right-hand-side)
-; instead of cons-pairs, as further specialized representations
-; are used during the transformation at higher arities
-; (4 for non-empty rows, 5 for non-empty rows with beheaded simple first pattern)
-; and cons-pairs quickly become inconvenient at higher arities.
-;
-; Note: in practice we do not use expressions as actions during matrix decomposition,
-; we represent each action by just its index in the initial clauses. This lets us
-; detect which actions are duplicated by the matching process, and turn those into exits
-; to avoid code duplication.
+; Note: in practice we do not store when-guards and actions in the row,
+; we represent them by just the index in the initial clauses. This lets us
+; detect which actions are duplicated by the matching process, and turn those
+; into functions (for guards) and exits (for actions) to avoid code duplication.
 (define (lower-match env istail arg h)
   (match-let* (
      (patterns (map car h))
-     (actions (map cdr h))
+     (actions (map (match-lambda ((p g e) (cons g e))) h))
+
      (pattern-vars (map pat-vars patterns))
      (actions
-      (map (lambda (pat-vars e)
-             (lower-expr (local-vars env pat-vars) istail e)
-       ) pattern-vars actions))
-     (action-numbers (range 0 (length actions)))
+      (map (lambda (pat-vars action)
+             (match-let* (
+                  (env (local-vars env pat-vars))
+                  ((g . rhs) action)
+              )
+              (cons
+                 (if (null? g) #nil (lower-expr env #f g))
+                 (lower-expr env istail rhs)))
+      ) pattern-vars actions))
+
+     (clause-numbers (range 0 (length h)))
      (args (list arg))
      (matrix
       ; a list of clauses is turned into a matrix of arity 1
-      (map (lambda (p action-number) (list (list p) #nil action-number)) patterns action-numbers))
+      (map (lambda (p idx) (list (list p) #nil idx)) patterns clause-numbers))
+     (guarded? (lambda (idx) (not (null? (car (list-ref actions idx))))))
      (matching-tree
-      (match-decompose-matrix env args matrix))
+      (match-decompose-matrix env guarded? args matrix))
+
+
      (action-frequencies
-      (compute-action-frequencies action-numbers matching-tree))
-     ((exit-defs . dedup-actions)
+      (compute-action-frequencies clause-numbers matching-tree))
+     ((under-guard-defs under-exit-defs actions)
       (deduplicate-actions
        (map
-        (lambda (vars e freq) (list vars e freq))
+        (lambda (vars act freq) (list vars act freq))
          pattern-vars actions action-frequencies)))
-     (code
-      (lower-matching-tree env matching-tree dedup-actions))
   )
-  (if (null? exit-defs)
-      code
-      (list 'LLetexits exit-defs code))
+  (under-guard-defs
+   (under-exit-defs
+    (lower-matching-tree env matching-tree actions)))
 ))
 
 (define (pat-vars p)
@@ -1437,7 +1445,7 @@
        (fold-right loop acc field-pats))
 )))
 
-(define (match-decompose-matrix env args m)
+(define (match-decompose-matrix env guarded? args m)
   ; (display "matrix") (display args) (newline)
   ; (for-each (lambda (r) (display r) (newline)) m)
   (assert (or (null? m) (equal? (length args) (length (car (car m))))))
@@ -1445,10 +1453,13 @@
     ((_ . #nil)
      ; no clauses: this matrix rejects all inputs
      (list 'MTFailure))
-    ((#nil . ((#nil bindings e) . _))
-     ; at least one clause of arity 0: matching (on nothing)
-     ; always succeeds and goes to this right-hand-side.
-     (list 'MTAction bindings e))
+    ((#nil . ((#nil bindings action) . rest))
+     ; no columns: matching (on nothing) succeeds,
+     ; but may still need to continue if a guard fails
+     (list 'MTAction bindings action
+       (if (not (guarded? action))
+         #nil
+         (match-decompose-matrix env guarded? args rest))))
     (((arg . args) . m)
      ; arity > 0; we represent m with a distinguished head column
      ; (first column, other columns, bindings, action)
@@ -1456,7 +1467,7 @@
       ((m (map (match-lambda (((p . ps) bindings e) (list p ps bindings e))) m))
        (m (simplify-matrix env arg m))
        (groups (split-matrix-in-groups env m))
-       (matching-tree (match-decompose-groups env arg args groups)))
+       (matching-tree (match-decompose-groups env guarded? arg args groups)))
       matching-tree
      ))
     ))
@@ -1577,13 +1588,14 @@
          (equal? group-width (vlist-length strong-groups)))
 ))
 
-(define (match-decompose-groups env arg args groups)
+(define (match-decompose-groups env guarded? arg args groups)
   (list
    'MTSwitch
    arg
    (vhash-map (lambda (h submatrix)
        (let* ((newargs (args-for-pattern-head arg h))
-              (matching-tree (match-decompose-matrix env (append newargs args) submatrix)))
+              (matching-tree
+               (match-decompose-matrix env guarded? (append newargs args) submatrix)))
        (cons newargs matching-tree))
      ) groups)
 ))
@@ -1594,42 +1606,88 @@
   (let iter ((matching-tree matching-tree))
     (match matching-tree
       (('MTFailure) #f)
-      (('MTAction bindings act)
-       (vector-set! freqs act (+ 1 (vector-ref freqs act))))
+      (('MTAction bindings act rest)
+       (vector-set! freqs act (+ 1 (vector-ref freqs act)))
+       (if (null? rest) #f (iter rest)))
       (('MTSwitch arg groups)
        (vlist-for-each (match-lambda ((h . (vars . group-tree)) (iter group-tree))) groups))
   ))
   (vector->list freqs)
 ))
 
-(define (deduplicate-actions actions)
-  (fold-right (lambda (action i acc)
-      (match-let* (
-         ((vars e freq) action)
-         ((exit-defs . actions) acc)
-      )
-      (if (or (<= freq 1) (substituable? e))
-        (cons exit-defs (cons e actions))
-        (let* (
-           (exit (string-append "act#" (number->string i)))
-           (exit-def (list exit vars e))
-           (exit-action (list 'LExit exit (map lid->lvar vars)))
-         )
-         (cons (cons exit-def exit-defs) (cons exit-action actions)))
-    ))) (cons #nil #nil) actions (range 0 (length actions))))
+(define (deduplicate-actions action-infos)
+  (match-let* (((guard-defs exit-defs actions)
+    (fold-right (lambda (action-info i acc)
+        (match-let* (
+           ((vars action freq) action-info)
+           ((guard-defs exit-defs actions) acc)
+        )
+        (if (<= freq 1)
+          (list guard-defs exit-defs (cons action actions))
+          (match-let* (
+             ((g . e) action)
+             ((guard-defs . g)
+              (if (or (null? g) (substituable? g))
+                (cons guard-defs g)
+                (let* (
+                  (guard-name (string-append "guard#" (number->string i)))
+                  (guard-def
+                   (list guard-name (if (null? vars) (list #nil) vars) g))
+                  (guard-call
+                   (list 'LApply (lid->lvar guard-name)
+                      (if (null? vars)
+                        (list (list 'LConst 0))
+                        (map lid->lvar vars))))
+                ) (cons (cons guard-def guard-defs) guard-call))))
+             ((exit-defs . e)
+              (if (substituable? e)
+                (cons exit-defs e)
+                (let* (
+                  (exit-name (string-append "act#" (number->string i)))
+                  (exit-def (list exit-name vars e))
+                  (exit-call (list 'LExit exit-name (map lid->lvar vars)))
+                ) (cons (cons exit-def exit-defs) exit-call))))
+           ) (list guard-defs exit-defs (cons (cons g e) actions))))
+      )) (list #nil #nil #nil) action-infos (range 0 (length action-infos)))
+  ))
+  (list
+   (lambda (code)
+     (fold-right (lambda (guard-info body)
+         (match-let* (((name args fun) guard-info))
+           (list 'LLetfun name args fun body))
+       ) code guard-defs))
+   (lambda (code)
+     (if (null? exit-defs) code (list 'LLetexits exit-defs code)))
+   actions)
+))
 
 (define (lower-matching-tree env matching-tree actions)
   (match matching-tree
     (('MTFailure) (list 'LMatchFailure))
-    (('MTAction bindings action-number)
-     ; bindings were accumulated into a list during decomposition,
-     ; so the earliest binding is at the end of the list. We use 'fold' so that
-     ; it ends up at the beginning of the resulting expression.
-     (fold (match-lambda* (((v . arg) e)
-             ; note: this Let is a variable rebinding (let x = y in ...),
-             ; with special support in the code generator
-             (list 'LLet v (lid->lvar arg) e)
-        )) (list-ref actions action-number) bindings))
+    (('MTAction bindings action-number rest)
+     (match-let* (
+       (under-bindings (lambda (body)
+         ; bindings were accumulated into a list during decomposition,
+         ; so the earliest binding is at the end of the list. We use 'fold' so that
+         ; it ends up at the beginning of the resulting expression.
+         (fold (match-lambda* (((v . arg) e)
+                 ; note: this Let is a variable rebinding (let x = y in ...),
+                 ; with special support in the code generator
+                 (list 'LLet v (lid->lvar arg) e)
+           )) body bindings)))
+       ((action-guard . action-expr) (list-ref actions action-number))
+      )
+      (if (null? action-guard)
+        (under-bindings action-expr)
+        (let* ((exit (string-append "guard#" (number->string action-number) "#exit")))
+         (list 'LLetexits
+            (list (list exit #nil (lower-matching-tree env rest actions)))
+            (under-bindings
+             (list 'LIf action-guard
+                action-expr
+                (list 'LExit exit #nil))))
+        ))
+     ))
     (('MTSwitch arg groups) (lower-match-groups env arg groups actions))
 ))
 
@@ -1764,7 +1822,7 @@
          (lower-expr (local-var env var) istail
           (list 'EMatch (lid->evar var)
            (append h (list
-             (cons (list 'PWild) (list 'EReraise (lid->evar var))))))))))
+             (list (list 'PWild) #nil (list 'EReraise (lid->evar var))))))))))
     (('EReraise e)
      (list 'LReraise (lower-notail e)))
     (('ELet rec-flag bindings body)
@@ -1848,7 +1906,7 @@
             (list
              'EMatch
              e
-             (list (cons p (list 'ELet #f rest body))))))
+             (list (list p #nil (list 'ELet #f rest body))))))
       )))
   ))
 
@@ -1904,9 +1962,8 @@
       (string-append "arg#" (number->string i)))))
 
 (define (lower-arg-default name default body)
-  (let* ((noneline (cons (lid->pconstr "None" #nil) default))
-         (someline (cons (lid->pconstr "Some" (list (lid->pvar name)))
-                         (lid->evar name)))
+  (let* ((noneline (list (lid->pconstr "None" #nil) #nil default))
+         (someline (list (lid->pconstr "Some" (list (lid->pvar name))) #nil (lid->evar name)))
          (default-expr (list 'EMatch (lid->evar name) (list noneline someline))))
     (list 'ELet #f (list (cons (lid->pvar name) default-expr)) body)))
 
@@ -1915,7 +1972,7 @@
    (('PVar _)
     body)
    (_
-    (list 'EMatch (lid->evar name) (list (cons pat body))))))
+    (list 'EMatch (lid->evar name) (list (list pat #nil body))))))
 
 (define (lower-switch env istail sw)
   (match-let*
