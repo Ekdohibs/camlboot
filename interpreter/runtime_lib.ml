@@ -59,5 +59,5 @@ let exn3 env name wrap1 wrap2 wrap3 =
   fun arg1 arg2 arg3 ->
     let v1 = wrap1 arg1 in
     let v2 = wrap2 arg2 in
-    let v3 = wrap2 arg3 in
+    let v3 = wrap3 arg3 in
     ptr @@ Constructor (name, exn_id, Some (ptr @@ Tuple [ v1; v2; v3 ]))
