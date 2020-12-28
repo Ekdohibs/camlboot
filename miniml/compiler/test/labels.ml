@@ -16,4 +16,7 @@ let f3 () ?(x=1) (y1, y2) ~z = show_int x; show_int y1; show_int y2; show_int z
 let () = f3 () (2, 3) ~z:4
 let () = f3 () ~x:0 (1, 2) ~z:3
 
+let f4 ~p:(x, y) = show_int x; show_int y
+let () = f4 ~p:(4, 5)
+
 let () = print_newline ()
