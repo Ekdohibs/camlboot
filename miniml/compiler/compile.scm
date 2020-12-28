@@ -193,6 +193,7 @@
    (labelled_arg
     (simple_pattern) : (mknolabelfun $1)
     (TILDE LIDENT) : (mkarg (list 'PVar $2) (list 'Labelled $2) (list 'None))
+    (TILDE LIDENT COLON simple_pattern) : (mkarg $4 (list 'Labelled $2) (list 'None))
     (QUESTION LIDENT) : (mkarg (list 'PVar $2) (list 'Optional $2) (list 'None))
     (QUESTION LPAREN LIDENT EQ expr RPAREN) : (mkarg (list 'PVar $3) (list 'Optional $3) (list 'Some $5)))
 
