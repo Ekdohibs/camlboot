@@ -123,3 +123,18 @@ let () = show_int (match Node (Leaf 2, Leaf 2) with
 )
 
 let () = print_newline ()
+let () = print_string "match with exception"
+
+let f ~success:b =
+  if b then 42
+  else raise (Failure " 42")
+
+let () = match f ~success:true with
+  | n -> show_int n
+  | exception (Failure s) -> print_string s
+
+let () = match f ~success:false with
+  | n -> show_int n
+  | exception (Failure s) -> print_string s
+
+let () = print_newline ()

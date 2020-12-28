@@ -423,11 +423,18 @@
       ;; (f e1 .. en @@ e) ~> f e1 .. en e
       (list 'EApply $1 (append $2 (list (mknolabelapp $4))))
     (MATCH expr WITH clauses) : (list 'EMatch $2 $4)
-    (TRY expr WITH clauses) : (list 'ETry $2 $4)
+    (TRY expr WITH clauses) :
+      (match-let* ((clauses $4)
+                   ((value-clauses exn-clauses) (split-clauses clauses)))
+       (if (not (null? exn-clauses)) (errorp "exception clauses are invalid with 'try'"))
+       (list 'ETry $2 clauses))
     (FUNCTION clauses) :
-      (mklambda
-       (list (mknolabelfun (lid->pvar "arg#function")))
-       (list 'EMatch (lid->evar "arg#function") $2))
+      (match-let* ((clauses $2)
+                   ((value-clauses exn-clauses) (split-clauses clauses)))
+       (if (not (null? exn-clauses)) (errorp "exception clauses are invalid with 'function'"))
+       (mklambda
+        (list (mknolabelfun (lid->pvar "arg#function")))
+        (list 'EMatch (lid->evar "arg#function") clauses)))
     (LET llet llet_ands IN expr (prec: LET)) : (list 'ELet #f (cons $2 $3) $5)
     (LET REC llet llet_ands IN expr (prec: LET)) : (list 'ELet #t (cons $3 $4) $6)
     (LET OPEN longident_uident IN expr (prec: LET)) : (list 'ELetOpen $3 $5)
@@ -464,8 +471,21 @@
     (clause BAR clauses_without_bar) : (cons $1 $3))
 
    (clause
-    (pattern MINUSGT expr) : (list $1 #nil $3)
-    (pattern WHEN expr MINUSGT expr) : (list $1 $3 $5)
+    (value-clause) : (cons 'ClValue $1)
+    (exception-clause) : (cons 'ClException $1)
+   )
+
+   (value-clause
+    (pattern clause_rhs) : (list $1 (car $2) (cadr $2))
+   )
+
+   (exception-clause
+    (EXCEPTION pattern clause_rhs) : (list $2 (car $3) (cadr $3))
+    )
+
+   (clause_rhs
+    (MINUSGT expr) : (list #nil $2)
+    (WHEN expr MINUSGT expr) : (list $2 $4)
    )
 
    (field_decl
@@ -1302,6 +1322,16 @@
       ) (range 0 numfields))
   ))
 
+(define (split-clauses h)
+  (let* (
+      (h-values
+         (filter-map (match-lambda (('ClValue p g e) (list p g e))
+                                   (('ClException p g e) #f)) h))
+      (h-exceptions
+       (filter-map (match-lambda (('ClException p g e) (list p g e))
+                                 (('ClValue p g e) #f)) h))
+  ) (list h-values h-exceptions)))
+
 (define (show-env env)
   (display "Vars: ")
   (display (vlist->list (env-get-vars env)))
@@ -1727,6 +1757,12 @@
                 ))) sw groups)))
   (list 'LSwitch (lid->lvar arg) sw)))
 
+(define (lower-try env istail exn-arg h)
+  (lower-match env istail exn-arg
+    ; add a reraise clause at the end of the pattern-matching
+    (append h (list
+      (list (list 'PWild) #nil (list 'EReraise (lid->evar exn-arg)))))))
+
 (define (lower-expr env istail expr)
   (let ((lower-tail (lambda (e) (lower-expr env istail e)))
         (lower-notail (lambda (e) (lower-expr env #f e))))
@@ -1813,17 +1849,28 @@
        (if istail
            (list 'LTailApply e args)
            (list 'LApply e args))))
-    (('EMatch e h)
-     (list 'LLet "match#arg" (lower-notail e)
-             (lower-match (local-var env "match#arg") istail "match#arg" h)))
-    (('ETry e h)
-     (let* ((e (lower-notail e))
-            (var "try#exn"))
-       (list 'LCatch e var
-         (lower-expr (local-var env var) istail
-          (list 'EMatch (lid->evar var)
-           (append h (list
-             (list (list 'PWild) #nil (list 'EReraise (lid->evar var))))))))))
+    (('EMatch e clauses)
+     (match-let* (
+         (e (lower-notail e))
+         ((value-clauses exception-clauses) (split-clauses clauses))
+     ) (if (null? exception-clauses)
+           (list 'LLet "match#arg" e
+             (lower-match (local-var env "match#arg") istail "match#arg" value-clauses))
+           (list 'LCatch e
+             "match#arg" (lower-match (local-var env "match#arg") istail "match#arg" value-clauses)
+             "match#exn" (lower-try   (local-var env "match#exn") istail "match#exn" exception-clauses)))
+           ))
+    (('ETry e clauses)
+     (match-let* (
+            (e (lower-notail e))
+            ((value-clauses exception-clauses) (split-clauses clauses))
+            (val-var "try#val")
+            (exn-var "try#exn")
+       )
+       (assert (null? exception-clauses))
+       (list 'LCatch e
+         val-var (lid->lvar val-var)
+         exn-var (lower-try (local-var env exn-var) istail exn-var value-clauses))))
     (('EReraise e)
      (list 'LReraise (lower-notail e)))
     (('ELet rec-flag bindings body)
@@ -1907,7 +1954,7 @@
             (list
              'EMatch
              e
-             (list (list p #nil (list 'ELet #f rest body))))))
+             (list (list 'ClValue p #nil (list 'ELet #f rest body))))))
       )))
   ))
 
@@ -1963,8 +2010,8 @@
       (string-append "arg#" (number->string i)))))
 
 (define (lower-arg-default name default body)
-  (let* ((noneline (list (lid->pconstr "None" #nil) #nil default))
-         (someline (list (lid->pconstr "Some" (list (lid->pvar name))) #nil (lid->evar name)))
+  (let* ((noneline (list 'ClValue (lid->pconstr "None" #nil) #nil default))
+         (someline (list 'ClValue (lid->pconstr "Some" (list (lid->pvar name))) #nil (lid->evar name)))
          (default-expr (list 'EMatch (lid->evar name) (list noneline someline))))
     (list 'ELet #f (list (cons (lid->pvar name) default-expr)) body)))
 
@@ -1973,7 +2020,7 @@
    (('PVar _)
     body)
    (_
-    (list 'EMatch (lid->evar name) (list (list pat #nil body))))))
+    (list 'EMatch (lid->evar name) (list (list 'ClValue pat #nil body))))))
 
 (define (lower-switch env istail sw)
   (match-let*
@@ -2128,22 +2175,23 @@
     (('LMatchfailure)
      ; TODO: we could actually raise a Match_failure exception (no location)
      (bytecode-put-u32-le STOP))
-    (('LCatch body exnvar handler)
-     (let* ((lab1 (newlabel))
-            (lab2 (newlabel))
+    (('LCatch e val-var val-handler exn-var exn-handler)
+     (let* ((lab-exn (newlabel))
+            (lab-end (newlabel))
             (stacksize-before-trap stacksize)
             (stacksize-after-trap (+ stacksize 4))
             )
        (bytecode-put-u32-le PUSHTRAP)
-       (bytecode-emit-labref lab1)
+       (bytecode-emit-labref lab-exn)
        (compile-expr
         (compenv-push-trap env stacksize-before-trap stacksize-after-trap)
-        stacksize-after-trap body)
+        stacksize-after-trap e)
        (bytecode-put-u32-le POPTRAP)
-       (bytecode-BRANCH-to lab2)
-       (bytecode-emit-label lab1)
-       (compile-bind-var env stacksize exnvar handler)
-       (bytecode-emit-label lab2)))
+       (compile-bind-var env stacksize val-var val-handler)
+       (bytecode-BRANCH-to lab-end)
+       (bytecode-emit-label lab-exn)
+       (compile-bind-var env stacksize exn-var exn-handler)
+       (bytecode-emit-label lab-end)))
     (('LLet var e body)
      (if (substituable? e)
          (compile-expr
@@ -2199,10 +2247,18 @@
 (define (compile-bind-var env stacksize var e)
   (if (null? var)
       (compile-expr env stacksize e)
-      (begin
-        (bytecode-put-u32-le PUSH)
-        (compile-expr (stack-var env var stacksize) (+ stacksize 1) e)
-        (bytecode-POP 1))))
+      (match e
+        (('LVar v)
+         ; this optimizes (let x = e in y) or (catch e (x -> y) (exn -> ...))
+         (if (equal? var v)
+             ; if 'v' is 'var', there is nothing to do, the value is already on top
+             #f
+             ; if 'v' is not 'var', we do not need to save 'var'
+             (compile-expr env stacksize e)))
+        (_
+         (bytecode-put-u32-le PUSH)
+         (compile-expr (stack-var env var stacksize) (+ stacksize 1) e)
+         (bytecode-POP 1)))))
 
 (define (compile-bind-var-pushed env stacksize var e)
   (if (null? var)
@@ -2439,10 +2495,12 @@
        (vset-union
         (fv-expr e bv)
         (fv-switch sw bv)))
-    (('LCatch e1 v e2)
+    (('LCatch e v1 e1 v2 e2)
        (vset-union
-        (fv-expr e1 bv)
-        (fv-expr e2 (bv-add-var v bv))))
+        (fv-expr e bv)
+        (vset-union
+         (fv-expr e1 (bv-add-var v1 bv))
+         (fv-expr e2 (bv-add-var v2 bv)))))
     (('LReraise e)
      (fv-expr e bv))
     (('LLet v e body)
