@@ -1839,6 +1839,11 @@
               (env (env-open env msig)))
          (lower-expr env istail e)))
     (('ELetModule name mod e)
+     ; This hackish code relies on the fact that (compile-module env mod)
+     ; will emit bytecode on the fly, so the module definition needs
+     ; not be part of the lowered expression we generate. By the time this
+     ; lowered expression will be turned into bytecode, the module
+     ; has been compiled exactly as if it had been hoisted out at the toplevel.
      (let* ((msig (compile-module env mod))
             (env (env-replace-module env name msig)))
          (lower-expr env istail e)))
