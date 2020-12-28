@@ -353,7 +353,9 @@
     (LPAREN RPAREN) : (list 'PInt 0)
     (LPAREN pattern RPAREN) : $2
     (LBRACE record_list_pattern option_semicolon RBRACE) : (list 'PRecord (reverse $2))
-    (INT) : (list 'PInt $1))
+    (INT) : (list 'PInt $1)
+    (STRING) : (list 'PString $1)
+   )
 
    (simple_expr
     (longident_lident) : (list 'EVar $1)
@@ -1112,6 +1114,7 @@
 (define STOP 143)
 (define RERAISE 146)
 (define obj_tag (cdr (prim "caml_obj_tag")))
+(define string_equal (cdr (prim "caml_string_equal")))
 
 ; bindings store for each name a definition, but also some visibility
 ; information, which indicate if this name was defined as "exported"
@@ -1347,18 +1350,21 @@
   (newline))
 
 (define-immutable-record-type <switch>
-  (mkswitch consts blocks default nums)
+  (mkswitch consts strings blocks default nums)
   switch?
   (consts switch-get-consts switch-with-consts)
+  (strings switch-get-strings switch-with-strings)
   (blocks switch-get-blocks switch-with-blocks)
   (default switch-get-default switch-with-default)
   (nums switch-get-nums switch-with-nums)
 )
 
-(define empty-switch (mkswitch #nil #nil #nil #nil))
+(define empty-switch (mkswitch #nil #nil #nil #nil #nil))
 
 (define (switch-cons-const sw const)
   (switch-with-consts sw (cons const (switch-get-consts sw))))
+(define (switch-cons-string sw string)
+  (switch-with-strings sw (cons string (switch-get-strings sw))))
 (define (switch-cons-block sw block)
   (switch-with-blocks sw (cons block (switch-get-blocks sw))))
 
@@ -1376,6 +1382,12 @@
   switch-const?
   (tag switch-const-get-tag)
   (rhs switch-const-get-rhs))
+
+(define-immutable-record-type <switch-string>
+  (mkswitch-string string rhs)
+  switch-string?
+  (string switch-string-get-string)
+  (rhs switch-string-get-rhs))
 
 (define-immutable-record-type <switch-block>
   (mkswitch-block tag arity vars rhs)
@@ -1462,7 +1474,7 @@
       (('PVar v) (cons v acc))
       (('PAs p v) (loop p (cons v acc)))
       (('PWild) acc)
-      (('PInt _) acc)
+      ((or ('PInt _) ('PString _)) acc)
       (('PConstr c ps) (fold-right loop acc ps))
       (('POr p1 p2)
        (let* ((vars1 (loop p1 #nil))
@@ -1534,6 +1546,8 @@
      (list (list #nil #nil ps bindings e)))
     (('PInt n)
      (list (list (list 'HPInt n) #nil ps bindings e)))
+    (('PString s)
+     (list (list (list 'HPString s) #nil ps bindings e)))
     (('PConstr c l)
      (let* ((arity (constr-get-arity (env-get-constr env c)))
             (l (adjust-pconstr-args l arity))
@@ -1550,7 +1564,7 @@
 (define (pattern-head-arity h)
   (match h
     (#nil 0)
-    (('HPInt _) 0)
+    ((or ('HPInt _) ('HPString _)) 0)
     (('HPConstr c arity) arity)
     (('HPRecord arity) arity)
   ))
@@ -1605,7 +1619,7 @@
     (group-width
      (if (vlist-null? strong-groups) #nil
        (match (car (vlist-head strong-groups))
-         (('HPInt _) #nil)
+         ((or ('HPInt _) ('HPString _)) #nil)
          (('HPRecord arity) 1)
          (('HPConstr c arity)
           (match-let* (
@@ -1741,6 +1755,8 @@
                 (match h
                   (('HPInt n)
                    (switch-cons-const sw (mkswitch-const n group-code)))
+                  (('HPString s)
+                   (switch-cons-string sw (mkswitch-string s group-code)))
                   (('HPRecord arity)
                    (switch-cons-block sw (mkswitch-block 0 arity group-vars group-code)))
                   (('HPConstr c arity)
@@ -2024,11 +2040,17 @@
 
 (define (lower-switch env istail sw)
   (match-let*
-   ((($ <switch> consts blocks default nums) sw)
+   ((($ <switch> consts strings blocks default nums) sw)
     (consts
       (map (match-lambda
             (($ <switch-const> tag rhs)
              (mkswitch-const tag
+               (lower-expr env istail rhs)))
+         ) consts))
+    (strings
+      (map (match-lambda
+            (($ <switch-string> str rhs)
+             (mkswitch-string str
                (lower-expr env istail rhs)))
          ) consts))
     (blocks
@@ -2042,7 +2064,7 @@
         (#nil #nil)
         ((var . rhs) (cons var (lower-expr (local-var env var) istail rhs)))
         ) default)))
-   (mkswitch consts blocks default nums)))
+   (mkswitch consts strings blocks default nums)))
 
 (define-immutable-record-type <compenv>
   (mkcompenv vars traps exits)
@@ -2270,10 +2292,13 @@
         (bytecode-POP 1))))
 
 (define (compile-switch env stacksize sw)
-  (match-let ((($ <switch> consts blocks default nums) sw))
+  (match-let ((($ <switch> consts strings blocks default nums) sw))
     (cond
-     ((and (null? consts) (null? blocks))
+     ((and (null? consts) (null? strings) (null? blocks))
       (compile-bind-var env stacksize (car default) (cdr default)))
+     ((not (null? strings))
+      (assert (and (null? consts) (null? blocks)))
+      (compile-string-switch env stacksize sw))
      ((or (null? nums) (< (car nums) 0))
       (compile-fragile-switch env stacksize sw))
      (else
@@ -2285,7 +2310,7 @@
 ;
 ; Inefficient compilation using if and Obj.tag.
 (define (compile-fragile-switch env stacksize sw)
-  (match-let ((($ <switch> consts blocks default nums) sw))
+  (match-let ((($ <switch> consts #nil blocks default nums) sw))
   (let* ((labblock (newlabel))
          (labdef (newlabel))
          (endlab (newlabel))
@@ -2334,8 +2359,35 @@
     (bytecode-emit-label endlab)
 )))
 
+
+(define (compile-string-switch env stacksize sw)
+  (match-let ((($ <switch> #nil strings #nil default _) sw))
+  (let* ((endlab (newlabel)))
+    (bytecode-put-u32-le PUSH)
+    (for-each (match-lambda (($ <switch-string> str e)
+                (let* ((lab (newlabel)))
+                  (bytecode-put-u32-le GETGLOBAL)
+                  (bytecode-put-u32-le (newglob str))
+                  (bytecode-put-u32-le PUSH)
+                  (bytecode-ACC 1)
+                  (bytecode-put-u32-le C_CALL2)
+                  (bytecode-put-u32-le string_equal)
+                  (bytecode-put-u32-le BRANCHIFNOT)
+                  (bytecode-emit-labref lab)
+                  (bytecode-POP 1)
+                  (compile-expr env stacksize e)
+                  (bytecode-BRANCH-to endlab)
+                  (bytecode-emit-label lab)
+                  )))
+              strings)
+    (if (pair? default)
+        (compile-bind-var-pushed env (+ stacksize 1) (car default) (cdr default))
+        (bytecode-put-u32-le STOP))
+    (bytecode-emit-label endlab)
+)))
+
 (define (compile-variant-switch env stacksize sw)
-  (match-let ((($ <switch> consts blocks default nums) sw))
+  (match-let ((($ <switch> consts #nil blocks default nums) sw))
   (let* ((numconsts (car nums))
          (numblocks (cdr nums))
          (endlab (newlabel))
@@ -2374,7 +2426,6 @@
         (bytecode-put-u32-le STOP)) ; match failure
     (bytecode-emit-label endlab)
 )))
-
 
 (define (compile-letexits env stacksize exit-defs body)
   (let* (
@@ -2545,12 +2596,16 @@
    (map (lambda (e) (fv-expr e bv)) exprs)))
 
 (define (fv-switch sw bv)
-  (match-let ((($ <switch> consts blocks default nums) sw))
+  (match-let ((($ <switch> consts strings blocks default nums) sw))
     (vset-list-union (append
       (map (match-lambda
             (($ <switch-const> tag rhs)
              (fv-expr rhs bv))
          ) consts)
+      (map (match-lambda
+            (($ <switch-string> str rhs)
+             (fv-expr rhs bv))
+         ) strings)
       (map (match-lambda
             (($ <switch-block> tag arity vars rhs)
              (fv-expr rhs (bv-add-vars vars bv)))
