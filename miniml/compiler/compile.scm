@@ -430,6 +430,7 @@
     (LET llet llet_ands IN expr (prec: LET)) : (list 'ELet #f (cons $2 $3) $5)
     (LET REC llet llet_ands IN expr (prec: LET)) : (list 'ELet #t (cons $3 $4) $6)
     (LET OPEN longident_uident IN expr (prec: LET)) : (list 'ELetOpen $3 $5)
+    (LET MODULE UIDENT functor_args EQ module_expr IN expr (prec: LET)) : (list 'ELetModule $3 (mkfunctor $4 $6) $8)
     (longident_uident DOT LPAREN expr RPAREN) : (list 'ELetOpen $1 $4)
     (expr_no_semi COLONCOLON expr_no_semi) : (lid->econstr "::" (cons $1 (cons $3 #nil)))
     (simple_expr DOT LPAREN expr RPAREN LTMINUS expr_no_semi) : (mkapp3 "array_set" $1 $4 $7)
@@ -1834,8 +1835,13 @@
      (match-let* (((args shape fun) (lower-function env args fun)))
       (list 'LLetfun  "lambda#" args fun (lid->lvar "lambda#"))))
     (('ELetOpen m e)
-       (let* ((menv (env-get-module env m)))
-         (lower-expr (env-open env menv) istail e)))
+       (let* ((msig (env-get-module env m))
+              (env (env-open env msig)))
+         (lower-expr env istail e)))
+    (('ELetModule name mod e)
+     (let* ((msig (compile-module env mod))
+            (env (env-replace-module env name msig)))
+         (lower-expr env istail e)))
     (('ELetExits bindings body)
      (list
       'LLetexits

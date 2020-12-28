@@ -30,6 +30,7 @@ TESTS=\
 	records \
 	exceptions \
 	let_open \
+	let_module \
 	infix_sugar \
 	functors \
 	exits \
