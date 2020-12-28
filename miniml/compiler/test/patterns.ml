@@ -113,6 +113,17 @@ let () = show_int (match { a = Empty; b = Leaf 1 } with
 )
 
 let () = print_newline ()
+let () = print_string "string patterns"
+let f = function
+| "foo" -> 42
+| "barbar" -> 21
+| _ -> 0
+
+let () = show_int (f "foo")
+let () = show_int (2 * f "barbar")
+let () = show_int (42 + f "bar")
+
+let () = print_newline ()
 let () = print_string "when-guards"
 
 let () = show_int (match Node (Leaf 2, Leaf 2) with
