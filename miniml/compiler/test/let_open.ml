@@ -19,4 +19,16 @@ let () =
   let open N in
   f ~x:21 show_int
 
+module R = struct
+  type r = { a : int; b : int }
+end
+
+let () =
+  let mk a b = R.{ a; b } in
+  let unmk R.{ a; b } = (a, b) in
+  let r = mk 42 21 in
+  let u = snd (unmk r) in
+  show_int r.R.a;
+  show_int (u + u)
+
 let () = print_newline ()
