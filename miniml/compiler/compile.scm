@@ -2541,7 +2541,7 @@
      (fv-expr-list args bv))
     (('LGetfield e f)
      (fv-expr e bv))
-    (('LSetfield e1 e2)
+    (('LSetfield e1 i e2)
      (vset-union (fv-expr e1 bv) (fv-expr e2 bv)))
     ((or ('LApply e es) ('LTailApply e es))
      (vset-union
