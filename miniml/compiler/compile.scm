@@ -353,6 +353,8 @@
     (LPAREN RPAREN) : (list 'PInt 0)
     (LPAREN pattern RPAREN) : $2
     (LBRACE record_list_pattern option_semicolon RBRACE) : (list 'PRecord (reverse $2))
+    (longident_uident DOT LBRACE record_list_pattern option_semicolon RBRACE) :
+        (list 'POpen $1 (list 'PRecord (reverse $4)))
     (INT) : (list 'PInt $1)
     (STRING) : (list 'PString $1)
    )
@@ -365,6 +367,10 @@
     (BEGIN expr END) : $2
     (LPAREN expr COLON type_ignore RPAREN) : $2
     (simple_expr DOT longident_field) : (list 'EGetfield $1 $3)
+    (longident_uident DOT LBRACE record_list_expr option_semicolon RBRACE) :
+        (list 'ELetOpen $1 (list 'ERecord (reverse $4)))
+    (longident_uident DOT LBRACE simple_expr WITH record_list_expr option_semicolon RBRACE) :
+        (list 'ELetOpen $1 (list 'ERecordwith $4 (reverse $6)))
     (LBRACE record_list_expr option_semicolon RBRACE) : (list 'ERecord (reverse $2))
     (LBRACE simple_expr WITH record_list_expr option_semicolon RBRACE) : (list 'ERecordwith $2 (reverse $4))
     (LBRACK RBRACK) : (lid->econstr "[]" #nil)
@@ -1501,6 +1507,7 @@
        (fold-right loop acc (map cdr field-defs)))
       (('PFullRecord field-pats)
        (fold-right loop acc field-pats))
+      (('POpen _ p) (loop p acc))
 )))
 
 (define (match-decompose-matrix env guarded? args m)
@@ -1574,6 +1581,9 @@
      (append
       (simplify-row env arg (list p1 ps bindings e))
       (simplify-row env arg (list p2 ps bindings e))))
+    (('POpen m p)
+     (let* ((menv (env-get-module env m)))
+       (simplify-row (env-open env menv) arg (list p ps bindings e))))
 )))
 
 (define (pattern-head-arity h)
