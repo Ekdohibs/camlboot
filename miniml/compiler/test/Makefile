@@ -33,7 +33,8 @@ TESTS=\
 	infix_sugar \
 	functors \
 	exits \
-	external_exceptions
+	external_exceptions \
+	loops
 
 .PHONY: all
 all: $(addprefix test-,$(TESTS))
