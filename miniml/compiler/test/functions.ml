@@ -75,3 +75,10 @@ let rec go n =
 let () = go 10
 
 let () = print_newline ()
+let () = print_string "general function application: "
+
+let () =
+  let f = ref ( + ) in
+  show_int (!f 12 30)
+
+let () = print_newline ()

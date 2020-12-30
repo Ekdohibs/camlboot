@@ -30,7 +30,7 @@
 (define (lid->econstr v args) (list 'EConstr (list 'Lident v) args))
 (define (lid->pconstr v args) (list 'PConstr (list 'Lident v) args))
 
-(define (mkapp fname args) (list 'EApply (list 'Lident fname) (map mknolabelapp args)))
+(define (mkapp fname args) (list 'EApply (lid->evar fname) (map mknolabelapp args)))
 (define (mkapp1 fname arg1) (mkapp fname (list arg1)))
 (define (mkapp2 fname arg1 arg2) (mkapp fname (list arg1 arg2)))
 (define (mkapp3 fname arg1 arg2 arg3) (mkapp fname (list arg1 arg2 arg3)))
@@ -401,7 +401,7 @@
    (expr_no_semi
     (simple_expr) : $1
     (FUN nonempty_list_labelled_arg MINUSGT expr) : (mklambda $2 $4)
-    (longident_lident nonempty_list_labelled_simple_expr) : (list 'EApply $1 $2)
+    (simple_expr nonempty_list_labelled_simple_expr) : (list 'EApply $1 $2)
     (longident_constr simple_expr) : (list 'EConstr $1 (cons $2 #nil))
     (comma_separated_list2_expr (prec: comma_prec)) : (list 'EConstr (list 'Lident "") (reverse $1))
     (simple_expr DOT longident_field LTMINUS expr_no_semi) : (list 'ESetfield $1 $3 $5)
@@ -421,10 +421,10 @@
     (expr_no_semi COLONEQ expr_no_semi) : (mkapp2 ":=" $1 $3)
     (expr_no_semi AMPERAMPER expr_no_semi) : (list 'EIf $1 $3 (list 'EConstant (list 'CInt 0)))
     (expr_no_semi BARBAR expr_no_semi) : (list 'EIf $1 (list 'EConstant (list 'CInt 1)) $3)
-    (expr_no_semi BARGT longident_lident list_labelled_simple_expr):
+    (expr_no_semi BARGT simple_expr list_labelled_simple_expr):
       ;; (e |> f e1 e2 .. en) ~> f e1 .. en e
       (list 'EApply $3 (append $4 (list (mknolabelapp $1))))
-    (longident_lident list_labelled_simple_expr ATAT expr_no_semi):
+    (simple_expr list_labelled_simple_expr ATAT expr_no_semi):
       ;; (f e1 .. en @@ e) ~> f e1 .. en e
       (list 'EApply $1 (append $2 (list (mknolabelapp $4))))
     (MATCH expr WITH clauses) : (list 'EMatch $2 $4)
@@ -1260,7 +1260,9 @@
           ))
   (define (align shape args)
     (cond ((null? shape) (if (null? args) #nil (align (map (lambda (arg) (list 'Nolabel)) args) args)))
-          ((null? args) #nil)
+          ((null? args) (begin
+                          (for-each (lambda (lab) (assert (equal? (car lab) 'Nolabel))) shape)
+                          #nil))
           ((equal? (car (car shape)) 'Nolabel)
            (let* ((r (extract-first (lambda (arg) (equal? (car (cdr arg)) 'Nolabel)) args))
                   (e (car (car r)))
@@ -1873,10 +1875,12 @@
        (assert (> size 0))
        (list 'LLet var e (list 'LBlock 0 es))))
     (('EApply f args)
-      (match-let* ((($ <var> f-location f-shape) (env-get-var env f))
+      (match-let* ((f-shape (match f
+                                   (('EVar v) (var-get-funshape (env-get-var env v)))
+                                   (_ #nil)))
                    (args (align-args f-shape args))
                    (args (map lower-notail args))
-                   (e (lower-notail (list 'EVar f))))
+                   (e (lower-notail f)))
        (if istail
            (list 'LTailApply e args)
            (list 'LApply e args))))
