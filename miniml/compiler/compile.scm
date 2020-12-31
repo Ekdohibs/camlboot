@@ -1796,18 +1796,25 @@
     (append h (list
       (list (list 'PWild) #nil (list 'EReraise (lid->evar exn-arg)))))))
 
+(define (lower-var env ld check-shape)
+  (let* ((vdef (env-get-var env ld))
+         (vloc (var-get-location vdef))
+         (vshape (var-get-funshape vdef)))
+    (if check-shape (for-each (lambda (lab) (assert (equal? (car lab) 'Nolabel))) vshape))
+    (match (var-get-location (env-get-var env ld))
+           (('VarLocal v)
+            (assert (equal? ld (list 'Lident v)))
+            (list 'LVar v))
+           (('VarGlobal id)
+            (list 'LGlobal id))
+           )
+    ))
+
 (define (lower-expr env istail expr)
   (let ((lower-tail (lambda (e) (lower-expr env istail e)))
         (lower-notail (lambda (e) (lower-expr env #f e))))
   (match expr
-    (('EVar ld)
-     (match (var-get-location (env-get-var env ld))
-        (('VarLocal v)
-         (assert (equal? ld (list 'Lident v)))
-         (list 'LVar v))
-        (('VarGlobal id)
-         (list 'LGlobal id))
-      ))
+    (('EVar ld) (lower-var env ld #t))
     (('EConstant c)
      (match c
        (('CInt n)
@@ -1875,15 +1882,15 @@
        (assert (> size 0))
        (list 'LLet var e (list 'LBlock 0 es))))
     (('EApply f args)
-      (match-let* ((f-shape (match f
-                                   (('EVar v) (var-get-funshape (env-get-var env v)))
-                                   (_ #nil)))
-                   (args (align-args f-shape args))
-                   (args (map lower-notail args))
-                   (e (lower-notail f)))
+      (match-let* (
+         ((f-shape . f-expr) (match f
+             (('EVar ld) (cons (var-get-funshape (env-get-var env ld)) (lower-var env ld #f)))
+             (_ (cons #nil (lower-notail f)))))
+         (args (align-args f-shape args))
+         (args (map lower-notail args)))
        (if istail
-           (list 'LTailApply e args)
-           (list 'LApply e args))))
+           (list 'LTailApply f-expr args)
+           (list 'LApply f-expr args))))
     (('EMatch e clauses)
      (match-let* (
          (e (lower-notail e))
