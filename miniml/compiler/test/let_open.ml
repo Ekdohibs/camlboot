@@ -21,6 +21,7 @@ let () =
 
 module R = struct
   type r = { a : int; b : int }
+  type o = A of int | B of int
 end
 
 let () =
@@ -28,7 +29,9 @@ let () =
   let unmk R.{ a; b } = (a, b) in
   let r = mk 42 21 in
   let u = snd (unmk r) in
+  let w = match R.A 12 with R.(A x) -> x + 30 | R.B x -> x in
   show_int r.R.a;
-  show_int (u + u)
+  show_int (u + u);
+  show_int w
 
 let () = print_newline ()

@@ -355,6 +355,7 @@
     (LBRACE record_list_pattern option_semicolon RBRACE) : (list 'PRecord (reverse $2))
     (longident_uident DOT LBRACE record_list_pattern option_semicolon RBRACE) :
         (list 'POpen $1 (list 'PRecord (reverse $4)))
+    (longident_uident DOT LPAREN pattern RPAREN) : (list 'POpen $1 $4)
     (INT) : (list 'PInt $1)
     (STRING) : (list 'PString $1)
    )
@@ -1486,7 +1487,7 @@
   )
   (under-guard-defs
    (under-exit-defs
-    (lower-matching-tree env matching-tree actions)))
+    (lower-matching-tree matching-tree actions)))
 ))
 
 (define (pat-vars p)
@@ -1531,7 +1532,7 @@
      (let*
       ((m (map (match-lambda (((p . ps) bindings e) (list p ps bindings e))) m))
        (m (simplify-matrix env arg m))
-       (groups (split-matrix-in-groups env m))
+       (groups (split-matrix-in-groups m))
        (matching-tree (match-decompose-groups env guarded? arg args groups)))
       matching-tree
      ))
@@ -1571,10 +1572,13 @@
     (('PString s)
      (list (list (list 'HPString s) #nil ps bindings e)))
     (('PConstr c l)
-     (let* ((arity (constr-get-arity (env-get-constr env c)))
+     (let* ((cdef (env-get-constr env c))
+            (arity (constr-get-arity cdef))
+            (tag (constr-get-tag cdef))
+            (nums (constr-get-numconstrs cdef))
             (l (adjust-pconstr-args l arity))
             (arity (length l)))
-       (list (list (list 'HPConstr c arity) l ps bindings e))))
+       (list (list (list 'HPConstr tag arity nums) l ps bindings e))))
     (('PFullRecord field-pats)
      (list (list (list 'HPRecord (length field-pats)) field-pats ps bindings e)))
     (('POr p1 p2)
@@ -1590,7 +1594,7 @@
   (match h
     (#nil 0)
     ((or ('HPInt _) ('HPString _)) 0)
-    (('HPConstr c arity) arity)
+    (('HPConstr tag arity nums) arity)
     (('HPRecord arity) arity)
   ))
 
@@ -1601,7 +1605,7 @@
   (map (lambda (i) (string-append arg "#" (number->string i))
      ) (range 0 (pattern-head-arity h))))
 
-(define (split-matrix-in-groups env simplified-matrix)
+(define (split-matrix-in-groups simplified-matrix)
   (let*
       (; first we compute all groups present in the matrix
        (groups
@@ -1633,23 +1637,22 @@
        (strong-groups (vhash-delete #nil groups))
        (groups
         ; if the strong groups are complete, no need for the default group
-        (if (complete-groups? env strong-groups) strong-groups groups))
+        (if (complete-groups? strong-groups) strong-groups groups))
        )
     groups))
 
 ; A set of strong groups is "complete" if all possible constructors
 ; for values of this type are covered.
-(define (complete-groups? env strong-groups)
+(define (complete-groups? strong-groups)
   (let* (
     (group-width
      (if (vlist-null? strong-groups) #nil
        (match (car (vlist-head strong-groups))
          ((or ('HPInt _) ('HPString _)) #nil)
          (('HPRecord arity) 1)
-         (('HPConstr c arity)
+         (('HPConstr tag arity nums)
           (match-let* (
-             (cdef (env-get-constr env c))
-             ((numconsts . numblocks) (constr-get-numconstrs cdef))
+             ((numconsts . numblocks) nums)
            ) (if (< numconsts 0) #nil
                  (+ numconsts numblocks))
            ))
@@ -1731,7 +1734,7 @@
    actions)
 ))
 
-(define (lower-matching-tree env matching-tree actions)
+(define (lower-matching-tree matching-tree actions)
   (match matching-tree
     (('MTFailure) (list 'LMatchFailure))
     (('MTAction bindings action-number rest)
@@ -1751,17 +1754,17 @@
         (under-bindings action-expr)
         (let* ((exit (string-append "guard#" (number->string action-number) "#exit")))
          (list 'LLetexits
-            (list (list exit #nil (lower-matching-tree env rest actions)))
+            (list (list exit #nil (lower-matching-tree rest actions)))
             (under-bindings
              (list 'LIf action-guard
                 action-expr
                 (list 'LExit exit #nil))))
         ))
      ))
-    (('MTSwitch arg groups) (lower-match-groups env arg groups actions))
+    (('MTSwitch arg groups) (lower-match-groups arg groups actions))
 ))
 
-(define (lower-match-groups env arg groups actions)
+(define (lower-match-groups arg groups actions)
   (let* (; separate the wildcard group from the groups with strong heads
          (default-matching-tree
            (let ((r (vhash-assoc #nil groups)))
@@ -1773,10 +1776,10 @@
          (sw (if (null? default-matching-tree)
                  empty-switch
                  (switch-with-default empty-switch (cons #nil
-                   (lower-matching-tree env default-matching-tree actions)))))
+                   (lower-matching-tree default-matching-tree actions)))))
          (sw (vhash-fold (lambda (h group sw)
                 (match-let* (((group-vars . group-matching-tree) group)
-                             (group-code (lower-matching-tree env group-matching-tree actions)))
+                             (group-code (lower-matching-tree group-matching-tree actions)))
                 (match h
                   (('HPInt n)
                    (switch-cons-const sw (mkswitch-const n group-code)))
@@ -1784,14 +1787,11 @@
                    (switch-cons-string sw (mkswitch-string s group-code)))
                   (('HPRecord arity)
                    (switch-cons-block sw (mkswitch-block 0 arity group-vars group-code)))
-                  (('HPConstr c arity)
+                  (('HPConstr tag arity nums)
                    ; TODO: instead of passing argument variables to the switch compiler,
                    ; we could lower the field-access logic by binding the new-args
                    ; with LGetField access.
-                   (let* ((cdef (env-get-constr env c))
-                          (nums (constr-get-numconstrs cdef))
-                          (tag (constr-get-tag cdef))
-                          (sw (switch-merge-nums sw nums)))
+                   (let* ((sw (switch-merge-nums sw nums)))
                    (if (equal? arity 0)
                        (switch-cons-const sw (mkswitch-const tag group-code))
                        (switch-cons-block sw (mkswitch-block tag arity group-vars group-code)))))
