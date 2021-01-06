@@ -47,6 +47,12 @@ let rev_apply loc = function
 external reraise : exn -> 'a = "%reraise"
 external raise_notrace : exn -> 'a = "%raise_notrace"
 
+module Prim = struct
+  external spacetime_enabled : unit -> bool = "caml_spacetime_enabled"
+  external time_include_children : bool -> float = "caml_sys_time_include_children"
+  external isatty : out_channel -> bool = "caml_sys_isatty"
+end
+
 let prims =
   let prim1 f = prim1 f Runtime_base.wrap_exn in
   let prim2 f = prim2 f Runtime_base.wrap_exn in
@@ -426,30 +432,14 @@ let prims =
       prim1 random_seed unwrap_unit (wrap_array wrap_int) );
     (* Spacetime *)
     ( "caml_spacetime_enabled",
-      let module Prim = struct
-        external spacetime_enabled : unit -> bool = "caml_spacetime_enabled"
-          [@@noalloc]
-      end
-      in
       prim1 Prim.spacetime_enabled unwrap_unit wrap_bool );
     (* Gc *)
     ("caml_gc_quick_stat", prim1 Gc.quick_stat unwrap_unit wrap_gc_stat);
     (* utils/profile.ml *)
     ( "caml_sys_time_include_children",
-      let module Prim = struct
-        external time_include_children
-          :  bool ->
-          float
-          = "caml_sys_time_include_children"
-      end
-      in
       prim1 Prim.time_include_children unwrap_bool wrap_float );
     (* utils/misc.ml *)
     ( "caml_sys_isatty",
-      let module Prim = struct
-        external isatty : out_channel -> bool = "caml_sys_isatty"
-      end
-      in
       prim1 Prim.isatty unwrap_out_channel wrap_bool );
     (* Digest *)
     ( "caml_md5_string",

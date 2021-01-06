@@ -294,7 +294,7 @@ and eval_expr prims env expr =
        | Value _ -> mismatch expr.pexp_loc; assert false
        | Instance_variable (obj, name) ->
           let var = SMap.find name obj.variables in
-          var := v;
+          var := v
      end;
      Runtime_base.wrap_unit ()
   | Pexp_override fields ->

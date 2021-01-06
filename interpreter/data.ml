@@ -249,13 +249,13 @@ let read_caml_int s =
   in
   for i = init to String.length s - 1 do
     match s.[i] with
-    | '0' .. '9' as x ->
+    | x when '0' <= x && x <= '9' ->
       c := Int64.(add (mul base !c) (of_int (int_of_char x - int_of_char '0')))
-    | 'a' .. 'f' as x ->
+    | x when 'a' <= x && x <= 'f' ->
       c :=
         Int64.(
           add (mul base !c) (of_int (int_of_char x - int_of_char 'a' + 10)))
-    | 'A' .. 'F' as x ->
+    | x when 'A' <= x && x <= 'F' ->
       c :=
         Int64.(
           add (mul base !c) (of_int (int_of_char x - int_of_char 'A' + 10)))
