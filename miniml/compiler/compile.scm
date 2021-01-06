@@ -113,6 +113,7 @@
      (EXCEPTION constr_decl) : (list 'MException (car $2) (cdr $2))
      (OPEN longident_uident) : (list 'MOpen $2)
      (MODULE UIDENT functor_args EQ module_expr) : (list 'MModule $2 (mkfunctor $3 $5))
+     (MODULE UIDENT functor_args COLON module_type EQ module_expr) : (list 'MModule $2 (mkfunctor $3 $7))
      (MODULE TYPE UIDENT EQ module_type) : (list 'MModuleType $3 $5)
      (EXTERNAL lident_ext COLON type_count_arrows EQ STRING) : (list 'MExternal $2 $4 $6))
 
@@ -127,6 +128,7 @@
 
    (signature_item
     (TYPE typedef type_ands) : '()
+    (EXCEPTION constr_decl) : '()
     (VAL lident_ext COLON type_ignore) : '())
 
    (signature
