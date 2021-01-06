@@ -1250,6 +1250,8 @@
   (index field-get-index)
   (numfields field-get-numfields))
 
+(define (check-no-labels shape) (for-each (lambda (lab) (assert (equal? (car lab) 'Nolabel))) shape))
+
 (define (align-args funshape args)
   (define has-labelled-arg (any (lambda (arg) (not (equal? (car (cdr arg)) 'Nolabel))) args))
   (define (extract-first f l)
@@ -1260,9 +1262,7 @@
           ))
   (define (align shape args)
     (cond ((null? shape) (if (null? args) #nil (align (map (lambda (arg) (list 'Nolabel)) args) args)))
-          ((null? args) (begin
-                          (for-each (lambda (lab) (assert (equal? (car lab) 'Nolabel))) shape)
-                          #nil))
+          ((null? args) (begin (check-no-labels shape) #nil))
           ((equal? (car (car shape)) 'Nolabel)
            (let* ((r (extract-first (lambda (arg) (equal? (car (cdr arg)) 'Nolabel)) args))
                   (e (car (car r)))
@@ -1800,8 +1800,8 @@
   (let* ((vdef (env-get-var env ld))
          (vloc (var-get-location vdef))
          (vshape (var-get-funshape vdef)))
-    (if check-shape (for-each (lambda (lab) (assert (equal? (car lab) 'Nolabel))) vshape))
-    (match (var-get-location (env-get-var env ld))
+    (if check-shape (check-no-labels vshape))
+    (match vloc
            (('VarLocal v)
             (assert (equal? ld (list 'Lident v)))
             (list 'LVar v))
