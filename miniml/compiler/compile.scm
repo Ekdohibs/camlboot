@@ -2659,10 +2659,11 @@
       (fv-expr body (bv-add-var f bv))))
     (('LLetrecfun bindings body)
      (let* ((vars (map car bindings))
+            (argss (map cadr bindings))
             (funs (map caddr bindings))
             (rec-bv (bv-add-vars vars bv)))
        (vset-union
-        (fv-expr-list funs rec-bv)
+        (vset-list-union (map (lambda (fun args) (fv-expr fun (bv-add-vars args rec-bv))) funs argss))
         (fv-expr body rec-bv))))
     (('LLetexits defs body)
      ; exit names live in a separate namespace, they are not (free) variables

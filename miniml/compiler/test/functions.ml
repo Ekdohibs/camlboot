@@ -53,6 +53,14 @@ let () =
   and sum2 i = if i = n then 0 else sum1 (i + 1) in
   show_int (sum1 0); show_int (sum2 0)
 
+(* regression test for nested let-rec *)
+let () =
+  let f () =
+    let rec g i = i in
+    g 0
+  in
+  show_int (f ())
+
 let () = print_newline ()
 let () = print_string "let-binding tests: "
 
