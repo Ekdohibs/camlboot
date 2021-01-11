@@ -63,3 +63,5 @@ type 'a ref = { mutable contents : 'a }
 let ref x = { contents = x }
 let ( ! ) x = x.contents
 let ( := ) x v = x.contents <- v
+
+let __atexit () = flush ()

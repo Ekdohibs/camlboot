@@ -379,7 +379,7 @@
     (LBRACK RBRACK) : (lid->econstr "[]" #nil)
     (LBRACK semi_separated_expr_list_opt RBRACK) :
         (fold-right (lambda (e r) (lid->econstr "::" (list e r))) (lid->econstr "[]" #nil) $2)
-    (LBRACKBAR BARRBRACK) : (list 'EVar (list 'Ldot (list 'Lident "Array") "empty_array"))
+    (LBRACKBAR BARRBRACK) : (list 'EVar (list 'Lident "__atom0"))
     (LBRACKBAR semi_separated_expr_list_opt BARRBRACK) : (lid->econstr "" $2)
     (PREFIXOP simple_expr) : (mkapp1 $1 $2)
     (simple_expr DOT LPAREN expr RPAREN) : (mkapp2 "array_get" $1 $4)
@@ -3074,11 +3074,12 @@
 (define (queue->list q)
   (unfold q-empty? deq! (lambda (q) q) q))
 (define prog (parse-phrases (queue->list input-phrases-q)))
+(define exec-end (list 'MLet #f (list (mkdef "_" #nil (mkapp1 "__atexit" (list 'EConstant (list 'CUnit)))))))
 
 (bytecode-open-output output-file)
 
 (bytecode-begin-section "CODE")
-(compile-defs initial-env prog)
+(compile-defs initial-env (append prog (list exec-end)))
 (bytecode-put-u32-le STOP)
 
 (bytecode-begin-section "PRIM")
