@@ -358,7 +358,8 @@
     (longident_uident DOT LBRACE record_list_pattern option_semicolon RBRACE) :
         (list 'POpen $1 (list 'PRecord (reverse $4)))
     (longident_uident DOT LPAREN pattern RPAREN) : (list 'POpen $1 $4)
-    (INT) : (list 'PInt $1)
+    (INT) : (if (null? (cdr $1)) (list 'PInt (car $1))
+                (errorp "Integer literals with non-empty extension unsupported in patterns"))
     (STRING) : (list 'PString $1)
    )
 
@@ -382,8 +383,8 @@
     (LBRACKBAR BARRBRACK) : (list 'EVar (list 'Lident "__atom0"))
     (LBRACKBAR semi_separated_expr_list_opt BARRBRACK) : (lid->econstr "" $2)
     (PREFIXOP simple_expr) : (mkapp1 $1 $2)
-    (simple_expr DOT LPAREN expr RPAREN) : (mkapp2 "array_get" $1 $4)
-    (simple_expr DOT LBRACK expr RBRACK) : (mkapp2 "string_get" $1 $4)
+    (simple_expr DOT LPAREN expr RPAREN) : (mkapp2 "__array_get" $1 $4)
+    (simple_expr DOT LBRACK expr RBRACK) : (mkapp2 "__string_get" $1 $4)
     (WHILE expr DO expr DONE) : (list 'EWhile $2 $4)
     (FOR lident_ext EQ expr TO expr DO expr DONE) : (list 'EFor $2 'UpTo $4 $6 $8)
     (FOR lident_ext EQ expr DOWNTO expr DO expr DONE) : (list 'EFor $2 'DownTo $4 $6 $8))
@@ -414,8 +415,8 @@
     (longident_constr simple_expr) : (list 'EConstr $1 (cons $2 #nil))
     (comma_separated_list2_expr (prec: comma_prec)) : (list 'EConstr (list 'Lident "") (reverse $1))
     (simple_expr DOT longident_field LTMINUS expr_no_semi) : (list 'ESetfield $1 $3 $5)
-    (IF expr THEN expr ELSE expr) : (list 'EIf $2 $4 $6)
-    (IF expr THEN expr) : (list 'EIf $2 $4 (list 'EConstant (list 'CUnit)))
+    (IF expr THEN expr_no_semi ELSE expr_no_semi) : (list 'EIf $2 $4 $6)
+    (IF expr THEN expr_no_semi) : (list 'EIf $2 $4 (list 'EConstant (list 'CUnit)))
     (expr_no_semi INFIXOP0 expr_no_semi) : (mkapp2 $2 $1 $3)
     (expr_no_semi INFIXOP1 expr_no_semi) : (mkapp2 $2 $1 $3)
     (expr_no_semi INFIXOP2 expr_no_semi) : (mkapp2 $2 $1 $3)
@@ -428,8 +429,8 @@
     (expr_no_semi PERCENT expr_no_semi) : (mkapp2 "%" $1 $3)
     (expr_no_semi STAR expr_no_semi) : (mkapp2 "*" $1 $3)
     (expr_no_semi COLONEQ expr_no_semi) : (mkapp2 ":=" $1 $3)
-    (expr_no_semi AMPERAMPER expr_no_semi) : (list 'EIf $1 $3 (list 'EConstant (list 'CInt 0)))
-    (expr_no_semi BARBAR expr_no_semi) : (list 'EIf $1 (list 'EConstant (list 'CInt 1)) $3)
+    (expr_no_semi AMPERAMPER expr_no_semi) : (list 'EIf $1 $3 (list 'EConstant (list 'CInt (cons 0 #nil))))
+    (expr_no_semi BARBAR expr_no_semi) : (list 'EIf $1 (list 'EConstant (list 'CInt (cons 1 #nil))) $3)
     (expr_no_semi BARGT simple_expr list_labelled_simple_expr):
       ;; (e |> f e1 e2 .. en) ~> f e1 .. en e
       (list 'EApply $3 (append $4 (list (mknolabelapp $1))))
@@ -454,8 +455,8 @@
     (LET OPEN longident_uident IN expr (prec: LET)) : (list 'ELetOpen $3 $5)
     (longident_uident DOT LPAREN expr RPAREN) : (list 'ELetOpen $1 $4)
     (expr_no_semi COLONCOLON expr_no_semi) : (lid->econstr "::" (cons $1 (cons $3 #nil)))
-    (simple_expr DOT LPAREN expr RPAREN LTMINUS expr_no_semi) : (mkapp3 "array_set" $1 $4 $7)
-    (simple_expr DOT LBRACK expr RBRACK LTMINUS expr_no_semi) : (mkapp3 "string_set" $1 $4 $7)
+    (simple_expr DOT LPAREN expr RPAREN LTMINUS expr_no_semi) : (mkapp3 "__array_set" $1 $4 $7)
+    (simple_expr DOT LBRACK expr RBRACK LTMINUS expr_no_semi) : (mkapp3 "__string_set" $1 $4 $7)
     (LET percent_exit llet llet_ands IN expr (prec: LET)) : (list 'ELetExits (cons $3 $4) $6)
     (LBRACK percent_exit RBRACK LIDENT list_labelled_simple_expr) : (list 'EExit $4 $5)
     )
@@ -466,11 +467,13 @@
 
    (expr
     (expr_no_semi) : $1
-    (expr SEMICOLON expr) : (list 'EChain $1 $3))
+    (expr_no_semi SEMICOLON) : $1
+    (expr_no_semi SEMICOLON expr) : (list 'EChain $1 $3))
 
    (llet
     (pattern EQ expr) : (cons $1 $3)
-    (lident_ext nonempty_list_labelled_arg EQ expr) : (cons (list 'PVar $1) (mklambda $2 $4)))
+    (lident_ext nonempty_list_labelled_arg EQ expr) : (cons (list 'PVar $1) (mklambda $2 $4))
+    (lident_ext nonempty_list_labelled_arg COLON type_ignore EQ expr) : (cons (list 'PVar $1) (mklambda $2 $6)))
 
    (llet_ands
     ( ) : #nil
@@ -655,6 +658,7 @@
 (define (number-chars errorp)
   (let ((c (peek-char)))
     (cond ((eof-object? c) #nil)
+          ((char=? c #\_) (begin (read-char) (number-chars errorp)))
           ((char-numeric? c) (begin (read-char) (cons c (number-chars errorp))))
           (else #nil)
           )))
@@ -695,6 +699,15 @@
          (c (read-char)))
     (token-dispatch errorp location c)))
 
+(define (mkint location n)
+  (let ((c (peek-char)))
+    (if (or (char-lower-case? c) (char-upper-case? c))
+        (begin
+          (read-char)
+          (make-lexical-token 'INT location (cons n (list->string (list c)))))
+        (make-lexical-token 'INT location (cons n #nil)))
+    ))
+
 (define (token-dispatch errorp location c)
   (cond ((eof-object? c) (make-lexical-token '*eoi* location #f))
         ((space-or-tab? c) (token errorp))
@@ -729,8 +742,7 @@
                          (else (mksymbol location c))))
         ; Handle '-' separately because of negative integer literals
         ((char=? c #\-) (if (char-numeric? (peek-char))
-                            (make-lexical-token 'INT location
-                                                (- (string->number (list->string (number-chars errorp)))))
+                            (mkint location (- (string->number (list->string (number-chars errorp)))))
                             (mksymbol location c)))
         ; All other characters that can begin an operator
         ((string-index "+=*~@^?!&<>/%$" c) (mksymbol location c))
@@ -740,17 +752,17 @@
                                  (let* ((nc (escape-sequence errorp))
                                         (c2 (read-char)))
                                    (if (char=? c2 #\')
-                                       (make-lexical-token 'INT location (char->integer nc))
+                                       (make-lexical-token 'INT location (cons (char->integer nc) #nil))
                                        (errorp "Unterminated character literal")
                                    ))
                                  (if (char=? (peek-char) #\')
                                      (begin
-                                       (read-char) (make-lexical-token 'INT location (char->integer c)))
+                                       (read-char) (make-lexical-token 'INT location (cons (char->integer c) #nil)))
                                      (begin (unread-char c) (make-lexical-token 'QUOTE location #f))))
                              ))
         ((or (char-lower-case? c) (char=? c #\_)) (mktoken location (get-lident (list->string (cons c (ident errorp))))))
         ((char-upper-case? c) (make-lexical-token 'UIDENT location (list->string (cons c (ident errorp)))))
-        ((char-numeric? c) (make-lexical-token 'INT location (string->number (list->string (cons c (number-chars errorp))))))
+        ((char-numeric? c) (mkint location (string->number (list->string (cons c (number-chars errorp))))))
         (else (errorp "Illegal character: " c))
         ))
 
@@ -1037,8 +1049,8 @@
   (cons "%eq" "%121")
   (cons "%noteq" "%122")
   (cons "%negint" "%109")
-  ; (cons "%succint" "")
-  ; (cons "%predint" "")
+  (cons "%succint" "%127,1")
+  (cons "%predint" "%127,-1")
   (cons "%addint" "%110")
   (cons "%subint" "%111")
   (cons "%mulint" "%112")
@@ -1052,17 +1064,46 @@
   (cons "%asrint" "%120")
   (cons "%string_length" "caml_ml_bytes_length")
   (cons "%bytes_length" "caml_ml_bytes_length")
-  ; (cons "%identity" "")
-  ; (cons "%ignore" "")
+  (cons "%identity" "%")
+  (cons "%ignore" "%99")
   (cons "%field0" "%67")
   (cons "%field1" "%68")
   (cons "%setfield0" "%73")
+  (cons "%array_length" "%79")
+  (cons "%array_safe_get" "caml_array_get")
+  (cons "%array_safe_set" "caml_array_set")
+  (cons "%array_unsafe_get" "caml_array_unsafe_get")
+  (cons "%array_unsafe_set" "caml_array_unsafe_set")
+  (cons "%floatarray_length" "%79")
+  (cons "%floatarray_safe_get" "caml_floatarray_get")
+  (cons "%floatarray_safe_set" "caml_floatarray_set")
+  (cons "%floatarray_unsafe_get" "caml_floatarray_unsafe_get")
+  (cons "%floatarray_unsafe_set" "caml_floatarray_unsafe_set")
+
+  (cons "%int64_neg" "caml_int64_neg")
+  (cons "%int64_add" "caml_int64_add")
+  (cons "%int64_sub" "caml_int64_sub")
+  (cons "%int64_mul" "caml_int64_mul")
+  (cons "%int64_div" "caml_int64_div")
+  (cons "%int64_mod" "caml_int64_mod")
+  (cons "%int64_and" "caml_int64_and")
+  (cons "%int64_or" "caml_int64_or")
+  (cons "%int64_xor" "caml_int64_xor")
+  (cons "%int64_lsl" "caml_int64_lsl")
+  (cons "%int64_asr" "caml_int64_asr")
+  (cons "%int64_lsr" "caml_int64_lsr")
+  (cons "%int64_of_int" "caml_int64_of_int")
+  (cons "%int64_to_int" "caml_int64_to_int")
+  (cons "%int64_of_int32" "caml_int64_of_int32")
+  (cons "%int64_to_int32" "caml_int64_to_int32")
+  (cons "%int64_of_nativeint" "caml_int64_of_nativeint")
+  (cons "%int64_to_nativeint" "caml_int64_to_nativeint")
 ))
 (define prims #nil)
 (define nprims 0)
 (define (raw-prim name)
   (if (equal? (string-ref name 0) #\%)
-      (cons 'Internal (string->number (substring name 1)))
+      (cons 'Internal (map string->number (string-split (substring name 1) #\,)))
       (begin
         (set! prims (cons name prims))
         (set! nprims (+ 1 nprims))
@@ -1868,8 +1909,12 @@
     (('EVar ld) (lower-var env ld #t))
     (('EConstant c)
      (match c
-       (('CInt n)
+       (('CInt (n . #nil))
         (list 'LConst n))
+       (('CInt (n . ext))
+        (lower-expr env istail
+                    (mkapp1 (string-append "__intext_" ext)
+                            (list 'EConstant (list 'CInt (cons n #nil))))))
        (('CUnit)
         (list 'LConst 0))
        (('CString str)
@@ -2980,7 +3025,8 @@
           (bytecode-put-u32-le PUSH)))
       (bytecode-ACC (- arity 1))
       (match prim-kind
-        ('Internal #f)
+        ('Internal
+          (for-each bytecode-put-u32-le prim-num))
         ('C
           (cond ((= arity 1) (bytecode-put-u32-le C_CALL1))
                 ((= arity 2) (bytecode-put-u32-le C_CALL2))
@@ -2989,8 +3035,8 @@
                 ((= arity 5) (bytecode-put-u32-le C_CALL5))
                 (else (begin
                         (bytecode-put-u32-le C_CALLN)
-                        (bytecode-put-u32-le arity))))))
-      (bytecode-put-u32-le prim-num)
+                        (bytecode-put-u32-le arity))))
+          (bytecode-put-u32-le prim-num)))
       (bytecode-put-u32-le RETURN)
       (bytecode-put-u32-le arity)
       (bytecode-emit-label lab1)
