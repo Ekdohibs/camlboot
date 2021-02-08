@@ -7,7 +7,7 @@ let parse filename =
   let inc = open_in filename in
   let lexbuf = Lexing.from_channel inc in
   Location.init lexbuf filename;
-  let parsed = Parse.implementation lexbuf in
+  let parsed = Parser.implementation Lexer.real_token lexbuf in
   close_in inc;
   parsed
 
@@ -284,6 +284,7 @@ module Compiler_files = struct
     "asmgen.ml";
 
     "asmlink.ml";
+    "asmlibrarian.ml";
   ]
 
   let bytegen = List.map (Filename.concat "bytecomp") [

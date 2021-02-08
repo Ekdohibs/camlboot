@@ -11,6 +11,7 @@ let exp_of_desc loc desc =
 let seq_or loc = function
   | [ (_, arg1); (_, arg2) ] ->
     let open Parsetree in
+    let open Asttypes in
     let expr_true =
       Pexp_construct ({ txt = Longident.Lident "true"; loc }, None)
     in
@@ -23,6 +24,7 @@ let seq_or loc = function
 let seq_and loc = function
   | [ (_, arg1); (_, arg2) ] ->
     let open Parsetree in
+    let open Asttypes in
     let expr_false =
       Pexp_construct ({ txt = Longident.Lident "false"; loc }, None)
     in
@@ -35,12 +37,14 @@ let seq_and loc = function
 let apply loc = function
   | [ (_, f); (_, x) ] ->
     let open Parsetree in
+    let open Asttypes in
     Some (exp_of_desc loc (Pexp_apply (f, [ (Nolabel, x) ])))
   | _ -> None
 
 let rev_apply loc = function
   | [ (_, x); (_, f) ] ->
     let open Parsetree in
+    let open Asttypes in
     Some (exp_of_desc loc (Pexp_apply (f, [ (Nolabel, x) ])))
   | _ -> None
 
@@ -51,6 +55,13 @@ module Prim = struct
   external spacetime_enabled : unit -> bool = "caml_spacetime_enabled"
   external time_include_children : bool -> float = "caml_sys_time_include_children"
   external isatty : out_channel -> bool = "caml_sys_isatty"
+end
+
+module Int32 = struct
+  external neg : int32 -> int32 = "caml_int32_neg"
+  external of_string : string -> int32 = "caml_int32_of_string"
+  external to_int : int32 -> int = "caml_int32_to_int"
+  external of_int : int -> int32 = "caml_int32_of_int"
 end
 
 let prims =
@@ -101,6 +112,8 @@ let prims =
      ptr @@ Prim (fun _ -> ptr @@ Prim (fun _ -> unit)));
     ( "caml_int64_float_of_bits",
       prim1 Int64.float_of_bits unwrap_int64 wrap_float );
+    ( "caml_int64_bits_of_float",
+      prim1 Int64.bits_of_float unwrap_float wrap_int64 );
     ( "caml_ml_open_descriptor_out",
       prim1 open_descriptor_out unwrap_int wrap_out_channel );
     ( "caml_ml_open_descriptor_in",
@@ -351,8 +364,10 @@ let prims =
     ("%int64_to_nativeint", prim1 Int64.to_nativeint unwrap_int64 wrap_nativeint);
     ("caml_int64_of_string", prim1 Int64.of_string unwrap_string wrap_int64);
     (* Int32 *)
-    ("caml_int32_of_string", prim1 int_of_string unwrap_string wrap_int);
-    ("%int32_neg", prim1 ( ~- ) unwrap_int wrap_int);
+    ("caml_int32_of_string", prim1 Int32.of_string unwrap_string wrap_int32);
+    ("%int32_neg", prim1 Int32.neg unwrap_int32 wrap_int32);
+    ("%int32_of_int", prim1 Int32.of_int unwrap_int wrap_int32);
+    ("%int32_to_int", prim1 Int32.to_int unwrap_int32 wrap_int);
     (* Nativeint *)
     ("%nativeint_neg", prim1 Nativeint.neg unwrap_nativeint wrap_nativeint);
     ("%nativeint_add", prim2 Nativeint.add unwrap_nativeint unwrap_nativeint wrap_nativeint);
@@ -371,6 +386,8 @@ let prims =
       prim2 Nativeint.shift_right unwrap_nativeint unwrap_int wrap_nativeint );
     ("%nativeint_of_int", prim1 Nativeint.of_int unwrap_int wrap_nativeint);
     ("%nativeint_to_int", prim1 Nativeint.to_int unwrap_nativeint wrap_int);
+    ("%nativeint_to_int32", prim1 Nativeint.to_int32 unwrap_nativeint wrap_int32);
+    ("%nativeint_of_int32", prim1 Nativeint.of_int32 unwrap_int32 wrap_nativeint);
     ("caml_nativeint_of_string", prim1 Nativeint.of_string unwrap_string wrap_nativeint);
     (* Array *)
     ("caml_make_vect", prim2 Array.make unwrap_int id wrap_array_id);

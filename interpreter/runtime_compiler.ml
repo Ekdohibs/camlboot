@@ -213,7 +213,7 @@ let unwrap_parse_tables syncenv = onptr @@ function
       unwrap_array
         (fun fv pe ->
           sync_parser_env pe syncenv;
-          Obj.repr (!apply_ref fv [ (Nolabel, syncenv) ]))
+          Obj.repr (!apply_ref fv [ (Asttypes.Nolabel, syncenv) ]))
         !(SMap.find "actions" r)
     in
     { actions;
@@ -234,7 +234,7 @@ let unwrap_parse_tables syncenv = onptr @@ function
           unwrap_unit
             (!apply_ref
                !(SMap.find "error_function" r)
-               [ (Nolabel, wrap_string s) ]));
+               [ (Asttypes.Nolabel, wrap_string s) ]));
       names_const = unwrap_string_unsafe !(SMap.find "names_const" r);
       names_block = unwrap_string_unsafe !(SMap.find "names_block" r)
     }

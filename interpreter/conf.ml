@@ -1,6 +1,8 @@
 let trace = false
-let tracearg_from = 742740000
+let traceend = false
+let tracearg_from = 75000_000000
 let tracecur = ref 0
+let tracedepth = ref 0
 
 let debug =
   match Sys.getenv_opt "OCAMLINTERP_DEBUG" with
@@ -18,7 +20,7 @@ let debug =
 let stdlib_path () =
   match Sys.getenv_opt "OCAMLINTERP_STDLIB_PATH" with
   | Some path -> path
-  | None ->
+  | None -> (*
     let input = Unix.open_process_in "ocamlc -where" in
     (match input_line input with
     | exception _ ->
@@ -26,7 +28,8 @@ let stdlib_path () =
       failwith "Error: unable to determine the standard library location"
     | path ->
       close_in input;
-      path)
+      path) *)
+  failwith "Error: standard library location must be specified"
 
 let compiler_source_path () =
   match Sys.getenv_opt "OCAMLINTERP_SRC_PATH" with

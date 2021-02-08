@@ -2,6 +2,7 @@ open Data
 
 let cc x d = ptr @@ Constructor (x, d, None)
 
+(*
 let builtin_exn_handler wrap_exn f =
   try f ()
   with exn ->
@@ -12,6 +13,19 @@ let builtin_exn_handler wrap_exn f =
       | Some exn_code -> InternalException exn_code
     in
     Printexc.raise_with_backtrace exn bt
+*)
+
+external reraise : exn -> 'a = "%reraise"
+
+let builtin_exn_handler wrap_exn f =
+  try f ()
+  with exn ->
+    let exn =
+      match wrap_exn exn with
+      | None -> exn
+      | Some exn_code -> InternalException exn_code
+    in
+    reraise exn
 
 let prim1 f wrap_exn unwrap1 wrap =
   ptr @@ Prim

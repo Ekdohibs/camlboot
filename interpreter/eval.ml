@@ -174,6 +174,22 @@ and eval_expr prims env expr =
       | Some expr -> eval_expr prims env expr)
     | func_value ->
       let args = List.map (fun (lab, e) -> (lab, eval_expr prims env e)) l in
+      if traceend then begin
+        let d = !tracedepth in
+        tracedepth := d + 1;
+        let print_action name =
+          let fname =
+            match f.pexp_desc with
+            | Pexp_ident lident -> String.concat "." (Longident.flatten lident.txt)
+            | _ -> "<unknown>"
+          in
+          Format.eprintf "(%d) %a %s %s@." d Location.print_loc expr.pexp_loc name fname
+        in
+        print_action "apply";
+        match apply prims (ptr @@ func_value) args with
+        | r -> print_action "leave"; tracedepth := d; r
+        | exception e -> print_action "error"; tracedepth := d; raise e
+      end else begin
       if trace
       then (
         match f.pexp_desc with
@@ -192,7 +208,8 @@ and eval_expr prims env expr =
               args;
           Format.eprintf "@."
         | _ -> ());
-      apply prims (ptr @@ func_value) args)
+      apply prims (ptr @@ func_value) args
+      end)
   | Pexp_tuple l ->
     let args = List.map (eval_expr prims env) l in
     ptr @@ Tuple args
@@ -368,6 +385,7 @@ and eval_bindings prims env recflag defs =
        nenv
 
 and pattern_bind prims env pat v =
+  (* if !tracecur > tracearg_from && (match pat.ppat_desc with | Ppat_any | Ppat_var _ -> false | _ -> true) then Format.eprintf "BIND %a %a@." pp_print_value v Location.print_loc pat.ppat_loc; *)
   match pat.ppat_desc with
   | Ppat_any -> env
   | Ppat_var s -> env_set_value s.txt v env
@@ -766,7 +784,7 @@ and eval_structitem prims env it =
       with Not_found ->
         ptr @@ Prim
           (fun _ ->
-            Format.eprintf "%a@." Location.print_loc loc;
+            Format.eprintf "%a: Unimplemented primitive %s@." Location.print_loc loc prim_name;
             failwith ("Unimplemented primitive " ^ prim_name))
     in
     env_set_value name prim env

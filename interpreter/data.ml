@@ -234,7 +234,7 @@ let pp_print_unit_id ppf (Path s) =
 let read_caml_int s =
   let c = ref 0L in
   let sign, init =
-    if String.length s > 0 && s.[0] = '-' then (-1L, 1) else (1L, 0)
+    if String.length s > 0 && s.[0] = '-' then (Int64.of_int (-1), 1) else (1L, 0)
   in
   let base, init =
     if String.length s >= init + 2 && s.[init] = '0'
@@ -267,8 +267,8 @@ let read_caml_int s =
   Int64.mul sign !c
 
 let value_of_constant const = ptr @@ match const with
-  | Pconst_integer (s, (None | Some 'l')) ->
-    Int (Int64.to_int (read_caml_int s))
+  | Pconst_integer (s, None) -> Int (Int64.to_int (read_caml_int s))
+  | Pconst_integer (s, Some 'l') -> Int32 (Int64.to_int32 (read_caml_int s))
   | Pconst_integer (s, Some 'L') -> Int64 (read_caml_int s)
   | Pconst_integer (s, Some 'n') -> Nativeint (Int64.to_nativeint (read_caml_int s))
   | Pconst_integer (_s, Some c) ->
