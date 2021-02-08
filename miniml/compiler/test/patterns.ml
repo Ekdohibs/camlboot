@@ -137,7 +137,7 @@ let () = print_newline ()
 let () = print_string "match with exception"
 
 let f ~success:b =
-  if b then 42
+  if b then 17
   else raise (Failure " 42")
 
 let () = match f ~success:true with

@@ -35,6 +35,11 @@
 (define (mkapp2 fname arg1 arg2) (mkapp fname (list arg1 arg2)))
 (define (mkapp3 fname arg1 arg2 arg3) (mkapp fname (list arg1 arg2 arg3)))
 
+(define (mkuminus arg)
+  (match arg
+         (('EConstant ('CInt (n . c))) (list 'EConstant (list 'CInt (cons (- n) c))))
+         (_ (mkapp1 "~-" arg))))
+
 (define (mklambda args body)
   (match body
          (('ELambda args2 body2) (list 'ELambda (append args args2) body2))
@@ -115,7 +120,8 @@
      (MODULE UIDENT functor_args EQ module_expr) : (list 'MModule $2 (mkfunctor $3 $5))
      (MODULE UIDENT functor_args COLON module_type EQ module_expr) : (list 'MModule $2 (mkfunctor $3 $7))
      (MODULE TYPE UIDENT EQ module_type) : (list 'MModuleType $3 $5)
-     (EXTERNAL lident_ext COLON type_count_arrows EQ STRING) : (list 'MExternal $2 $4 $6))
+     (EXTERNAL lident_ext COLON type_count_arrows EQ STRING) : (list 'MExternal $2 $4 $6)
+     (EXTERNAL lident_ext COLON type_count_arrows EQ STRING STRING) : (list 'MExternal $2 $4 $6))
 
    (module_expr
     (STRUCT list_semidefinition END) : (list 'MEStruct $2)
@@ -320,8 +326,8 @@
    )
 
    (record_list_pattern
-    (record_item_pattern) : (cons $1 #nil)
-    (record_list_pattern SEMICOLON record_item_pattern) : (cons $3 $1))
+    (record_item_pattern) : (if (equal? (car $1) (list 'Lident "_")) #nil (cons $1 #nil))
+    (record_list_pattern SEMICOLON record_item_pattern) : (if (equal? (car $3) (list 'Lident "_")) $1 (cons $3 $1)))
 
    (record_item_pattern
     (longident_field EQ pattern) : (cons $1 $3)
@@ -408,11 +414,15 @@
     (labelled_simple_expr) : (cons $1 #nil)
     (labelled_simple_expr nonempty_list_labelled_simple_expr) : (cons $1 $2))
 
-   (expr_no_semi
+   (expr_no_semi1
     (simple_expr) : $1
-    (FUN nonempty_list_labelled_arg MINUSGT expr) : (mklambda $2 $4)
+    (MINUS expr_no_semi1 (prec: uminus_prec)) : (mkuminus $2)
     (simple_expr nonempty_list_labelled_simple_expr) : (list 'EApply $1 $2)
-    (longident_constr simple_expr) : (list 'EConstr $1 (cons $2 #nil))
+    (longident_constr simple_expr) : (list 'EConstr $1 (cons $2 #nil)))
+
+   (expr_no_semi
+    (expr_no_semi1) : $1
+    (FUN nonempty_list_labelled_arg MINUSGT expr) : (mklambda $2 $4)
     (comma_separated_list2_expr (prec: comma_prec)) : (list 'EConstr (list 'Lident "") (reverse $1))
     (simple_expr DOT longident_field LTMINUS expr_no_semi) : (list 'ESetfield $1 $3 $5)
     (IF expr THEN expr_no_semi ELSE expr_no_semi) : (list 'EIf $2 $4 $6)
@@ -425,7 +435,6 @@
     (expr_no_semi EQ expr_no_semi) : (mkapp2 "=" $1 $3)
     (expr_no_semi PLUS expr_no_semi) : (mkapp2 "+" $1 $3)
     (expr_no_semi MINUS expr_no_semi) : (mkapp2 "-" $1 $3)
-    (MINUS expr_no_semi (prec: uminus_prec)) : (mkapp1 "~-" $2)
     (expr_no_semi PERCENT expr_no_semi) : (mkapp2 "%" $1 $3)
     (expr_no_semi STAR expr_no_semi) : (mkapp2 "*" $1 $3)
     (expr_no_semi COLONEQ expr_no_semi) : (mkapp2 ":=" $1 $3)
@@ -724,7 +733,9 @@
         ((char=? c #\,) (make-lexical-token 'COMMA location #f))
         ((char=? c #\[) (if (char=? (peek-char) #\|)
                             (begin (read-char) (make-lexical-token 'LBRACKBAR location #f))
-                            (make-lexical-token 'LBRACK location #f)))
+                            (if (char=? (peek-char) #\@)
+                                (begin (do () ((char=? (read-char) #\]))) (token errorp))
+                                (make-lexical-token 'LBRACK location #f))))
         ((char=? c #\]) (make-lexical-token 'RBRACK location #f))
         ((char=? c #\;) (if (char=? (peek-char) #\;)
                             (begin (read-char) (make-lexical-token 'SEMICOLONSEMICOLON location #f))
@@ -741,7 +752,7 @@
                           (read-char) (make-lexical-token 'BARRBRACK location #f))
                          (else (mksymbol location c))))
         ; Handle '-' separately because of negative integer literals
-        ((char=? c #\-) (if (char-numeric? (peek-char))
+        ((char=? c #\-) (if (and #f (char-numeric? (peek-char)))
                             (mkint location (- (string->number (list->string (number-chars errorp)))))
                             (mksymbol location c)))
         ; All other characters that can begin an operator
@@ -994,31 +1005,31 @@
          (objcountpos (bytecode-reserve 8))
          (size64pos (bytecode-reserve 8))
          (loop
-          (lambda (obj)
-            (begin
-              (cond ((integer? obj) (begin (bytecode-put-u8 #x3) (bytecode-put-u64 obj) (set! len (+ len 9))))
-                    ((string? obj) (begin
-                                     (bytecode-put-u8 #x15)
-                                     (bytecode-put-u64 (string-length obj))
-                                     (bytecode-put-string obj)
-                                     (set! len (+ len (+ 9 (string-length obj))))
-                                     (set! size64 (+ size64 (+ 1 (ash (+ (string-length obj) 8) -3))))
-                                     ))
-                    (else (let ((sz (length (cdr obj))))
-                            (if (= sz 0)
-                                (begin
-                                  (bytecode-put-u8 #x8)
-                                  (bytecode-put-u32 (car obj))
-                                  (set! len (+ len 5)))
-                                (begin
-                                  (bytecode-put-u8 #x13)
-                                  (bytecode-put-u64 (+ (car obj) (ash sz 10)))
-                                  (set! len (+ len 9))
-                                  (set! size64 (+ size64 (+ 1 sz)))
-                                  (for-each loop (cdr obj))
-                                  ))
-                            ))
-              )))))
+          (match-lambda
+           (('Integer n)
+              (bytecode-put-u8 #x3)
+              (bytecode-put-u64 n)
+              (set! len (+ len 9)))
+           (('String s)
+              (bytecode-put-u8 #x15)
+              (bytecode-put-u64 (string-length s))
+              (bytecode-put-string s)
+              (set! len (+ len (+ 9 (string-length s))))
+              (set! size64 (+ size64 (+ 1 (ash (+ (string-length s) 8) -3)))))
+           (('Block tag values)
+              (let ((sz (length values)))
+                (if (= sz 0)
+                    (begin
+                      (bytecode-put-u8 #x8)
+                      (bytecode-put-u32 tag)
+                      (set! len (+ len 5)))
+                    (begin
+                      (bytecode-put-u8 #x13)
+                      (bytecode-put-u64 (+ tag (ash sz 10)))
+                      (set! len (+ len 9))
+                      (set! size64 (+ size64 (+ 1 sz)))
+                      (for-each loop values)))))
+              )))
       (loop value)
       (bytecode-backpatch-u64 lenpos len)
       (bytecode-backpatch-u64 objcountpos 0)
@@ -1026,19 +1037,29 @@
       )))
 
 (define globs #nil)
+(define globnames #nil)
 (define nglobs 0)
-(define (newglob value)
+(define (newglob value name)
   (begin
     (set! globs (cons value globs))
+    (set! globnames (cons (string-append name " (" (number->string nglobs) ")") globnames))
     (set! nglobs (+ 1 nglobs))
     (- nglobs 1)))
-(define (slot-for-global) (newglob 0))
+(define (slot-for-global name) (newglob (list 'Integer 0) name))
 (define (bytecode-write-globals)
-  (bytecode-marshal (cons 0 (reverse globs))))
+  (bytecode-marshal (list 'Block 0 (reverse globs))))
 
+(define (mktbl names n)
+  (if (null? names) (list 'Integer 0)
+        (list 'Block 0 (list (mktbl (cdr names) (- n 1)) (list 'Block 0 (list (list 'Integer 0) (list 'String (car names)) (list 'Integer 0))) (list 'Integer (- n 1)) (list 'Integer 0) (list 'Integer n)))))
+
+(define (bytecode-write-symbols)
+  (bytecode-marshal (list 'Block 0 (list (list 'Integer nglobs) (mktbl globnames nglobs)))))
 
 (define known-prims (list
   (cons "%raise" "%91")
+  (cons "%reraise" "%146")
+  (cons "%raise_notrace" "%147")
   (cons "%equal" "caml_equal")
   (cons "%notequal" "caml_notequal")
   (cons "%lessthan" "caml_lessthan")
@@ -1062,8 +1083,31 @@
   (cons "%lslint" "%118")
   (cons "%lsrint" "%119")
   (cons "%asrint" "%120")
-  (cons "%string_length" "caml_ml_bytes_length")
+
+  (cons "%negfloat" "caml_neg_float")
+  (cons "%addfloat" "caml_add_float")
+  (cons "%subfloat" "caml_sub_float")
+  (cons "%mulfloat" "caml_mul_float")
+  (cons "%divfloat" "caml_div_float")
+  (cons "%absfloat" "caml_abs_float")
+  (cons "%floatofint" "caml_float_of_int")
+  (cons "%intoffloat" "caml_int_of_float")
+
   (cons "%bytes_length" "caml_ml_bytes_length")
+  (cons "%bytes_safe_get" "caml_bytes_get")
+  (cons "%bytes_unsafe_get" "%82")
+  (cons "%bytes_safe_set" "caml_bytes_set")
+  (cons "%bytes_unsafe_set" "%83")
+
+  (cons "%string_length" "caml_ml_string_length")
+  (cons "%string_safe_get" "caml_string_get")
+  (cons "%string_unsafe_get" "%148")
+  (cons "%string_safe_set" "caml_bytes_set")
+  (cons "%string_unsafe_set" "%83")
+
+  (cons "%bytes_to_string" "caml_string_of_bytes")
+  (cons "%bytes_of_string" "caml_bytes_of_string")
+
   (cons "%identity" "%")
   (cons "%ignore" "%99")
   (cons "%field0" "%67")
@@ -1089,21 +1133,41 @@
   (cons "%int64_and" "caml_int64_and")
   (cons "%int64_or" "caml_int64_or")
   (cons "%int64_xor" "caml_int64_xor")
-  (cons "%int64_lsl" "caml_int64_lsl")
-  (cons "%int64_asr" "caml_int64_asr")
-  (cons "%int64_lsr" "caml_int64_lsr")
+  (cons "%int64_lsl" "caml_int64_shift_left")
+  (cons "%int64_asr" "caml_int64_shift_right")
+  (cons "%int64_lsr" "caml_int64_shift_right_unsigned")
   (cons "%int64_of_int" "caml_int64_of_int")
   (cons "%int64_to_int" "caml_int64_to_int")
   (cons "%int64_of_int32" "caml_int64_of_int32")
   (cons "%int64_to_int32" "caml_int64_to_int32")
   (cons "%int64_of_nativeint" "caml_int64_of_nativeint")
   (cons "%int64_to_nativeint" "caml_int64_to_nativeint")
+
+  (cons "%nativeint_neg" "caml_nativeint_neg")
+  (cons "%nativeint_add" "caml_nativeint_add")
+  (cons "%nativeint_sub" "caml_nativeint_sub")
+  (cons "%nativeint_mul" "caml_nativeint_mul")
+  (cons "%nativeint_div" "caml_nativeint_div")
+  (cons "%nativeint_mod" "caml_nativeint_mod")
+  (cons "%nativeint_and" "caml_nativeint_and")
+  (cons "%nativeint_or" "caml_nativeint_or")
+  (cons "%nativeint_xor" "caml_nativeint_xor")
+  (cons "%nativeint_lsl" "caml_nativeint_shift_left")
+  (cons "%nativeint_asr" "caml_nativeint_shift_right")
+  (cons "%nativeint_lsr" "caml_nativeint_shift_right_unsigned")
+  (cons "%nativeint_of_int" "caml_nativeint_of_int")
+  (cons "%nativeint_to_int" "caml_nativeint_to_int")
+  (cons "%nativeint_of_int32" "caml_nativeint_of_int32")
+  (cons "%nativeint_to_int32" "caml_nativeint_to_int32")
+
 ))
 (define prims #nil)
 (define nprims 0)
 (define (raw-prim name)
   (if (equal? (string-ref name 0) #\%)
-      (cons 'Internal (map string->number (string-split (substring name 1) #\,)))
+      (let* ((l (map string->number (if (string=? name "%") #nil (string-split (substring name 1) #\,)))))
+        (if (member #f l) (errorp "Unknown primitive: " name))
+        (cons 'Internal l))
       (begin
         (set! prims (cons name prims))
         (set! nprims (+ 1 nprims))
@@ -1585,7 +1649,7 @@
       (('POr p1 p2)
        (let* ((vars1 (loop p1 #nil))
               (vars2 (loop p2 #nil)))
-         (assert (equal? (sort vars1 <=) (sort vars2 <=)))
+         (assert (equal? (sort vars1 string<=?) (sort vars2 string<=?)))
          (append vars1 acc)
        ))
       (('PRecord field-defs)
@@ -1918,7 +1982,7 @@
        (('CUnit)
         (list 'LConst 0))
        (('CString str)
-        (list 'LGlobal (newglob str)))))
+        (list 'LGlobal (newglob (list 'String str) (string-append "\"" str "\""))))))
     (('EIf e1 e2 e3)
      (list
       'LIf
@@ -2269,7 +2333,7 @@
          (bytecode-CONSTINT n)
          (begin
            (bytecode-put-u32-le GETGLOBAL)
-           (bytecode-put-u32-le (newglob n)))))
+           (bytecode-put-u32-le (newglob (list 'Integer n) "<constant int>")))))
     (('LBlock tag args)
      (compile-args env stacksize args)
      (bytecode-MAKEBLOCK (length args) tag))
@@ -2535,7 +2599,7 @@
     (for-each (match-lambda (($ <switch-string> str e)
                 (let* ((lab (newlabel)))
                   (bytecode-put-u32-le GETGLOBAL)
-                  (bytecode-put-u32-le (newglob str))
+                  (bytecode-put-u32-le (newglob (list 'String str) "<constant string switch>"))
                   (bytecode-put-u32-le PUSH)
                   (bytecode-ACC 1)
                   (bytecode-put-u32-le C_CALL2)
@@ -2979,7 +3043,7 @@
      ((env . (name . arity)) (expand-constr-def env "exn" (cons name constr-info)))
     ) (declare-exn name arity env)))
    (('MLet rec-flag bindings)
-    (let* ((locations (map (lambda (def) (if (equal? (def-get-name def) "_") #nil (slot-for-global))) bindings))
+    (let* ((locations (map (lambda (def) (if (equal? (def-get-name def) "_") #nil (slot-for-global (def-get-name def)))) bindings))
            (nenv-vars (fold (match-lambda* ((($ <def> name args body) loc e)
                              (let ((shape (map arg-get-label args)))
                                (if (equal? name "_") e
@@ -2990,7 +3054,7 @@
            (nenv (env-with-vars env nenv-vars))
            (tenv (if rec-flag nenv env)))
       (for-each (match-lambda* ((($ <def> name args body) loc)
-                    ; (display "Compiling ") (display name) (newline)
+                    (if show-progress (begin (display "Compiling ") (display name) (newline)))
                     (if (null? args)
                         (compile-high-expr tenv #f body)
                         (match-let* (((args shape body) (lower-function tenv args body)))
@@ -3012,7 +3076,7 @@
            ((prim-kind . prim-num) (prim primname))
            (lab1 (newlabel))
            (lab2 (newlabel))
-           (pos (slot-for-global)))
+           (pos (slot-for-global name)))
       (assert (> arity 0))
       (bytecode-BRANCH-to lab1)
       (bytecode-put-u32-le RESTART)
@@ -3061,7 +3125,7 @@
 
 (define (declare-builtin-exn name arity)
   (set! initial-env (declare-exn name arity initial-env))
-  (newglob exnid))
+  (newglob (list 'Integer exnid) "<builtin exn>"))
 
 ; Order sensitive! Must match declarations in runtime/caml/fail.h
 ; Do NOT call newglob before this point: the builtin exceptions must correspond to the globals 0-11
@@ -3100,10 +3164,13 @@
   (display "Usage: guile compile.scm input.ml -o output\n")
   (exit))
 
+(define show-progress #f)
+
 (define (process-args args)
   (match args
          (#nil '())
          (("-h" . rest) (usage-and-exit))
+         (("-P" . rest) (set! show-progress #t) (process-args rest))
          (("-o" outfile . rest)
           (set! output-file outfile)
           (process-args rest))
@@ -3133,5 +3200,8 @@
 
 (bytecode-begin-section "DATA")
 (bytecode-write-globals)
+
+(bytecode-begin-section "SYMB")
+(bytecode-write-symbols)
 
 (bytecode-close-output)
