@@ -209,9 +209,9 @@ let symbol_end () = (symbol_end_pos ()).pos_cnum
 let rhs_start n = (rhs_start_pos n).pos_cnum
 let rhs_end n = (rhs_end_pos n).pos_cnum
 
-(*
+
 let is_current_lookahead tok =
   (!current_lookahead_fun)(Obj.repr tok)
-*)
+
 
 let parse_error (_ : string) = ()

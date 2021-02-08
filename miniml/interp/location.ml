@@ -274,7 +274,7 @@ let show_filename file =
   (* if !absname then absolute_path file else file *) assert false
 
 let print_filename ppf file =
-  (* Format.fprintf ppf "%s" (show_filename file) *) assert false
+  Format.fprintf ppf "%s" file
 
 let reset () =
   num_loc_lines := 0
@@ -283,6 +283,11 @@ let reset () =
 let (msg_file, msg_line, msg_chars, msg_to, msg_colon) =
   ("File \"", "\", line ", ", characters ", "-", ":")
 *)
+let msg_file = "File \""
+let msg_line = "\", line "
+let msg_chars = ", characters "
+let msg_to = "-"
+let msg_colon = ":"
 
 (* return file, line, char from the given position *)
 let get_pos_info pos =
@@ -292,6 +297,7 @@ let get_pos_info pos =
 let setup_colors () =
   (* Misc.Color.setup !Clflags.color *) ()
 
+(*
 let print_loc ppf loc = (*
   setup_colors ();
   let (file, line, startchar) = get_pos_info loc.loc_start in
@@ -306,6 +312,15 @@ let print_loc ppf loc = (*
       fprintf ppf "%s%i%s%i" msg_chars startchar msg_to endchar;
     fprintf ppf "@}"
   end *) assert false
+;;
+*)
+
+let print_loc ppf loc =
+  let (file, line, startchar) = get_pos_info loc.loc_start in
+  let endchar = loc.loc_end.pos_cnum - loc.loc_start.pos_cnum + startchar in
+  Format.fprintf ppf "%s%a%s%d" msg_file print_filename file msg_line line;
+  if startchar >= 0 then
+    Format.fprintf ppf "%s%d%s%d" msg_chars startchar msg_to endchar
 ;;
 
 let default_printer ppf loc = (*

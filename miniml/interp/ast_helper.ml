@@ -68,38 +68,38 @@ module Typ = struct
             Ptyp_var x
         | Ptyp_arrow (label,core_type,core_type') ->
             Ptyp_arrow(label, loop var_names core_type, loop var_names core_type')
-        | Ptyp_tuple lst -> Ptyp_tuple (List.map1 loop var_names lst)
+        | Ptyp_tuple lst -> Ptyp_tuple (List.map (loop var_names) lst)
         | Ptyp_constr(longident, lst) ->
             if lst = [] then
               match longident.txt with Longident.Lident s ->
                 if List.mem s var_names then Ptyp_var s
-                else Ptyp_constr(longident, List.map1 loop var_names lst)
-                | _ -> Ptyp_constr(longident, List.map1 loop var_names lst)
+                else Ptyp_constr(longident, List.map (loop var_names) lst)
+                | _ -> Ptyp_constr(longident, List.map (loop var_names) lst)
             else
-            Ptyp_constr(longident, List.map1 loop var_names lst)
+            Ptyp_constr(longident, List.map (loop var_names) lst)
         | Ptyp_object (lst, o) ->
-            Ptyp_object (List.map1 loop_object_field var_names lst, o)
+            Ptyp_object (List.map (loop_object_field var_names) lst, o)
         | Ptyp_class (longident, lst) ->
-            Ptyp_class (longident, List.map1 loop var_names lst)
+            Ptyp_class (longident, List.map (loop var_names) lst)
         | Ptyp_alias(core_type, string) ->
             check_variable var_names t.ptyp_loc string;
             Ptyp_alias(loop var_names core_type, string)
         | Ptyp_variant(row_field_list, flag, lbl_lst_option) ->
-            Ptyp_variant(List.map1 loop_row_field var_names row_field_list,
+            Ptyp_variant(List.map (loop_row_field var_names) row_field_list,
                          flag, lbl_lst_option)
         | Ptyp_poly(string_lst, core_type) ->
-          List.iter1 (fun vt v -> let (var_names, t) = vt in
-            check_variable var_names t.ptyp_loc v.txt) (var_names,t) string_lst;
+          List.iter (fun v ->
+            check_variable var_names t.ptyp_loc v.txt) string_lst;
             Ptyp_poly(string_lst, loop var_names core_type)
         | Ptyp_package a -> let (longident,lst) = a in
-            Ptyp_package(longident,List.map1 (fun var_names nt -> let (n,typ) = nt in (n,loop var_names typ) ) var_names lst)
+            Ptyp_package(longident,List.map (fun nt -> let (n,typ) = nt in (n,loop var_names typ) ) lst)
         | Ptyp_extension a -> let (s, arg) = a in
             Ptyp_extension (s, arg)
       in
       {t with ptyp_desc = desc}
     and loop_row_field var_names t = match t with
         | Rtag(label,attrs,flag,lst) ->
-            Rtag(label,attrs,flag,List.map1 loop var_names lst)
+            Rtag(label,attrs,flag,List.map (loop var_names) lst)
         | Rinherit t ->
             Rinherit (loop var_names t)
     and loop_object_field var_names t = match t with
