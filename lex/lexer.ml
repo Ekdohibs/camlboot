@@ -200,7 +200,7 @@ let rec try_skip_space_and_comments lexbuf =
   | () -> try_skip_space_and_comments lexbuf
   | exception Bad_rule -> ()
 
-let _main lexbuf: Parser.token =
+let _main lexbuf =
   (* 1. skip spaces and comments *)
   try_skip_space_and_comments lexbuf;
   (* 2. try to parse each type *)
@@ -301,7 +301,7 @@ match tokk with
 
 let main lexbuf =
   let tokk = _main lexbuf in
-  print_token tokk;
-  Printf.printf "%!";
+  (*print_token tokk;
+  Printf.printf "%!";*)
   (*print_lexbuf lexbuf;*)
   tokk;;
