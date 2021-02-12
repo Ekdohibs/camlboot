@@ -41,6 +41,8 @@ let min_int = max_int + 1
 let min x y = if x <= y then x else y
 let max x y = if x >= y then x else y
 
+let abs x = if x < 0 then -x else x
+
 type bool = false | true
 type 'a ref = { mutable contents : 'a }
 type ('a, 'b) result = Ok of 'a | Error of 'b
@@ -161,6 +163,7 @@ let open_out_bin name =
   open_out_gen [Open_wronly; Open_creat; Open_trunc; Open_binary] 438 (* 0o666 *) name
 
 external close_in : in_channel -> unit = "caml_ml_close_channel"
+let close_in_noerr ic = try close_in ic with _ -> ()
 external flush : out_channel -> unit = "caml_ml_flush"
 external close_out_channel : out_channel -> unit = "caml_ml_close_channel"
 let close_out oc = flush oc; close_out_channel oc
@@ -184,6 +187,8 @@ let output_string oc s =
   unsafe_output_string oc s 0 (string_length s)
 
 let print_string s = output_string stdout s; flush stdout
+let print_newline () = print_string "\n"
+let print_endline s = print_string s; print_newline ()
 let print_err s = output_string stderr s; flush stderr
 
 external unsafe_input : in_channel -> bytes -> int -> int -> int
@@ -230,6 +235,7 @@ module Sys = struct
     with Not_found -> None
 
   let max_string_length = (1 lsl 57) - 9
+  let max_array_length = (1 lsl 54) - 1
   let word_size = 8
 
   external get_argv: unit -> string * string array = "caml_sys_get_argv"
@@ -242,6 +248,9 @@ module Sys = struct
   external getcwd: unit -> string = "caml_sys_getcwd"
   external rename : string -> string -> unit = "caml_sys_rename"
   external remove: string -> unit = "caml_sys_remove"
+
+  let os_type = ""
+  let ocaml_version = "camlboot"
 end
 
 

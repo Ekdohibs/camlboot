@@ -72,8 +72,8 @@
            MUTABLE OF OPEN REC SIG STRUCT TO TRY TYPE VAL WHEN WHILE WITH
            EOF STRING LIDENT UIDENT INT
            (right: MINUSGT)
-           (left: BAR)
            (left: AS)
+           (left: BAR)
            (nonassoc: annot_prec)
            (nonassoc: LET MATCH)
            (right: SEMICOLON)
@@ -244,6 +244,9 @@
     (nonempty_variance type_ignore) : '()
     (QUOTE type_ignore) : '()
     (longident_field type_ignore) : '()
+    (QUESTION type_ignore) : '()
+    (TILDE type_ignore) : '()
+    (COLON type_ignore) : '()
     (LPAREN type_ignore RPAREN type_ignore) : '())
 
    (type_count_stars
@@ -255,6 +258,9 @@
 
    (type_count_arrows
     ( ) : 0
+    (QUESTION type_count_arrows) : $2
+    (TILDE type_count_arrows) : $2
+    (COLON type_count_arrows) : $2
     (MINUSGT type_count_arrows) : (+ 1 $2)
     (longident_field type_count_arrows) : $2
     (QUOTE type_count_arrows) : $2

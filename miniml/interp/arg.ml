@@ -268,11 +268,12 @@ let parse_and_expand_argv_dynamic_aux allow_expand current argv speclist anonfun
 let parse_and_expand_argv_dynamic current argv speclist anonfun errmsg =
   parse_and_expand_argv_dynamic_aux true current argv speclist anonfun errmsg
 
-let parse_argv_dynamic ?(current=current) argv speclist anonfun errmsg =
+let current1 = current
+let parse_argv_dynamic ?(current=current1) argv speclist anonfun errmsg =
   parse_and_expand_argv_dynamic_aux false current (ref argv) speclist anonfun errmsg
 
 
-let parse_argv ?(current=current) argv speclist anonfun errmsg =
+let parse_argv ?(current=current1) argv speclist anonfun errmsg =
   parse_argv_dynamic ~current:current argv (ref speclist) anonfun errmsg
 
 

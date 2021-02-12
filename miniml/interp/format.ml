@@ -6,8 +6,8 @@ type formatter_functions = {
 let error msg =
   print_string msg; print_string "\n"; failwith msg
 
-let mkprintf is_format ff fmt cont =
-  let out_string = ff.out_string in
+let mkprintf is_format print_fun ff fmt cont =
+  let out_string = print_fun ff in
   let rec loop i =
     let j = ref i in
     while !j < String.length fmt && fmt.[!j] <> '%' && (not is_format || fmt.[!j] <> '@') do
@@ -47,10 +47,11 @@ let mkprintf is_format ff fmt cont =
   in
   loop 0
 
-let printf fmt = mkprintf true { out_string = print_string } fmt (fun () -> ())
-let fprintf ff fmt = mkprintf true ff fmt (fun () -> ())
-let eprintf fmt = mkprintf true { out_string = print_err } fmt (fun () -> ())
-let kbprintf k b fmt = mkprintf true { out_string = Buffer.add_string b } fmt (fun () -> k b)
+let getff ff = ff.out_string
+let printf fmt = mkprintf true getff { out_string = print_string } fmt (fun () -> ())
+let fprintf ff fmt = mkprintf true getff ff fmt (fun () -> ())
+let eprintf fmt = mkprintf true getff { out_string = print_err } fmt (fun () -> ())
+let kbprintf k b fmt = mkprintf true getff { out_string = Buffer.add_string b } fmt (fun () -> k b)
 let bprintf b fmt = kbprintf (fun _ -> ()) b fmt
 let kprintf k fmt = kbprintf (fun b -> k (Buffer.contents b)) (Buffer.create 16) fmt
 let ksprintf = kprintf
