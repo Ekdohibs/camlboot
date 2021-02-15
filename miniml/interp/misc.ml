@@ -19,4 +19,7 @@ exception Fatal_error
 
 let fatal_error msg = raise Fatal_error
 
-let create_hashtable x l = l
+let create_hashtable size init =
+   let tbl = Hashtbl.create size in
+   List.iter (fun (key, data) -> Hashtbl.add tbl key data) init;
+   tbl
