@@ -66,7 +66,7 @@ let engine tbl state buf =
   if result >= 0 then begin
     buf.lex_start_p <- buf.lex_curr_p;
     buf.lex_curr_p <- {buf.lex_curr_p
-                       with pos_cnum = buf.lex_abs_pos + buf.lex_curr_pos}
+                       with pos_cnum = buf.lex_abs_pos + buf.lex_curr_pos};
   end;
   result
 
@@ -76,23 +76,14 @@ let new_engine tbl state buf =
   if result >= 0 then begin
     buf.lex_start_p <- buf.lex_curr_p;
     buf.lex_curr_p <- {buf.lex_curr_p
-                       with pos_cnum = buf.lex_abs_pos + buf.lex_curr_pos}
+                       with pos_cnum = buf.lex_abs_pos + buf.lex_curr_pos};
   end;
   result
 
-let rec lex_refill_loop t i s =
-  if i < 0 then () else begin
-    let v = t.(i) in
-    if v >= 0 then t.(i) <- v-s;
-    lex_refill_loop t (i - 1) s
-  end
 
-let refill_buff lexbuf =
-  let aux_buffer, ic = lexbuf.refill_buff in
+let lex_refill read_fun aux_buffer lexbuf =
   let read =
-    (* read_fun aux_buffer (Bytes.length aux_buffer) *)
-    input ic aux_buffer 0 (Bytes.length aux_buffer)
-  in
+    read_fun aux_buffer (Bytes.length aux_buffer) in
   let n =
     if read > 0
     then read
@@ -118,7 +109,7 @@ let refill_buff lexbuf =
          space since n <= String.length aux_buffer <= String.length buffer.
          Watch out for string length overflow, though. *)
       let newlen =
-        2 * Bytes.length lexbuf.lex_buffer in
+        min (2 * Bytes.length lexbuf.lex_buffer) Sys.max_string_length in
       if lexbuf.lex_buffer_len - lexbuf.lex_start_pos + n > newlen
       then failwith "Lexing.lex_refill: cannot grow buffer";
       let newbuf = Bytes.create newlen in
@@ -137,11 +128,11 @@ let refill_buff lexbuf =
     lexbuf.lex_last_pos <- lexbuf.lex_last_pos - s;
     lexbuf.lex_buffer_len <- lexbuf.lex_buffer_len - s ;
     let t = lexbuf.lex_mem in
-    (*for i = 0 to Array.length t-1 do
+    for i = 0 to Array.length t-1 do
       let v = t.(i) in
       if v >= 0 then
         t.(i) <- v-s
-    done*) lex_refill_loop t (Array.length t - 1) s
+    done
   end;
   (* There is now enough space at the end of the buffer *)
   Bytes.blit aux_buffer 0 lexbuf.lex_buffer lexbuf.lex_buffer_len n;
@@ -154,9 +145,8 @@ let zero_pos = {
   pos_cnum = 0;
 }
 
-
-let from_channel ic =
-  { refill_buff = (Bytes.create 512, ic);
+let from_function f =
+  { refill_buff = lex_refill f (Bytes.create 512);
     lex_buffer = Bytes.create 1024;
     lex_buffer_len = 0;
     lex_abs_pos = 0;
@@ -164,15 +154,14 @@ let from_channel ic =
     lex_curr_pos = 0;
     lex_last_pos = 0;
     lex_last_action = 0;
-    lex_mem = [|0|];
+    lex_mem = [||];
     lex_eof_reached = false;
     lex_start_p = zero_pos;
     lex_curr_p = zero_pos;
   }
 
-(*
 let from_channel ic =
-  (* from_function (fun buf n -> input ic buf 0 n) *) assert false
+  from_function (fun buf n -> input ic buf 0 n)
 
 let from_string s =
   { refill_buff = (fun lexbuf -> lexbuf.lex_eof_reached <- true);
@@ -184,11 +173,11 @@ let from_string s =
     lex_curr_pos = 0;
     lex_last_pos = 0;
     lex_last_action = 0;
-    lex_mem = [|0|];
+    lex_mem = [||];
     lex_eof_reached = true;
     lex_start_p = zero_pos;
     lex_curr_p = zero_pos;
-  } *)
+  }
 
 let lexeme lexbuf =
   let len = lexbuf.lex_curr_pos - lexbuf.lex_start_pos in
@@ -239,4 +228,4 @@ let flush_input lb =
   lb.lex_curr_pos <- 0;
   lb.lex_abs_pos <- 0;
   lb.lex_curr_p <- {lb.lex_curr_p with pos_cnum = 0};
-  lb.lex_buffer_len <- 0
+  lb.lex_buffer_len <- 0;

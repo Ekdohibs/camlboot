@@ -3240,8 +3240,15 @@
     (set-current-input-port port)
     ((ml-parser) (lambda () (token errorp)) errorp))))
 
+(define (caml-capitalize name)
+  (let ((s (string->list name)))
+    (list->string (cons (char-upcase (car s)) (cdr s)))))
+
 (define (input-file->module-name file)
-  (string-capitalize (basename file ".ml")))
+  (cond
+   ((string-suffix? ".ml" file) (caml-capitalize (basename file ".ml")))
+   ((string-suffix? ".mli" file) (caml-capitalize (basename file ".mli")))
+   (else (errorp "Unknown file extension"))))
 
 (define (parse-phrases input-phrases)
   (map (match-lambda
