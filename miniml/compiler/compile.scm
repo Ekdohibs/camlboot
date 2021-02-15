@@ -5,6 +5,10 @@
              (ice-9 binary-ports) (ice-9 vlist) (ice-9 match))
 
 
+(define rec-closure-step 2)
+(define has-custom-fixed #f)
+(define magic "Caml1999X023")
+
 (define error-code-syntax 3)
 
 (define-immutable-record-type <def>
@@ -743,7 +747,7 @@
     (if (or (char-lower-case? c) (char-upper-case? c))
         (begin
           (read-char)
-          (make-lexical-token 'INT location (cons n (list->string (list c)))))
+          (make-lexical-token 'INT location (cons n c)))
         (make-lexical-token 'INT location (cons n #nil)))
     ))
 
@@ -1028,7 +1032,7 @@
         (put-u32 bytecode-output-port (cdr section))
      )) (reverse bytecode-sections))
     (put-u32 bytecode-output-port (length bytecode-sections))
-    (put-string bytecode-output-port "Caml1999X023")
+    (put-string bytecode-output-port magic)
     (close-output-port bytecode-output-port)
     (set! bytecode-output-port #nil)
     ))
@@ -1049,6 +1053,28 @@
               (bytecode-put-u8 #x3)
               (bytecode-put-u64 n)
               (set! len (+ len 9)))
+           (('Int64 n)
+              (bytecode-put-u8 (if has-custom-fixed #x19 #x12))
+              (bytecode-put-string "_j")
+              (bytecode-put-u8 0)
+              (bytecode-put-u64 n)
+              (set! len (+ len 12))
+              (set! size64 (+ size64 3)))
+           (('Int32 n)
+              (bytecode-put-u8 (if has-custom-fixed #x19 #x12))
+              (bytecode-put-string "_i")
+              (bytecode-put-u8 0)
+              (bytecode-put-u32 n)
+              (set! len (+ len 8))
+              (set! size64 (+ size64 3)))
+           (('Intnat n)
+              (bytecode-put-u8 (if has-custom-fixed #x19 #x12))
+              (bytecode-put-string "_n")
+              (bytecode-put-u8 0)
+              (bytecode-put-u8 2)
+              (bytecode-put-u64 n)
+              (set! len (+ len 13))
+              (set! size64 (+ size64 3)))
            (('String s)
               (bytecode-put-u8 #x15)
               (bytecode-put-u64 (string-length s))
@@ -1481,8 +1507,6 @@
   ; (newline)(display funshape)(newline)(display args)(newline)
 
   (align funshape args))
-
-(define rec-closure-step 2)
 
 ; Bytecode instructions expect "stack-relative" addresses,
 ; with 0 being the last slot on the stack.
@@ -2014,10 +2038,14 @@
      (match c
        (('CInt (n . #nil))
         (list 'LConst n))
-       (('CInt (n . ext))
-        (lower-expr env istail
-                    (mkapp1 (string-append "__intext_" ext)
-                            (list 'EConstant (list 'CInt (cons n #nil))))))
+       (('CInt (n . #\L))
+        (list 'LGlobal (newglob (list 'Int64 n) (string-append (number->string n) "L"))))
+       (('CInt (n . #\l))
+        (list 'LGlobal (newglob (list 'Int32 n) (string-append (number->string n) "l"))))
+       (('CInt (n . #\n))
+        (list 'LGlobal (newglob (list 'Intnat n) (string-append (number->string n) "n"))))
+       (('CInt (n . c))
+        (errorp "Unknown int extension: " (list->string (list c))))
        (('CUnit)
         (list 'LConst 0))
        (('CString str)

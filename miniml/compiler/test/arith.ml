@@ -44,3 +44,11 @@ let () = show_int 0o52
 let () = show_int 0b101010
 
 let () = print_newline ()
+
+external int64_format : string -> int64 -> string = "caml_int64_format"
+external int32_format : string -> int32 -> string = "caml_int32_format"
+external nativeint_format : string -> nativeint -> string = "caml_nativeint_format"
+
+let () = print_endline (int64_format "%d" 9223372036854775807L)
+let () = print_endline (int32_format "%d" 2147483647l)
+let () = print_endline (nativeint_format "%d" 9223372036854775807n)

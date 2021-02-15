@@ -258,10 +258,6 @@ external float_of_string : string -> float = "caml_float_of_string"
 
 external sys_exit : int -> 'a = "caml_sys_exit"
 
-external __intext_L : int -> int64 = "caml_int64_of_int"
-external __intext_n : int -> nativeint = "caml_nativeint_of_int"
-
-
 external ( ~-. ) : float -> float = "%negfloat"
 external ( ~+. ) : float -> float = "%identity"
 external ( +. ) : float -> float -> float = "%addfloat"
