@@ -1,26 +1,33 @@
 BOOT=_boot
 OCAMLSRC=ocaml-src
 CONFIG=$(OCAMLSRC)/config/Makefile
-OCAMLRUN=_boot/byterun/ocamlrun
+OCAMLRUN=$(OCAMLSRC)/byterun/ocamlrun
+GENERATED=$(OCAMLSRC)/bytecomp/opcodes.ml
+
+$(OCAMLRUN): $(CONFIG)
+	make -C $(OCAMLSRC)/byterun all
 
 .PHONY: configure-ocaml
 configure-ocaml:
 	rm $(OCAMLSRC)/boot/ocamlc $(OCAMLSRC)/boot/ocamllex
 	cd $(OCAMLSRC) && bash configure
+
+.PHONY: ocaml-generated-files
+ocaml-generated-files: $(OCAMLRUN) lex make_opcodes
 	make -C $(OCAMLSRC) ocamlyacc && cp $(OCAMLSRC)/yacc/ocamlyacc $(OCAMLSRC)/boot 
 	make -C $(OCAMLSRC)/stdlib sys.ml
 	make -C $(OCAMLSRC) utils/config.ml
 	make -C $(OCAMLSRC) parsing/parser.ml
-	#make -C $(OCAMLSRC) CAMLLEX=ocamllex CAMLRUN=ocamlrun parsing/lexer.ml
+	miniml/interp/lex.sh $(OCAMLSRC)/parsing/lexer.mll -o $(OCAMLSRC)/parsing/lexer.ml
 	make -C $(OCAMLSRC) bytecomp/runtimedef.ml
-	#make -C $(OCAMLSRC) CAMLLEX=ocamllex CAMLRUN=ocamlrun CAMLC=ocamlc bytecomp/opcodes.ml
+	miniml/interp/make_opcodes.sh -opcodes < $(OCAMLSRC)/byterun/caml/instruct.h > $(OCAMLSRC)/bytecomp/opcodes.ml
 
 .PHONY: lex
-lex:
+lex: $(OCAMLRUN)
 	make -C miniml/interp lex.byte
 
 .PHONY: make_opcodes
-make_opcodes:
+make_opcodes: $(OCAMLRUN)
 	make -C miniml/interp make_opcodes.byte
 
 .PHONY: clean-ocaml-config
@@ -33,7 +40,10 @@ clean-ocaml-config:
 $(CONFIG): $(OCAMLSRC)/VERSION
 	make configure-ocaml
 
-$(BOOT)/driver: $(OCAMLSRC)/driver $(OCAMLSRC)/otherlibs/dynlink $(CONFIG)
+$(GENERATED): $(OCAMLRUN) lex make_opcodes
+	make ocaml-generated-files
+
+$(BOOT)/driver: $(OCAMLSRC)/driver $(OCAMLSRC)/otherlibs/dynlink $(CONFIG) $(GENERATED)
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
@@ -41,38 +51,35 @@ $(BOOT)/driver: $(OCAMLSRC)/driver $(OCAMLSRC)/otherlibs/dynlink $(CONFIG)
 	grep -v 'REMOVE_ME for ../../debugger/dynlink.ml' \
 	     $(OCAMLSRC)/otherlibs/dynlink/dynlink.ml > $@/compdynlink.mlbyte
 
-$(BOOT)/byterun: $(OCAMLSRC)/byterun $(CONFIG)
-	make -C $(OCAMLSRC)/byterun all
+$(BOOT)/byterun: $(OCAMLSRC)/byterun $(CONFIG) $(GENERATED)
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
 
-$(BOOT)/bytecomp: $(OCAMLSRC)/bytecomp $(CONFIG)
-	mkdir -p $(BOOT)
-	rm -rf $@
-	cp -r $< $@
-	miniml/interp/make_opcodes.sh -opcodes < $(OCAMLSRC)/byterun/caml/instruct.h > $(BOOT)/bytecomp/opcodes.ml
-
-$(BOOT)/typing: $(OCAMLSRC)/typing $(CONFIG)
+$(BOOT)/bytecomp: $(OCAMLSRC)/bytecomp $(CONFIG) $(GENERATED)
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
 
-$(BOOT)/parsing: $(OCAMLSRC)/parsing $(CONFIG) patches/parsetree.patch lex
+$(BOOT)/typing: $(OCAMLSRC)/typing $(CONFIG) $(GENERATED)
+	mkdir -p $(BOOT)
+	rm -rf $@
+	cp -r $< $@
+
+$(BOOT)/parsing: $(OCAMLSRC)/parsing $(CONFIG) $(GENERATED) patches/parsetree.patch lex
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
 	patch $(BOOT)/parsing/parsetree.mli patches/parsetree.patch
-	miniml/interp/lex.sh $(BOOT)/parsing/lexer.mll -o $(BOOT)/parsing/lexer.ml
 
-$(BOOT)/utils: $(OCAMLSRC)/utils $(CONFIG) patches/disable-profiling.patch
+$(BOOT)/utils: $(OCAMLSRC)/utils $(CONFIG) $(GENERATED) patches/disable-profiling.patch
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
 	cp $(BOOT)/utils/profile.ml $(BOOT)/utils/profile.ml.noprof
 	patch $(BOOT)/utils/profile.ml.noprof patches/disable-profiling.patch
 
-$(BOOT)/stdlib: $(OCAMLSRC)/stdlib $(CONFIG) patches/compflags.patch
+$(BOOT)/stdlib: $(OCAMLSRC)/stdlib $(CONFIG) $(GENERATED) patches/compflags.patch
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
