@@ -33,7 +33,7 @@ let escaped = function
   | '\t' -> "\\t"
   | '\r' -> "\\r"
   | '\b' -> "\\b"
-  | c when (' ' <= c && c <= '~') ->
+  | ' ' .. '~' as c ->
       let s = bytes_create 1 in
       bytes_unsafe_set s 0 c;
       unsafe_to_string s

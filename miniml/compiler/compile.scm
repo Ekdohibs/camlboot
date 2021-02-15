@@ -185,6 +185,9 @@
     (type_name_with_args EQ separated_nonempty_list_bar_constr_decl) : (cons $1 (list 'ISum $3))
     (type_name_with_args EQ BAR separated_nonempty_list_bar_constr_decl) : (cons $1 (list 'ISum $4))
     (type_name_with_args EQ record_def) : (cons $1 (list 'IRecord $3))
+    (type_name_with_args EQ type_ignore EQ separated_nonempty_list_bar_constr_decl) : (cons $1 (list 'ISum $5))
+    (type_name_with_args EQ type_ignore EQ BAR separated_nonempty_list_bar_constr_decl) : (cons $1 (list 'ISum $6))
+    (type_name_with_args EQ type_ignore EQ record_def) : (cons $1 (list 'IRecord $5))
     (type_name_with_args EQ type_ignore) : (cons $1 (list 'IRebind)))
 
    (record_def
@@ -408,6 +411,7 @@
     (PREFIXOP simple_expr) : (mkapp1 $1 $2)
     (simple_expr DOT LPAREN expr RPAREN) : (mkapp2 "__array_get" $1 $4)
     (simple_expr DOT LBRACK expr RBRACK) : (mkapp2 "__string_get" $1 $4)
+    (longident_uident DOT LPAREN expr RPAREN) : (list 'ELetOpen $1 $4)
     (WHILE expr DO expr DONE) : (list 'EWhile $2 $4)
     (FOR lident_ext EQ expr TO expr DO expr DONE) : (list 'EFor $2 'UpTo $4 $6 $8)
     (FOR lident_ext EQ expr DOWNTO expr DO expr DONE) : (list 'EFor $2 'DownTo $4 $6 $8))
@@ -479,7 +483,6 @@
     (LET llet llet_ands IN expr (prec: LET)) : (list 'ELet #f (cons $2 $3) $5)
     (LET REC llet llet_ands IN expr (prec: LET)) : (list 'ELet #t (cons $3 $4) $6)
     (LET OPEN longident_uident IN expr (prec: LET)) : (list 'ELetOpen $3 $5)
-    (longident_uident DOT LPAREN expr RPAREN) : (list 'ELetOpen $1 $4)
     (expr_no_semi COLONCOLON expr_no_semi) : (lid->econstr "::" (cons $1 (cons $3 #nil)))
     (simple_expr DOT LPAREN expr RPAREN LTMINUS expr_no_semi) : (mkapp3 "__array_set" $1 $4 $7)
     (simple_expr DOT LBRACK expr RBRACK LTMINUS expr_no_semi) : (mkapp3 "__string_set" $1 $4 $7)
@@ -1234,6 +1237,20 @@
   (cons "%nativeint_of_int32" "caml_nativeint_of_int32")
   (cons "%nativeint_to_int32" "caml_nativeint_to_int32")
 
+  (cons "%int32_neg" "caml_int32_neg")
+  (cons "%int32_add" "caml_int32_add")
+  (cons "%int32_sub" "caml_int32_sub")
+  (cons "%int32_mul" "caml_int32_mul")
+  (cons "%int32_div" "caml_int32_div")
+  (cons "%int32_mod" "caml_int32_mod")
+  (cons "%int32_and" "caml_int32_and")
+  (cons "%int32_or" "caml_int32_or")
+  (cons "%int32_xor" "caml_int32_xor")
+  (cons "%int32_lsl" "caml_int32_shift_left")
+  (cons "%int32_asr" "caml_int32_shift_right")
+  (cons "%int32_lsr" "caml_int32_shift_right_unsigned")
+  (cons "%int32_of_int" "caml_int32_of_int")
+  (cons "%int32_to_int" "caml_int32_to_int")
 ))
 (define prims #nil)
 (define nprims 0)
@@ -2379,7 +2396,7 @@
    (((or 'LVar 'LGlobal 'LConst) . _)
     #t)
    (((or 'LBlock
-        'LGetfield 'Setfield
+        'LGetfield 'LSetfield
         'LApply 'LTailApply
         'LIf 'LChain 'LSwitch
         'LReraise 'LCatch

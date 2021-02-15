@@ -55,7 +55,7 @@ let to_hex d =
   for i = 0 to 15 do
     let x = Char.code d.[i] in
     Bytes.unsafe_set result (i*2) (char_hex (x lsr 4));
-    Bytes.unsafe_set result (i*2+1) (char_hex (x land 15));
+    Bytes.unsafe_set result (i*2+1) (char_hex (x land 0x0f));
   done;
   Bytes.unsafe_to_string result
 
@@ -63,9 +63,9 @@ let from_hex s =
   if String.length s <> 32 then invalid_arg "Digest.from_hex";
   let digit c =
     match c with
-    | c when '0'<=c&&c<='9' -> Char.code c - Char.code '0'
-    | c when 'A'<=c&&c<='F' -> Char.code c - Char.code 'A' + 10
-    | c when 'a'<=c&&c<='f' -> Char.code c - Char.code 'a' + 10
+    | '0'..'9' -> Char.code c - Char.code '0'
+    | 'A'..'F' -> Char.code c - Char.code 'A' + 10
+    | 'a'..'f' -> Char.code c - Char.code 'a' + 10
     | _ -> raise (Invalid_argument "Digest.from_hex")
   in
   let byte i = digit s.[i] lsl 4 + digit s.[i+1] in

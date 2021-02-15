@@ -39,11 +39,11 @@ type docstring =
 
 (* List of docstrings *)
 
-let docstrings = ref []
+let docstrings (* : docstring list ref *) = ref []
 
 (* Warn for unused and ambiguous docstrings *)
 
-let warn_bad_docstrings () = (*
+let warn_bad_docstrings () =
   if Warnings.is_active (Warnings.Bad_docstring true) then begin
     List.iter
       (fun ds ->
@@ -57,7 +57,7 @@ let warn_bad_docstrings () = (*
              | Many ->
                prerr_warning ds.ds_loc (Warnings.Bad_docstring false))
       (List.rev !docstrings)
-end *) ()
+end
 
 (* Docstring constructors and destructors *)
 
@@ -86,7 +86,7 @@ type docs =
 let empty_docs = { docs_pre = None; docs_post = None }
 
 let doc_loc = {txt = "ocaml.doc"; loc = Location.none}
-(*
+
 let docs_attr ds =
   let open Parsetree in
   let exp =
@@ -98,10 +98,9 @@ let docs_attr ds =
     { pstr_desc = Pstr_eval (exp, []); pstr_loc = exp.pexp_loc }
   in
     (doc_loc, PStr [item])
-*)
 
 let add_docs_attrs docs attrs =
-  (* let attrs =
+  let attrs =
     match docs.docs_pre with
     | None | Some { ds_body=""; _ } -> attrs
     | Some ds -> docs_attr ds :: attrs
@@ -110,7 +109,7 @@ let add_docs_attrs docs attrs =
     match docs.docs_post with
     | None | Some { ds_body=""; _ } -> attrs
     | Some ds -> attrs @ [docs_attr ds]
-  in *)
+  in
   attrs
 
 (* Docstrings attached to constructors or fields *)
@@ -118,13 +117,13 @@ let add_docs_attrs docs attrs =
 type info = docstring option
 
 let empty_info = None
-(*
+
 let info_attr = docs_attr
-*)
+
 let add_info_attrs info attrs =
-  (* match info with
+  match info with
   | None | Some {ds_body=""; _} -> attrs
-  | Some ds -> attrs @ [info_attr ds] *) attrs
+  | Some ds -> attrs @ [info_attr ds]
 
 (* Docstrings not attached to a specific item *)
 
@@ -136,22 +135,23 @@ let empty_text_lazy = lazy []
 let text_loc = {txt = "ocaml.text"; loc = Location.none}
 
 let text_attr ds =
+  let open Parsetree in
   let exp =
-    { Parsetree.pexp_desc = Parsetree.Pexp_constant (Parsetree.Pconst_string(ds.ds_body, None));
-      Parsetree.pexp_loc = ds.ds_loc;
-      Parsetree.pexp_attributes = []; }
+    { pexp_desc = Pexp_constant (Pconst_string(ds.ds_body, None));
+      pexp_loc = ds.ds_loc;
+      pexp_attributes = []; }
   in
   let item =
-    { Parsetree.pstr_desc = Parsetree.Pstr_eval (exp, []); Parsetree.pstr_loc = exp.Parsetree.pexp_loc }
+    { pstr_desc = Pstr_eval (exp, []); pstr_loc = exp.pexp_loc }
   in
-    (text_loc, Parsetree.PStr [item])
+    (text_loc, PStr [item])
 
-let add_text_attrs dsl attrs = (*
+let add_text_attrs dsl attrs =
   let fdsl = List.filter (function {ds_body=""} -> false| _ ->true) dsl in
-  (List.map text_attr fdsl) @ attrs *) attrs
+  (List.map text_attr fdsl) @ attrs
 
 (* Find the first non-info docstring in a list, attach it and return it *)
-let get_docstring ~info dsl = (*
+let get_docstring ~info dsl =
   let rec loop = function
     | [] -> None
     | {ds_attached = Info; _} :: rest -> loop rest
@@ -159,10 +159,10 @@ let get_docstring ~info dsl = (*
         ds.ds_attached <- if info then Info else Docs;
         Some ds
   in
-  loop dsl *) None
+  loop dsl
 
 (* Find all the non-info docstrings in a list, attach them and return them *)
-let get_docstrings dsl = (*
+let get_docstrings dsl =
   let rec loop acc = function
     | [] -> List.rev acc
     | {ds_attached = Info; _} :: rest -> loop acc rest
@@ -170,110 +170,110 @@ let get_docstrings dsl = (*
         ds.ds_attached <- Docs;
         loop (ds :: acc) rest
   in
-    loop [] dsl *) []
+    loop [] dsl
 
 (* "Associate" all the docstrings in a list *)
-let associate_docstrings dsl = (*
+let associate_docstrings dsl =
   List.iter
     (fun ds ->
        match ds.ds_associated with
        | Zero -> ds.ds_associated <- One
        | (One | Many) -> ds.ds_associated <- Many)
-    dsl *) ()
+    dsl
 
 (* Map from positions to pre docstrings *)
-(*
-let pre_table =
+
+let pre_table (* : (Lexing.position, docstring list) Hashtbl.t *) =
   Hashtbl.create 50
-*)
+
 let set_pre_docstrings pos dsl =
-  (* if dsl <> [] then Hashtbl.add pre_table pos dsl *) ()
+  if dsl <> [] then Hashtbl.add pre_table pos dsl
 
 let get_pre_docs pos =
-  (* try
+  try
     let dsl = Hashtbl.find pre_table pos in
       associate_docstrings dsl;
       get_docstring ~info:false dsl
-  with Not_found -> None *) None
+  with Not_found -> None
 
 let mark_pre_docs pos =
-  (* try
+  try
     let dsl = Hashtbl.find pre_table pos in
       associate_docstrings dsl
-  with Not_found -> () *) ()
+  with Not_found -> ()
 
 (* Map from positions to post docstrings *)
-(*
-let post_table =
+
+let post_table (* : (Lexing.position, docstring list) Hashtbl.t *) =
   Hashtbl.create 50
-*)
+
 let set_post_docstrings pos dsl =
-  (*if dsl <> [] then Hashtbl.add post_table pos dsl *) ()
- 
+  if dsl <> [] then Hashtbl.add post_table pos dsl
+
 let get_post_docs pos =
-  (* try
+  try
     let dsl = Hashtbl.find post_table pos in
       associate_docstrings dsl;
       get_docstring ~info:false dsl
-  with Not_found -> None *) None
+  with Not_found -> None
 
 let mark_post_docs pos =
-  (* try
+  try
     let dsl = Hashtbl.find post_table pos in
       associate_docstrings dsl
-  with Not_found -> () *) ()
+  with Not_found -> ()
 
 let get_info pos =
-  (*try
+  try
     let dsl = Hashtbl.find post_table pos in
       get_docstring ~info:true dsl
-  with Not_found -> None*) None
+  with Not_found -> None
 
 (* Map from positions to floating docstrings *)
-(*
-let floating_table =
+
+let floating_table (* : (Lexing.position, docstring list) Hashtbl.t *) =
   Hashtbl.create 50
-*)
+
 let set_floating_docstrings pos dsl =
-  (* if dsl <> [] then Hashtbl.add floating_table pos dsl *) ()
+  if dsl <> [] then Hashtbl.add floating_table pos dsl
 
 let get_text pos =
-  (* try
+  try
     let dsl = Hashtbl.find floating_table pos in
       get_docstrings dsl
-  with Not_found -> [] *) []
+  with Not_found -> []
 
 let get_post_text pos =
-  (* try
+  try
     let dsl = Hashtbl.find post_table pos in
       get_docstrings dsl
-  with Not_found -> [] *) []
+  with Not_found -> []
 
 (* Maps from positions to extra docstrings *)
-(*
-let pre_extra_table =
+
+let pre_extra_table (* : (Lexing.position, docstring list) Hashtbl.t *) =
   Hashtbl.create 50
-*)
+
 let set_pre_extra_docstrings pos dsl =
-  (* if dsl <> [] then Hashtbl.add pre_extra_table pos dsl *) ()
+  if dsl <> [] then Hashtbl.add pre_extra_table pos dsl
 
 let get_pre_extra_text pos =
-  (* try
+  try
     let dsl = Hashtbl.find pre_extra_table pos in
       get_docstrings dsl
-  with Not_found -> [] *) []
-(*
-let post_extra_table =
+  with Not_found -> []
+
+let post_extra_table (* : (Lexing.position, docstring list) Hashtbl.t *) =
   Hashtbl.create 50
-*)
+
 let set_post_extra_docstrings pos dsl =
-  (* if dsl <> [] then Hashtbl.add post_extra_table pos dsl *) ()
+  if dsl <> [] then Hashtbl.add post_extra_table pos dsl
 
 let get_post_extra_text pos =
-  (* try
+  try
     let dsl = Hashtbl.find post_extra_table pos in
       get_docstrings dsl
-  with Not_found -> [] *) []
+  with Not_found -> []
 
 (* Docstrings from parser actions *)
 
@@ -344,10 +344,9 @@ let rhs_post_extra_text pos =
 (* (Re)Initialise all comment state *)
 
 let init () =
-  docstrings := [] (*;
+  docstrings := [];
   Hashtbl.reset pre_table;
   Hashtbl.reset post_table;
   Hashtbl.reset floating_table;
   Hashtbl.reset pre_extra_table;
-  Hashtbl.reset post_extra_table*)
-
+  Hashtbl.reset post_extra_table

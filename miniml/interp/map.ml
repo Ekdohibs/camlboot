@@ -496,7 +496,7 @@ module Make(Ord: OrderedType) = struct
     let to_seq_from low m =
       let rec aux low m c = match m with
         | Empty -> c
-        | Node {l; v; d; r} ->
+        | Node {l; v; d; r; _} ->
             begin match Ord.compare v low with
               | 0 -> More (v, d, r, c)
               | n when n<0 -> aux low r c

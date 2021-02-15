@@ -173,7 +173,7 @@ let escaped s =
     n := !n +
       (match unsafe_get s i with
        | '\"' | '\\' | '\n' | '\t' | '\r' | '\b' -> 2
-       | c when ' ' <= c && c <= '~' -> 1
+       | ' ' .. '~' -> 1
        | _ -> 4)
   done;
   if !n = length s then copy s else begin
@@ -191,7 +191,7 @@ let escaped s =
           unsafe_set s' !n '\\'; incr n; unsafe_set s' !n 'r'
       | '\b' ->
           unsafe_set s' !n '\\'; incr n; unsafe_set s' !n 'b'
-      | c when (' ' <= c && c <= '~') -> unsafe_set s' !n c
+      | (' ' .. '~') as c -> unsafe_set s' !n c
       | c ->
           let a = char_code c in
           unsafe_set s' !n '\\';
@@ -317,7 +317,7 @@ let rcontains_from s i c =
 
 type t = bytes
 
-let compare (x: t) (y: t) = compare x y
+let compare (x: t) (y: t) = Pervasives.compare x y
 external equal : t -> t -> bool = "caml_bytes_equal"
 
 (* Deprecated functions implemented via other deprecated functions *)

@@ -32,6 +32,17 @@ let with_default_loc l f =
   try let r = f () in default_loc := old; r
   with exn -> default_loc := old; raise exn
 
+module Const = struct
+  let integer ?suffix i = Pconst_integer (i, suffix)
+  let int ?suffix i = integer ?suffix (string_of_int i)
+  let int32 ?(suffix='l') i = integer ~suffix (Int32.to_string i)
+  let int64 ?(suffix='L') i = integer ~suffix (Int64.to_string i)
+  let nativeint ?(suffix='n') i = integer ~suffix (Nativeint.to_string i)
+  let float ?suffix f = Pconst_float (f, suffix)
+  let char c = Pconst_char c
+  let string ?quotation_delimiter s = Pconst_string (s, quotation_delimiter)
+end
+
 module Typ = struct
   let mk ?(loc = !default_loc) ?(attrs = []) d =
     {ptyp_desc = d; ptyp_loc = loc; ptyp_attributes = attrs}
@@ -55,11 +66,12 @@ module Typ = struct
     | Ptyp_poly _ -> t
     | _ -> poly ~loc:t.ptyp_loc [] t (* -> ghost? *)
 
-  let check_variable vl loc v =
-    if List.mem v vl then
-      raise (Syntaxerr.Error(Syntaxerr.Variable_in_scope(loc,v)))
-
-    let rec loop var_names t =
+  let varify_constructors var_names t =
+    let check_variable vl loc v =
+      if List.mem v vl then
+        raise Syntaxerr.(Error(Variable_in_scope(loc,v))) in
+    let var_names = List.map (fun v -> v.txt) var_names in
+    let rec loop t =
       let desc =
         match t.ptyp_desc with
         | Ptyp_any -> Ptyp_any
@@ -67,50 +79,47 @@ module Typ = struct
             check_variable var_names t.ptyp_loc x;
             Ptyp_var x
         | Ptyp_arrow (label,core_type,core_type') ->
-            Ptyp_arrow(label, loop var_names core_type, loop var_names core_type')
-        | Ptyp_tuple lst -> Ptyp_tuple (List.map (loop var_names) lst)
+            Ptyp_arrow(label, loop core_type, loop core_type')
+        | Ptyp_tuple lst -> Ptyp_tuple (List.map loop lst)
+        | Ptyp_constr( { txt = Longident.Lident s }, [])
+          when List.mem s var_names ->
+            Ptyp_var s
         | Ptyp_constr(longident, lst) ->
-            if lst = [] then
-              match longident.txt with Longident.Lident s ->
-                if List.mem s var_names then Ptyp_var s
-                else Ptyp_constr(longident, List.map (loop var_names) lst)
-                | _ -> Ptyp_constr(longident, List.map (loop var_names) lst)
-            else
-            Ptyp_constr(longident, List.map (loop var_names) lst)
+            Ptyp_constr(longident, List.map loop lst)
         | Ptyp_object (lst, o) ->
-            Ptyp_object (List.map (loop_object_field var_names) lst, o)
+            Ptyp_object (List.map loop_object_field lst, o)
         | Ptyp_class (longident, lst) ->
-            Ptyp_class (longident, List.map (loop var_names) lst)
+            Ptyp_class (longident, List.map loop lst)
         | Ptyp_alias(core_type, string) ->
             check_variable var_names t.ptyp_loc string;
-            Ptyp_alias(loop var_names core_type, string)
+            Ptyp_alias(loop core_type, string)
         | Ptyp_variant(row_field_list, flag, lbl_lst_option) ->
-            Ptyp_variant(List.map (loop_row_field var_names) row_field_list,
+            Ptyp_variant(List.map loop_row_field row_field_list,
                          flag, lbl_lst_option)
         | Ptyp_poly(string_lst, core_type) ->
           List.iter (fun v ->
             check_variable var_names t.ptyp_loc v.txt) string_lst;
-            Ptyp_poly(string_lst, loop var_names core_type)
-        | Ptyp_package a -> let (longident,lst) = a in
-            Ptyp_package(longident,List.map (fun nt -> let (n,typ) = nt in (n,loop var_names typ) ) lst)
-        | Ptyp_extension a -> let (s, arg) = a in
+            Ptyp_poly(string_lst, loop core_type)
+        | Ptyp_package(longident,lst) ->
+            Ptyp_package(longident,List.map (fun (n,typ) -> (n,loop typ) ) lst)
+        | Ptyp_extension (s, arg) ->
             Ptyp_extension (s, arg)
       in
       {t with ptyp_desc = desc}
-    and loop_row_field var_names t = match t with
+    and loop_row_field  =
+      function
         | Rtag(label,attrs,flag,lst) ->
-            Rtag(label,attrs,flag,List.map (loop var_names) lst)
+            Rtag(label,attrs,flag,List.map loop lst)
         | Rinherit t ->
-            Rinherit (loop var_names t)
-    and loop_object_field var_names t = match t with
+            Rinherit (loop t)
+    and loop_object_field =
+      function
         | Otag(label, attrs, t) ->
-            Otag(label, attrs, loop var_names t)
+            Otag(label, attrs, loop t)
         | Oinherit t ->
-            Oinherit (loop var_names t)
-
-  let varify_constructors var_names t =
-    let var_names = List.map (fun v -> v.txt) var_names in
-    loop var_names t
+            Oinherit (loop t)
+    in
+    loop t
 
 end
 

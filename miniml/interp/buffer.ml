@@ -23,6 +23,7 @@ type t =
 
 let create n =
  let n = if n < 1 then 1 else n in
+ let n = if n > Sys.max_string_length then Sys.max_string_length else n in
  let s = Bytes.create n in
  {buffer = s; position = 0; length = n; initial_buffer = s}
 
@@ -57,14 +58,15 @@ let reset b =
   b.position <- 0; b.buffer <- b.initial_buffer;
   b.length <- Bytes.length b.buffer
 
-let rec make_new_len new_len x =
-  if x <= !new_len then () else begin new_len := 2 * !new_len; make_new_len new_len x end
-
 let resize b more =
   let len = b.length in
   let new_len = ref len in
-  (* while b.position + more > !new_len do new_len := 2 * !new_len done; *)
-  make_new_len new_len (b.position + more);
+  while b.position + more > !new_len do new_len := 2 * !new_len done;
+  if !new_len > Sys.max_string_length then begin
+    if b.position + more <= Sys.max_string_length
+    then new_len := Sys.max_string_length
+    else failwith "Buffer.add: cannot grow buffer"
+  end;
   let new_buffer = Bytes.create !new_len in
   (* PR#6148: let's keep using [blit] rather than [unsafe_blit] in
      this tricky function that is slow anyway. *)
@@ -78,11 +80,11 @@ let add_char b c =
   Bytes.unsafe_set b.buffer pos c;
   b.position <- pos + 1
 
- let add_utf_8_uchar b u = let u = Uchar.to_int u in
- if u < 0 then assert false
- else if u <= 127 then
+ let add_utf_8_uchar b u = match Uchar.to_int u with
+ | u when u < 0 -> assert false
+ | u when u <= 0x007F ->
      add_char b (Char.unsafe_chr u)
- else if u <= 2047 then (*
+ | u when u <= 0x07FF ->
      let pos = b.position in
      if pos + 2 > b.length then resize b 2;
      Bytes.unsafe_set b.buffer (pos    )
@@ -90,7 +92,7 @@ let add_char b c =
      Bytes.unsafe_set b.buffer (pos + 1)
        (Char.unsafe_chr (0x80 lor (u land 0x3F)));
      b.position <- pos + 2
- else if u <= 65535 then
+ | u when u <= 0xFFFF ->
      let pos = b.position in
      if pos + 3 > b.length then resize b 3;
      Bytes.unsafe_set b.buffer (pos    )
@@ -100,7 +102,7 @@ let add_char b c =
      Bytes.unsafe_set b.buffer (pos + 2)
        (Char.unsafe_chr (0x80 lor (u land 0x3F)));
      b.position <- pos + 3
- else if u <= 1114111 then
+ | u when u <= 0x10FFFF ->
      let pos = b.position in
      if pos + 4 > b.length then resize b 4;
      Bytes.unsafe_set b.buffer (pos    )
@@ -112,7 +114,49 @@ let add_char b c =
      Bytes.unsafe_set b.buffer (pos + 3)
        (Char.unsafe_chr (0x80 lor (u land 0x3F)));
      b.position <- pos + 4
- else assert false *) assert false
+ | _ -> assert false
+
+ let add_utf_16be_uchar b u = match Uchar.to_int u with
+ | u when u < 0 -> assert false
+ | u when u <= 0xFFFF ->
+     let pos = b.position in
+     if pos + 2 > b.length then resize b 2;
+     Bytes.unsafe_set b.buffer (pos    ) (Char.unsafe_chr (u lsr 8));
+     Bytes.unsafe_set b.buffer (pos + 1) (Char.unsafe_chr (u land 0xFF));
+     b.position <- pos + 2
+ | u when u <= 0x10FFFF ->
+     let u' = u - 0x10000 in
+     let hi = 0xD800 lor (u' lsr 10) in
+     let lo = 0xDC00 lor (u' land 0x3FF) in
+     let pos = b.position in
+     if pos + 4 > b.length then resize b 4;
+     Bytes.unsafe_set b.buffer (pos    ) (Char.unsafe_chr (hi lsr 8));
+     Bytes.unsafe_set b.buffer (pos + 1) (Char.unsafe_chr (hi land 0xFF));
+     Bytes.unsafe_set b.buffer (pos + 2) (Char.unsafe_chr (lo lsr 8));
+     Bytes.unsafe_set b.buffer (pos + 3) (Char.unsafe_chr (lo land 0xFF));
+     b.position <- pos + 4
+ | _ -> assert false
+
+ let add_utf_16le_uchar b u = match Uchar.to_int u with
+ | u when u < 0 -> assert false
+ | u when u <= 0xFFFF ->
+     let pos = b.position in
+     if pos + 2 > b.length then resize b 2;
+     Bytes.unsafe_set b.buffer (pos    ) (Char.unsafe_chr (u land 0xFF));
+     Bytes.unsafe_set b.buffer (pos + 1) (Char.unsafe_chr (u lsr 8));
+     b.position <- pos + 2
+ | u when u <= 0x10FFFF ->
+     let u' = u - 0x10000 in
+     let hi = 0xD800 lor (u' lsr 10) in
+     let lo = 0xDC00 lor (u' land 0x3FF) in
+     let pos = b.position in
+     if pos + 4 > b.length then resize b 4;
+     Bytes.unsafe_set b.buffer (pos    ) (Char.unsafe_chr (hi land 0xFF));
+     Bytes.unsafe_set b.buffer (pos + 1) (Char.unsafe_chr (hi lsr 8));
+     Bytes.unsafe_set b.buffer (pos + 2) (Char.unsafe_chr (lo land 0xFF));
+     Bytes.unsafe_set b.buffer (pos + 3) (Char.unsafe_chr (lo lsr 8));
+     b.position <- pos + 4
+ | _ -> assert false
 
 let add_substring b s offset len =
   if offset < 0 || len < 0 || offset > String.length s - len
@@ -147,7 +191,7 @@ let rec add_channel_rec b ic len =
   )
 
 let add_channel b ic len =
-  if len < 0 then   (* PR#5004 *)
+  if len < 0 || len > Sys.max_string_length then   (* PR#5004 *)
     invalid_arg "Buffer.add_channel";
   if b.position + len > b.length then resize b len;
   add_channel_rec b ic len
@@ -155,4 +199,104 @@ let add_channel b ic len =
 let output_buffer oc b =
   output oc b.buffer 0 b.position
 
+let closing = function
+  | '(' -> ')'
+  | '{' -> '}'
+  | _ -> assert false
+
+(* opening and closing: open and close characters, typically ( and )
+   k: balance of opening and closing chars
+   s: the string where we are searching
+   start: the index where we start the search. *)
+let advance_to_closing opening closing k s start =
+  let rec advance k i lim =
+    if i >= lim then raise Not_found else
+    if s.[i] = opening then advance (k + 1) (i + 1) lim else
+    if s.[i] = closing then
+      if k = 0 then i else advance (k - 1) (i + 1) lim
+    else advance k (i + 1) lim in
+  advance k start (String.length s)
+
+let advance_to_non_alpha s start =
+  let rec advance i lim =
+    if i >= lim then lim else
+    match s.[i] with
+    | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' -> advance (i + 1) lim
+    | _ -> i in
+  advance start (String.length s)
+
+(* We are just at the beginning of an ident in s, starting at start. *)
+let find_ident s start lim =
+  if start >= lim then raise Not_found else
+  match s.[start] with
+  (* Parenthesized ident ? *)
+  | '(' | '{' as c ->
+     let new_start = start + 1 in
+     let stop = advance_to_closing c (closing c) 0 s new_start in
+     String.sub s new_start (stop - start - 1), stop + 1
+  (* Regular ident *)
+  | _ ->
+     let stop = advance_to_non_alpha s (start + 1) in
+     String.sub s start (stop - start), stop
+
+(* Substitute $ident, $(ident), or ${ident} in s,
+    according to the function mapping f. *)
+let add_substitute b f s =
+  let lim = String.length s in
+  let rec subst previous i =
+    if i < lim then begin
+      match s.[i] with
+      | '$' as current when previous = '\\' ->
+         add_char b current;
+         subst ' ' (i + 1)
+      | '$' ->
+         let j = i + 1 in
+         let ident, next_i = find_ident s j lim in
+         add_string b (f ident);
+         subst ' ' next_i
+      | current when previous == '\\' ->
+         add_char b '\\';
+         add_char b current;
+         subst ' ' (i + 1)
+      | '\\' as current ->
+         subst current (i + 1)
+      | current ->
+         add_char b current;
+         subst current (i + 1)
+    end else
+    if previous = '\\' then add_char b previous in
+  subst ' ' 0
+
+let truncate b len =
+    if len < 0 || len > length b then
+      invalid_arg "Buffer.truncate"
+    else
+      b.position <- len
+
+(** {6 Iterators} *)
+
+let to_seq b =
+  let rec aux i () =
+    if i >= b.position then Seq.Nil
+    else
+      let x = Bytes.get b.buffer i in
+      Seq.Cons (x, aux (i+1))
+  in
+  aux 0
+
+let to_seqi b =
+  let rec aux i () =
+    if i >= b.position then Seq.Nil
+    else
+      let x = Bytes.get b.buffer i in
+      Seq.Cons ((i,x), aux (i+1))
+  in
+  aux 0
+
+let add_seq b seq = Seq.iter (add_char b) seq
+
+let of_seq i =
+  let b = create 32 in
+  add_seq b i;
+  b
 
