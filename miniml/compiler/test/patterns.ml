@@ -149,3 +149,15 @@ let () = match f ~success:false with
   | exception (Failure s) -> print_string s
 
 let () = print_newline ()
+let () = print_string "interval patterns"
+
+let f c = show_int (match c with
+  | 'c' | 'W' | '6' -> 0
+  | 'a'..'z' -> 1
+  | 'A'..'Z' -> 2
+  | '0'..'9' -> 3
+  | _ -> 4)
+
+let () = f 'c'; f 'W'; f '6'; f 'a'; f 'b'; f 'd'; f 'z'; f 'A'; f 'V'; f 'X'; f 'Z'; f '0'; f '5'; f '7'; f '9'; f '/'; f ':'; f '@'; f '['; f '`'; f '{'
+
+let () = print_newline ()

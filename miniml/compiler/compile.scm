@@ -59,6 +59,10 @@
 (define (mkfunctor args body)
   (fold-right (lambda (arg b) (list 'MEFunctor arg b)) body args))
 
+; Dummy
+(define (mkintervalpat n1 n2)
+  (if (= n1 n2) (list 'PInt n1) (list 'POr (list 'PInt n1) (mkintervalpat (+ n1 1) n2))))
+
 ; note: ml-parser is a procedure rather than a variable, because we were not able
 ; to call the same lalr-parser on several input files in a reliable way.
 ; (There is no documentation about this, or in general very little
@@ -72,7 +76,7 @@
    ;; Token definitions
    (LPAREN LBRACE RBRACE QUOTE TILDE
            QUESTION SEMICOLONSEMICOLON LBRACK RBRACK LBRACKBAR BARRBRACK
-           AND BEGIN DO DONE DOWNTO END EXCEPTION EXTERNAL FOR FUN FUNCTION FUNCTOR IF IN MODULE
+           AND BEGIN DO DONE DOTDOT DOWNTO END EXCEPTION EXTERNAL FOR FUN FUNCTION FUNCTOR IF IN MODULE
            MUTABLE OF OPEN REC SIG STRUCT TO TRY TYPE VAL WHEN WHILE WITH
            EOF STRING LIDENT UIDENT INT
            (right: MINUSGT)
@@ -376,6 +380,9 @@
     (longident_uident DOT LPAREN pattern RPAREN) : (list 'POpen $1 $4)
     (INT) : (if (null? (cdr $1)) (list 'PInt (car $1))
                 (errorp "Integer literals with non-empty extension unsupported in patterns"))
+    (INT DOTDOT INT) :
+        (if (and (null? (cdr $1)) (null? (cdr $3))) (mkintervalpat (car $1) (car $3))
+            (errorp "Integer literals with non-empty extension unsupported in patterns"))
     (STRING) : (list 'PString $1)
    )
 
@@ -774,7 +781,9 @@
         ((char=? c #\;) (if (char=? (peek-char) #\;)
                             (begin (read-char) (make-lexical-token 'SEMICOLONSEMICOLON location #f))
                             (make-lexical-token 'SEMICOLON location #f)))
-        ((char=? c #\.) (make-lexical-token 'DOT location #f))
+        ((char=? c #\.) (if (char=? (peek-char) #\.)
+                            (begin (read-char) (make-lexical-token 'DOTDOT location #f))
+                            (make-lexical-token 'DOT location #f)))
         ((char=? c #\:) (if (char=? (peek-char) #\:)
                             (begin (read-char) (make-lexical-token 'COLONCOLON location #f))
                             (if (char=? (peek-char) #\=)

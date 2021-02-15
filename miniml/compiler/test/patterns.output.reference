@@ -8,3 +8,4 @@ record patterns 1
 string patterns 42 42 42
 when-guards 1 2 3
 match with exception 17 42
+interval patterns 0 0 0 1 1 1 1 2 2 2 2 3 3 3 3 4 4 4 4 4 4
