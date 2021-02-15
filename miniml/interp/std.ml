@@ -168,6 +168,7 @@ external flush : out_channel -> unit = "caml_ml_flush"
 external close_out_channel : out_channel -> unit = "caml_ml_close_channel"
 let close_out oc = flush oc; close_out_channel oc
 
+let stdin = open_descriptor_in 0
 let stdout = open_descriptor_out 1
 let stderr = open_descriptor_out 2
 

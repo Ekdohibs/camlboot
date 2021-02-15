@@ -23,6 +23,12 @@ lex/lexer.ml: lex.boot.byte ../../ocaml-src/lex/lexer.mll
 lex.byte: $(LEXOBJS)
 	$(MINIML) $(LEXOBJS) -o $@
 
+make_opcodes.ml: lex.byte ../../ocaml-src/tools/make_opcodes.mll
+	$(OCAMLRUN) lex.byte ../../ocaml-src/tools/make_opcodes.mll -o make_opcodes.ml
+
+make_opcodes.byte: $(COMMONOBJS) make_opcodes.ml
+	$(MINIML) $(COMMONOBJS) make_opcodes.ml -o $@
+
 interp.byte: $(INTERPOBJS)
 	$(MINIML) $(INTERPOBJS) -o $@
 

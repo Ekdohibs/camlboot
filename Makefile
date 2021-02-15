@@ -5,14 +5,23 @@ OCAMLRUN=_boot/byterun/ocamlrun
 
 .PHONY: configure-ocaml
 configure-ocaml:
+	rm $(OCAMLSRC)/boot/ocamlc $(OCAMLSRC)/boot/ocamllex
 	cd $(OCAMLSRC) && bash configure
 	make -C $(OCAMLSRC) ocamlyacc && cp $(OCAMLSRC)/yacc/ocamlyacc $(OCAMLSRC)/boot 
 	make -C $(OCAMLSRC)/stdlib sys.ml
 	make -C $(OCAMLSRC) utils/config.ml
 	make -C $(OCAMLSRC) parsing/parser.ml
-	make -C $(OCAMLSRC) CAMLLEX=ocamllex CAMLRUN=ocamlrun parsing/lexer.ml
+	#make -C $(OCAMLSRC) CAMLLEX=ocamllex CAMLRUN=ocamlrun parsing/lexer.ml
 	make -C $(OCAMLSRC) bytecomp/runtimedef.ml
-	make -C $(OCAMLSRC) CAMLLEX=ocamllex CAMLRUN=ocamlrun CAMLC=ocamlc bytecomp/opcodes.ml
+	#make -C $(OCAMLSRC) CAMLLEX=ocamllex CAMLRUN=ocamlrun CAMLC=ocamlc bytecomp/opcodes.ml
+
+.PHONY: lex
+lex:
+	make -C miniml/interp lex.byte
+
+.PHONY: make_opcodes
+make_opcodes:
+	make -C miniml/interp make_opcodes.byte
 
 .PHONY: clean-ocaml-config
 clean-ocaml-config:
@@ -42,17 +51,19 @@ $(BOOT)/bytecomp: $(OCAMLSRC)/bytecomp $(CONFIG)
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
+	miniml/interp/make_opcodes.sh -opcodes < $(OCAMLSRC)/byterun/caml/instruct.h > $(BOOT)/bytecomp/opcodes.ml
 
 $(BOOT)/typing: $(OCAMLSRC)/typing $(CONFIG)
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
 
-$(BOOT)/parsing: $(OCAMLSRC)/parsing $(CONFIG) patches/parsetree.patch
+$(BOOT)/parsing: $(OCAMLSRC)/parsing $(CONFIG) patches/parsetree.patch lex
 	mkdir -p $(BOOT)
 	rm -rf $@
 	cp -r $< $@
 	patch $(BOOT)/parsing/parsetree.mli patches/parsetree.patch
+	miniml/interp/lex.sh $(BOOT)/parsing/lexer.mll -o $(BOOT)/parsing/lexer.ml
 
 $(BOOT)/utils: $(OCAMLSRC)/utils $(CONFIG) patches/disable-profiling.patch
 	mkdir -p $(BOOT)
@@ -88,7 +99,6 @@ $(OCAMLRUN): $(BOOT)/byterun
 
 $(BOOT)/ocamlc: $(COPY_TARGETS)
 	make -C $(OCAMLSRC)/yacc all
-	make -C miniml/compiler miniml
 	make -C miniml/interp interp
 	cd $(BOOT)/stdlib && ../../compile_stdlib.sh
 	mkdir -p $(BOOT)/compilerlibs
