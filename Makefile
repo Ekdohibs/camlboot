@@ -107,9 +107,11 @@ $(OCAMLRUN): $(BOOT)/byterun
 $(BOOT)/ocamlc: $(COPY_TARGETS)
 	make -C $(OCAMLSRC)/yacc all
 	make -C miniml/interp interp
-	cd $(BOOT)/stdlib && ../../compile_stdlib.sh
+	echo "stdlib compilation:" > timings
+	cd $(BOOT)/stdlib && /usr/bin/env time -a -o ../../timings ../../compile_stdlib.sh
 	mkdir -p $(BOOT)/compilerlibs
-	cd $(BOOT) && ../compile_ocamlc.sh
+	echo "ocamlc compilation:" >> timings 
+	cd $(BOOT) && /usr/bin/env time -a -o ../timings ../compile_ocamlc.sh
 
 .PHONY: test-compiler
 test-compiler: $(OCAMLRUN)
