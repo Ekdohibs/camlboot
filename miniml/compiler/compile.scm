@@ -670,13 +670,37 @@
               (else #nil)
               )))
 
+(define (char->digit c) (- (char->integer c) (char->integer #\0)))
+
 (define (number-chars errorp)
   (let ((c (peek-char)))
     (cond ((eof-object? c) #nil)
           ((char=? c #\_) (begin (read-char) (number-chars errorp)))
-          ((char-numeric? c) (begin (read-char) (cons c (number-chars errorp))))
+          ((char-numeric? c) (begin (read-char) (cons (char->digit c) (number-chars errorp))))
           (else #nil)
           )))
+
+(define (hex-chars errorp)
+  (let ((c (peek-char)))
+    (cond ((eof-object? c) #nil)
+          ((char=? c #\_) (begin (read-char) (hex-chars errorp)))
+          ((char-numeric? c)
+           (begin
+             (read-char)
+             (cons (char->digit c) (hex-chars errorp))))
+          ((and (char<=? #\a c) (char<=? c #\f))
+           (begin
+             (read-char)
+             (cons (+ 10 (- (char->integer c) (char->integer #\a))) (hex-chars errorp))))
+          ((and (char<=? #\A c) (char<=? c #\F))
+           (begin
+             (read-char)
+             (cons (+ 10 (- (char->integer c) (char->integer #\A))) (hex-chars errorp))))
+          (else #nil)
+          )))
+
+(define (list->number l base)
+  (fold (lambda (d acc) (assert (and (<= 0 d) (< d base))) (+ d (* base acc))) 0 l))
 
 (define (symbol-char? c)
   (string-index "!$%&*+-./:<=>?@^|~" c))
@@ -757,12 +781,8 @@
                          ((char=? (peek-char) #\])
                           (read-char) (make-lexical-token 'BARRBRACK location #f))
                          (else (mksymbol location c))))
-        ; Handle '-' separately because of negative integer literals
-        ((char=? c #\-) (if (and #f (char-numeric? (peek-char)))
-                            (mkint location (- (string->number (list->string (number-chars errorp)))))
-                            (mksymbol location c)))
         ; All other characters that can begin an operator
-        ((string-index "+=*~@^?!&<>/%$" c) (mksymbol location c))
+        ((string-index "+-=*~@^?!&<>/%$" c) (mksymbol location c))
         ((char=? c #\") (make-lexical-token 'STRING location (list->string (string-chars errorp))))
         ((char=? c #\') (let ((c (read-char)))
                              (if (char=? c #\\ )
@@ -779,7 +799,20 @@
                              ))
         ((or (char-lower-case? c) (char=? c #\_)) (mktoken location (get-lident (list->string (cons c (ident errorp))))))
         ((char-upper-case? c) (make-lexical-token 'UIDENT location (list->string (cons c (ident errorp)))))
-        ((char-numeric? c) (mkint location (string->number (list->string (cons c (number-chars errorp))))))
+        ((char-numeric? c) (cond
+                            ((and (char=? c #\0) (char=? (peek-char) #\x))
+                             (read-char)
+                             (mkint location (list->number (hex-chars errorp) 16))
+                             )
+                            ((and (char=? c #\0) (char=? (peek-char) #\o))
+                             (read-char)
+                             (mkint location (list->number (number-chars errorp) 8))
+                             )
+                            ((and (char=? c #\0) (char=? (peek-char) #\b))
+                             (read-char)
+                             (mkint location (list->number (number-chars errorp) 2))
+                             )
+                            (else (mkint location (list->number (cons (char->digit c) (number-chars errorp)) 10)))))
         (else (errorp "Illegal character: " c))
         ))
 

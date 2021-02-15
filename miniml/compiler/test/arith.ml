@@ -31,3 +31,16 @@ let () = show_int (1 + 3 % 2)
 let () = show_int (7 % 4 % 4)
 
 let () = print_newline ()
+
+let () = show_int 0xff
+let () = show_int 0xFF
+let () = show_int 255
+let () = show_int 0o377
+let () = show_int 0b11111111
+
+let () = show_int 0x2a
+let () = show_int 42
+let () = show_int 0o52
+let () = show_int 0b101010
+
+let () = print_newline ()
