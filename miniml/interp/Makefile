@@ -29,6 +29,12 @@ make_opcodes.ml: lex.byte ../../ocaml-src/tools/make_opcodes.mll
 make_opcodes.byte: $(COMMONOBJS) make_opcodes.ml
 	$(MINIML) $(COMMONOBJS) make_opcodes.ml -o $@
 
+cvt_emit.ml: lex.byte ../../ocaml-src/tools/cvt_emit.mll
+	$(OCAMLRUN) lex.byte ../../ocaml-src/tools/cvt_emit.mll -o cvt_emit.ml
+
+cvt_emit.byte: $(COMMONOBJS) cvt_emit.ml
+	$(MINIML) $(COMMONOBJS) cvt_emit.ml -o $@
+
 interp.byte: $(INTERPOBJS)
 	$(MINIML) $(INTERPOBJS) -o $@
 

@@ -110,6 +110,10 @@ let __atom0 = __mkatom0 ()
 
 external int_of_string : string -> int = "caml_int_of_string"
 
+external format_int : string -> int -> string = "caml_format_int"
+let string_of_int n = format_int "%d" n
+
+
 external unsafe_input : in_channel -> bytes -> int -> int -> unit = "caml_ml_input"
 
 let input ic s ofs len =
@@ -187,10 +191,14 @@ external pos_in : in_channel -> int = "caml_ml_pos_in"
 let output_string oc s =
   unsafe_output_string oc s 0 (string_length s)
 
+let print_char c = output_char stdout c
 let print_string s = output_string stdout s; flush stdout
 let print_newline () = print_string "\n"
 let print_endline s = print_string s; print_newline ()
 let print_err s = output_string stderr s; flush stderr
+let prerr_string s = print_err s
+let prerr_int n = prerr_string (string_of_int n)
+let prerr_newline () = prerr_string "\n"
 
 external unsafe_input : in_channel -> bytes -> int -> int -> int
                       = "caml_ml_input"
@@ -218,9 +226,6 @@ let really_input_string ic len =
   really_input ic s 0 len;
   bytes_unsafe_to_string s
 
-
-external format_int : string -> int -> string = "caml_format_int"
-let string_of_int n = format_int "%d" n
 
 module Sys = struct
   type backend_type =
