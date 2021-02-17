@@ -114,12 +114,10 @@ ocamlrun: $(OCAMLRUN)
 
 $(BOOT)/ocamlc: $(COPY_TARGETS)
 	make -C $(OCAMLSRC)/yacc all
-	make -C miniml/interp interp.byte
-	echo "stdlib compilation:" > timings
-	cd $(BOOT)/stdlib && /usr/bin/env time -a -o ../../timings ../../compile_stdlib.sh
+	make -C miniml/interp interpopt.opt
+	cd $(BOOT)/stdlib && ../../timed.sh ../../compile_stdlib.sh
 	mkdir -p $(BOOT)/compilerlibs
-	echo "ocamlc compilation:" >> timings 
-	cd $(BOOT) && /usr/bin/env time -a -o ../timings ../compile_ocamlc.sh
+	cd $(BOOT) && ../timed.sh ../compile_ocamlc.sh
 
 .PHONY: test-compiler
 test-compiler: $(OCAMLRUN)

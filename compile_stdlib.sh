@@ -2,7 +2,7 @@
 
 ulimit -s 2000000
 
-export COMPILER=../../miniml/interp/interp
+export COMPILER=../../miniml/interp/interp.opt
 export COMPFLAGS="-strict-sequence -absname -w +a-4-9-41-42-44-45-48 -g -warn-error A -bin-annot -nostdlib -safe-string -strict-formats"
 
 export EXT=cmx

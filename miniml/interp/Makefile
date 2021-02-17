@@ -42,6 +42,7 @@ interp.byte: $(INTERPOBJS)
 
 interpopt.opt: $(INTERPOBJS)
 	./genfileopt.sh
+	@echo "Compiling interpopt.opt, this make take a while..."
 	$(TIMED) ./interp -nopervasives -nostdlib -w -20-21 ../../ocaml-src/asmrun/libasmrun.a interpopt.ml -o interpopt.opt -ccopt "-lm -lpthread -ldl"
 
 lexer.ml: lex.byte lexer.mll
