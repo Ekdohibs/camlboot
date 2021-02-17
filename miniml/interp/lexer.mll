@@ -100,8 +100,8 @@ let keyword_table =
 (* To buffer string literals *)
 
 let string_buffer = Buffer.create 256
-let reset_string_buffer _ = Buffer.reset string_buffer
-let get_stored_string _ = Buffer.contents string_buffer
+let reset_string_buffer () = Buffer.reset string_buffer
+let get_stored_string () = Buffer.contents string_buffer
 
 let store_string_char c = Buffer.add_char string_buffer c
 let store_string_utf_8_uchar u = Buffer.add_utf_8_uchar string_buffer u
@@ -111,9 +111,9 @@ let store_lexeme lexbuf = store_string (Lexing.lexeme lexbuf)
 (* To store the position of the beginning of a string and comment *)
 let string_start_loc = ref Location.none;;
 let comment_start_loc = ref [];;
-let in_comment _ = !comment_start_loc <> [];;
+let in_comment () = !comment_start_loc <> [];;
 let is_in_string = ref false
-let in_string _ = !is_in_string
+let in_string () = !is_in_string
 let print_warnings = ref true
 
 (* Escaped chars are interpreted in strings unless they are in comments. *)
@@ -141,23 +141,21 @@ let hex_digit_value d = (* assert (d in '0'..'9' 'a'..'f' 'A'..'F') *)
   if d >= 65 then d - 55 else
   d - 48
 
-let rec hex_num_value_loop lexbuf last acc i =
-  if i > last then
-    acc
-  else
-    let value = hex_digit_value (Lexing.lexeme_char lexbuf i) in
-    hex_num_value_loop lexbuf last (16 * acc + value) (i + 1)
-
 let hex_num_value lexbuf ~first ~last =
-  hex_num_value_loop lexbuf last 0 first
+  let rec loop acc i = match i > last with
+  | true -> acc
+  | false ->
+      let value = hex_digit_value (Lexing.lexeme_char lexbuf i) in
+      loop (16 * acc + value) (i + 1)
+  in
+  loop 0 first
 
-let char_for_backslash c = match c with
+let char_for_backslash = function
   | 'n' -> '\010'
   | 'r' -> '\013'
   | 'b' -> '\008'
   | 't' -> '\009'
   | c   -> c
-
 
 let char_for_decimal_code lexbuf i =
   let c = 100 * (Char.code(Lexing.lexeme_char lexbuf i) - 48) +
@@ -180,21 +178,21 @@ let char_for_hexadecimal_code lexbuf i =
   let byte = hex_num_value lexbuf ~first:i ~last:(i+1) in
   Char.chr byte
 
-let ie_err lexbuf e =
-  raise
-    (Error (Illegal_escape (Lexing.lexeme lexbuf ^ e), Location.curr lexbuf))
-
 let uchar_for_uchar_escape lexbuf =
+  let err e =
+    raise
+      (Error (Illegal_escape (Lexing.lexeme lexbuf ^ e), Location.curr lexbuf))
+  in
   let len = Lexing.lexeme_end lexbuf - Lexing.lexeme_start lexbuf in
   let first = 3 (* skip opening \u{ *) in
   let last = len - 2 (* skip closing } *) in
   let digit_count = last - first + 1 in
   match digit_count > 6 with
-  | true -> ie_err lexbuf ", too many digits, expected 1 to 6 hexadecimal digits"
+  | true -> err ", too many digits, expected 1 to 6 hexadecimal digits"
   | false ->
       let cp = hex_num_value lexbuf ~first ~last in
       if Uchar.is_valid cp then Uchar.unsafe_of_int cp else
-      (* ie_err lexbuf (", " ^ Printf.sprintf "%X" cp ^ " is not a Unicode scalar value") *) assert false
+      err (", " ^ Printf.sprintf "%X" cp ^ " is not a Unicode scalar value")
 
 (* recover the name from a LABEL or OPTLABEL token *)
 
@@ -242,14 +240,13 @@ let add_docstring_comment ds =
   in
     add_comment com
 
-let comments _ = List.rev !comment_list
+let comments () = List.rev !comment_list
 
 (* Error report *)
 
-(*
 open Format
 
-let report_error ppf e = (* match e with
+let report_error ppf = function
   | Illegal_character c ->
       fprintf ppf "Illegal character (%s)" (Char.escaped c)
   | Illegal_escape s ->
@@ -271,17 +268,16 @@ let report_error ppf e = (* match e with
       begin match explanation with
         | None -> ()
         | Some expl -> fprintf ppf ": %s" expl
-      end *) assert false
+      end
 
-let _ =
+let () =
   Location.register_error_of_exn
-    (fun e -> match e with
+    (function
       | Error (err, loc) ->
           Some (Location.error_of_printer loc report_error err)
       | _ ->
           None
     )
-*)
 
 }
 
@@ -415,6 +411,15 @@ rule token = parse
         else
           COMMENT ("*" ^ s, loc)
       }
+  | "(**" (('*'+) as stars)
+      { let s, loc =
+          with_comment_buffer
+            (fun lexbuf ->
+               store_string ("*" ^ stars);
+               comment lexbuf)
+            lexbuf
+        in
+        COMMENT (s, loc) }
   | "(*)"
       { if !print_warnings then
           Location.prerr_warning (Location.curr lexbuf) Warnings.Comment_start;
@@ -435,8 +440,8 @@ rule token = parse
         STAR
       }
   | "#"
-      { let pos = lexbuf.lex_start_p in
-        if (pos.pos_cnum <> pos.pos_bol)
+      { let at_beginning_of_line pos = (pos.pos_cnum = pos.pos_bol) in
+        if not (at_beginning_of_line lexbuf.lex_start_p)
         then HASH
         else try directive lexbuf with Failure _ -> HASH
       }
@@ -517,12 +522,12 @@ and directive = parse
         [^ '\010' '\013'] *
       {
         match int_of_string num with
-(*        | exception _ ->
+        | exception _ ->
             (* PR#7165 *)
             let loc = Location.curr lexbuf in
             let explanation = "line number out of range" in
             let error = Invalid_directive ("#" ^ directive, Some explanation) in
-            raise (Error (error, loc)) *)
+            raise (Error (error, loc))
         | line_num ->
            (* Documentation says that the line number should be
               positive, but we have never guarded against this and it
@@ -539,9 +544,8 @@ and comment = parse
   | "*)"
       { match !comment_start_loc with
         | [] -> assert false
-        | _ :: l -> match l with
-          | [] -> comment_start_loc := []; Location.curr lexbuf
-          | _ -> comment_start_loc := l;
+        | [_] -> comment_start_loc := []; Location.curr lexbuf
+        | _ :: l -> comment_start_loc := l;
                   store_lexeme lexbuf;
                   comment lexbuf
        }
@@ -550,7 +554,7 @@ and comment = parse
         string_start_loc := Location.curr lexbuf;
         store_string_char '\"';
         is_in_string := true;
-        (*begin try string lexbuf
+        begin try string lexbuf
         with Error (Unterminated_string, str_start) ->
           match !comment_start_loc with
           | [] -> assert false
@@ -559,8 +563,7 @@ and comment = parse
             comment_start_loc := [];
             raise (Error (Unterminated_string_in_comment (start, str_start),
                           loc))
-          end;*)
-        string lexbuf;
+        end;
         is_in_string := false;
         store_string_char '\"';
         comment lexbuf }
@@ -571,7 +574,7 @@ and comment = parse
         string_start_loc := Location.curr lexbuf;
         store_lexeme lexbuf;
         is_in_string := true;
-        (*begin try quoted_string delim lexbuf
+        begin try quoted_string delim lexbuf
         with Error (Unterminated_string, str_start) ->
           match !comment_start_loc with
           | [] -> assert false
@@ -580,10 +583,8 @@ and comment = parse
             comment_start_loc := [];
             raise (Error (Unterminated_string_in_comment (start, str_start),
                           loc))
-          end;*)
-        quoted_string delim lexbuf;
+        end;
         is_in_string := false;
-        assert false;
         store_string_char '|';
         store_string delim;
         store_string_char '}';
@@ -651,7 +652,7 @@ and string = parse
                         Location.curr lexbuf))
 *)
           let loc = Location.curr lexbuf in
-          Location.prerr_warning loc Warnings.Illegal_backslash
+          Location.prerr_warning loc Warnings.Illegal_backslash;
         end;
         store_lexeme lexbuf;
         string lexbuf
@@ -698,7 +699,7 @@ and skip_hash_bang = parse
   | "" { () }
 
 {
-(*
+
   let token_with_comments lexbuf =
     match !preprocessor with
     | None -> token lexbuf
@@ -792,21 +793,14 @@ and skip_hash_bang = parse
           tok
     in
       loop NoLine Initial lexbuf
-*)
-  let rec real_token lexbuf =
-     match token lexbuf with
-     | COMMENT _ -> real_token lexbuf
-     | EOL -> real_token lexbuf
-     | DOCSTRING _ -> real_token lexbuf
-     | tok -> tok
 
-  let init _ =
+  let init () =
     is_in_string := false;
     comment_start_loc := [];
     comment_list := [];
     match !preprocessor with
     | None -> ()
-    | Some a -> let (init, _preprocess) = a in init ()
+    | Some (init, _preprocess) -> init ()
 
   let set_preprocessor init preprocess =
     escaped_newlines := true;

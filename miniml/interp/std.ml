@@ -22,11 +22,10 @@ external ( > ) : 'a -> 'a -> bool = "caml_greaterthan"
 external ( == ) : 'a -> 'a -> bool = "%eq"
 external ( != ) : 'a -> 'a -> bool = "%noteq"
 
-
 external raise : exn -> 'a = "%raise"
 
 external fst : 'a * 'b -> 'a = "%field0"
-external snd : 'a * 'b -> 'a = "%field1"
+external snd : 'a * 'b -> 'b = "%field1"
 
 let invalid_arg x = raise (Invalid_argument x)
 let failwith x = raise (Failure x)
@@ -43,13 +42,9 @@ let max x y = if x >= y then x else y
 
 let abs x = if x < 0 then -x else x
 
-type bool = false | true
 type 'a ref = { mutable contents : 'a }
 type ('a, 'b) result = Ok of 'a | Error of 'b
 type 'a list = [] | (::) of 'a * 'a list
-type 'a option = None | Some of 'a
-
-let assert b = if b = 0 then raise (Assert_failure ("", 0, 0))
 
 exception Exit
 
@@ -60,24 +55,24 @@ external __string_set : string -> int -> char -> unit = "caml_bytes_set"
 
 module Obj = struct
   type t
-  let obj x = x
-  let repr x = x
-  let magic x = x
+  external obj : t -> 'a = "%identity"
+  external repr : 'a -> t = "%identity"
+  external magic : 'a -> 'b = "%identity"
   external is_block : t -> bool = "caml_obj_is_block"
   external new_block : int -> int -> t = "caml_obj_block"
   external tag : t -> int = "caml_obj_tag"
   external set_tag : t -> int -> unit = "caml_obj_set_tag"
-  external size : t -> int = "%79" (* VECTLENGTH "caml_obj_size" *)
-  external field : t -> int -> t = "%80" (* GETVECTITEM "caml_obj_field" *)
-  external set_field : t -> int -> t -> unit = "%81" (* SETVECTITEM "caml_obj_set_field" *)
-  external is_int : t -> bool = "%129"
+  external size : t -> int = "%obj_size"
+  external field : t -> int -> t = "%obj_field"
+  external set_field : t -> int -> t -> unit = "%obj_set_field"
+  external is_int : t -> bool = "%obj_is_int"
+  let lazy_tag = 246
+  let forward_tag = 250
   let string_tag = 252
 end
-let lazy x = x
-module Lazy = struct let force x = x end
 
-let int_of_char x = x
-let char_of_int x = x
+let int_of_char (x : char) : int = Obj.magic x
+let char_of_int (x : int) : char = Obj.magic x
 
 external string_length : string -> int = "%string_length"
 external bytes_length : bytes -> int = "%bytes_length"
@@ -93,8 +88,12 @@ let ( ^ ) s1 s2 =
   string_blit s2 0 s l1 l2;
   bytes_unsafe_to_string s
 
-(* module Char = struct let code x = x let chr x = x let unsafe_chr x = x end *)
-module Uchar = struct let unsafe_of_int x = x let to_int x = x let is_valid x = true end
+module Uchar = struct
+  type t
+  let unsafe_of_int (x : int) : t = Obj.magic x
+  let to_int (x : t) : int = Obj.magic x
+  let is_valid (x : int) = true
+end
 
 let rec ( @ ) l1 l2 = match l1 with [] -> l2 | x :: l1 -> x :: (l1 @ l2)
 
@@ -103,16 +102,17 @@ let ( ! ) x = x.contents
 let ( := ) x y = x.contents <- y
 let incr x = x := !x + 1
 let decr x = x := !x - 1
-let not x = 1 - x
+external not : bool -> bool = "%boolnot"
 
-external __mkatom0 : unit -> 'a array = "%58"
-let __atom0 = __mkatom0 ()
+external __array_make: int -> 'a -> 'a array = "caml_make_vect"
+let __atom0 = __array_make 0 0
 
 external int_of_string : string -> int = "caml_int_of_string"
-
 external format_int : string -> int -> string = "caml_format_int"
 let string_of_int n = format_int "%d" n
 
+type in_channel
+type out_channel
 
 external unsafe_input : in_channel -> bytes -> int -> int -> unit = "caml_ml_input"
 
@@ -161,10 +161,10 @@ let open_out_gen mode perm name =
   c
 
 let open_out name =
-  open_out_gen [Open_wronly; Open_creat; Open_trunc; Open_text] 438 (* 0o666 *) name
+  open_out_gen [Open_wronly; Open_creat; Open_trunc; Open_text] 0o666 name
 
 let open_out_bin name =
-  open_out_gen [Open_wronly; Open_creat; Open_trunc; Open_binary] 438 (* 0o666 *) name
+  open_out_gen [Open_wronly; Open_creat; Open_trunc; Open_binary] 0o666 name
 
 external close_in : in_channel -> unit = "caml_ml_close_channel"
 let close_in_noerr ic = try close_in ic with _ -> ()
@@ -343,8 +343,8 @@ let valid_float_lexem s =
   let l = string_length s in
   let rec loop i =
     if i >= l then s ^ "." else
-    match s.[i] with
-    | c when (c = '-' || '0' <= c && c <= '9') -> loop (i + 1)
+    match __string_get s i with
+    | '-' | '0' .. '9' -> loop (i + 1)
     | _ -> s
   in
   loop 0

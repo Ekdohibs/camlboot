@@ -20,6 +20,12 @@
    - manual/manual/cmds/native.etex
 *)
 
+type loc = {
+  loc_start: Lexing.position;
+  loc_end: Lexing.position;
+  loc_ghost: bool;
+}
+
 type t =
   | Comment_start                           (*  1 *)
   | Comment_not_end                         (*  2 *)

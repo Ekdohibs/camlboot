@@ -1,4 +1,6 @@
-MINIML=guile ../compiler/compile.scm std.ml --open Std
+TIMED=../../timed.sh
+
+MINIML=guile ../compiler/compile.scm std_miniml_prefix.ml --open Std_miniml_prefix std.ml --open Std std_miniml.ml --open Std_miniml
 
 OCAMLRUN=../../ocaml-src/byterun/ocamlrun
 OCAMLLEX=../../ocaml-src/byterun/ocamlrun ../../ocaml-src/boot/ocamllex
@@ -37,6 +39,10 @@ cvt_emit.byte: $(COMMONOBJS) cvt_emit.ml
 
 interp.byte: $(INTERPOBJS)
 	$(MINIML) $(INTERPOBJS) -o $@
+
+interpopt.opt: $(INTERPOBJS)
+	./genfileopt.sh
+	$(TIMED) ./interp -nopervasives -nostdlib -w -20-21 ../../ocaml-src/asmrun/libasmrun.a interpopt.ml -o interpopt.opt -ccopt "-lm -lpthread -ldl"
 
 lexer.ml: lex.byte lexer.mll
 	$(OCAMLRUN) lex.byte lexer.mll

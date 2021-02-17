@@ -45,7 +45,7 @@ let mkprintf is_format print_fun ff fmt cont =
       cont ()
     end
   in
-  loop 0
+  Obj.magic (loop 0)
 
 let getff ff = ff.out_string
 let printf fmt = mkprintf true getff { out_string = print_string } fmt (fun () -> ())

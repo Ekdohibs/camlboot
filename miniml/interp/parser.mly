@@ -104,7 +104,7 @@ let mkexp_cons consloc args loc =
 let mkpat_cons consloc args loc =
   Pat.mk ~loc (Ppat_construct(mkloc (Lident "::") consloc, Some args))
 
-let rec mktailexp nilloc el = match el with
+let rec mktailexp nilloc = function
     [] ->
       let loc = { nilloc with loc_ghost = true } in
       let nil = { txt = Lident "[]"; loc = loc } in
@@ -118,7 +118,7 @@ let rec mktailexp nilloc el = match el with
       let arg = Exp.mk ~loc (Pexp_tuple [e1; exp_el]) in
       mkexp_cons {loc with loc_ghost = true} arg loc
 
-let rec mktailpat nilloc pl = match pl with
+let rec mktailpat nilloc = function
     [] ->
       let loc = { nilloc with loc_ghost = true } in
       let nil = { txt = Lident "[]"; loc = loc } in
@@ -135,24 +135,24 @@ let rec mktailpat nilloc pl = match pl with
 let mkstrexp e attrs =
   { pstr_desc = Pstr_eval (e, attrs); pstr_loc = e.pexp_loc }
 
-let mkexp_constraint e ts =
-  let (t1, t2) = ts in
-  match t2 with
-  | None -> (match t1 with None -> assert false | Some t -> ghexp(Pexp_constraint(e, t)))
-  | Some t -> ghexp(Pexp_coerce(e, t1, t))
+let mkexp_constraint e (t1, t2) =
+  match t1, t2 with
+  | Some t, None -> ghexp(Pexp_constraint(e, t))
+  | _, Some t -> ghexp(Pexp_coerce(e, t1, t))
+  | None, None -> assert false
 
-let mkexp_opt_constraint e c = match c with
+let mkexp_opt_constraint e = function
   | None -> e
   | Some constraint_ -> mkexp_constraint e constraint_
 
-let mkpat_opt_constraint p c = match c with
+let mkpat_opt_constraint p = function
   | None -> p
   | Some typ -> mkpat (Ppat_constraint(p, typ))
 
 let array_function str name =
   ghloc (Ldot(Lident str, (if !Clflags.fast then "unsafe_" ^ name else name)))
 
-let syntax_error _ =
+let syntax_error () =
   raise Syntaxerr.Escape_error
 
 let unclosed opening_name opening_num closing_name closing_num =
@@ -160,21 +160,20 @@ let unclosed opening_name opening_num closing_name closing_num =
                                            rhs_loc closing_num, closing_name)))
 
 let expecting pos nonterm =
-    raise (Syntaxerr.Error(Syntaxerr.Expecting(rhs_loc pos, nonterm)))
+    raise Syntaxerr.(Error(Expecting(rhs_loc pos, nonterm)))
 
 let not_expecting pos nonterm =
-    raise (Syntaxerr.Error(Syntaxerr.Not_expecting(rhs_loc pos, nonterm)))
+    raise Syntaxerr.(Error(Not_expecting(rhs_loc pos, nonterm)))
 
 let bigarray_function str name =
   ghloc (Ldot(Ldot(Lident "Bigarray", str), name))
 
-let bigarray_untuplify exp =
-  match exp.pexp_desc with
-  | Pexp_tuple explist -> explist
+let bigarray_untuplify = function
+    { pexp_desc = Pexp_tuple explist; pexp_loc = _ } -> explist
   | exp -> [exp]
 
 let bigarray_get arr arg =
-(*  let get = if !Clflags.fast then "unsafe_get" else "get" in
+  let get = if !Clflags.fast then "unsafe_get" else "get" in
   match bigarray_untuplify arg with
     [c1] ->
       mkexp(Pexp_apply(ghexp(Pexp_ident(bigarray_function "Array1" get)),
@@ -187,10 +186,9 @@ let bigarray_get arr arg =
                        [Nolabel, arr; Nolabel, c1; Nolabel, c2; Nolabel, c3]))
   | coords ->
       mkexp(Pexp_apply(ghexp(Pexp_ident(bigarray_function "Genarray" "get")),
-                       [Nolabel, arr; Nolabel, ghexp(Pexp_array coords)]))*)
-  assert false
+                       [Nolabel, arr; Nolabel, ghexp(Pexp_array coords)]))
 
-let bigarray_set arr arg newval = (*
+let bigarray_set arr arg newval =
   let set = if !Clflags.fast then "unsafe_set" else "set" in
   match bigarray_untuplify arg with
     [c1] ->
@@ -208,7 +206,7 @@ let bigarray_set arr arg newval = (*
       mkexp(Pexp_apply(ghexp(Pexp_ident(bigarray_function "Genarray" "set")),
                        [Nolabel, arr;
                         Nolabel, ghexp(Pexp_array coords);
-                        Nolabel, newval]))*) assert false
+                        Nolabel, newval]))
 
 let lapply p1 p2 =
   if !Clflags.applicative_functors
@@ -230,8 +228,7 @@ let wrap_type_annotation newtypes core_type body =
   let exp = mk_newtypes newtypes exp in
   (exp, ghtyp(Ptyp_poly(newtypes, Typ.varify_constructors newtypes core_type)))
 
-let wrap_exp_attrs body extattrs =
-  let (ext, attrs) = extattrs in
+let wrap_exp_attrs body (ext, attrs) =
   (* todo: keep exact location for the entire attribute *)
   let body = {body with pexp_attributes = attrs @ body.pexp_attributes} in
   match ext with
@@ -241,8 +238,7 @@ let wrap_exp_attrs body extattrs =
 let mkexp_attrs d attrs =
   wrap_exp_attrs (mkexp d) attrs
 
-let wrap_typ_attrs typ extattrs =
-  let (ext, attrs) = extattrs in
+let wrap_typ_attrs typ (ext, attrs) =
   (* todo: keep exact location for the entire attribute *)
   let typ = {typ with ptyp_attributes = attrs @ typ.ptyp_attributes} in
   match ext with
@@ -252,8 +248,7 @@ let wrap_typ_attrs typ extattrs =
 let mktyp_attrs d attrs =
   wrap_typ_attrs (mktyp d) attrs
 
-let wrap_pat_attrs pat extattrs =
-  let (ext, attrs) = extattrs in
+let wrap_pat_attrs pat (ext, attrs) =
   (* todo: keep exact location for the entire attribute *)
   let pat = {pat with ppat_attributes = attrs @ pat.ppat_attributes} in
   match ext with
@@ -320,8 +315,8 @@ type let_binding =
   { lb_pattern: pattern;
     lb_expression: expression;
     lb_attributes: attributes;
-    lb_docs: docs Lazy.t;
-    lb_text: text Lazy.t;
+    lb_docs: docs;
+    lb_text: text;
     lb_loc: Location.t; }
 
 type let_bindings =
@@ -330,14 +325,13 @@ type let_bindings =
     lbs_extension: string Asttypes.loc option;
     lbs_loc: Location.t }
 
-let mklb first pe attrs =
-  let (p, e) = pe in
+let mklb first (p, e) attrs =
   { lb_pattern = p;
     lb_expression = e;
     lb_attributes = attrs;
-    lb_docs = symbol_docs_lazy ();
-    lb_text = if first then empty_text_lazy
-              else symbol_text_lazy ();
+    lb_docs = symbol_docs ();
+    lb_text = if first then empty_text
+              else symbol_text ();
     lb_loc = symbol_rloc (); }
 
 let mklbs ext rf lb =
@@ -354,8 +348,8 @@ let val_of_let_bindings lbs =
     List.map
       (fun lb ->
          Vb.mk ~loc:lb.lb_loc ~attrs:lb.lb_attributes
-           ~docs:(Lazy.force lb.lb_docs)
-           ~text:(Lazy.force lb.lb_text)
+           ~docs:(lb.lb_docs)
+           ~text:(lb.lb_text)
            lb.lb_pattern lb.lb_expression)
       lbs.lbs_bindings
   in
@@ -384,7 +378,7 @@ let class_of_let_bindings lbs body =
       lbs.lbs_bindings
   in
     if lbs.lbs_extension <> None then
-      raise (Syntaxerr.Error(Syntaxerr.Not_expecting(lbs.lbs_loc, "extension")));
+      raise Syntaxerr.(Error(Not_expecting(lbs.lbs_loc, "extension")));
     mkclass(Pcl_let (lbs.lbs_rec, List.rev bindings, body))
 
 
@@ -392,15 +386,18 @@ let class_of_let_bindings lbs body =
    and extract the package type during type-checking. In that case,
    the assertions below should be turned into explicit checks. *)
 let package_type_of_module_type pmty =
-  let map_cstr = fun cstr -> match cstr with
+  let err loc s =
+    raise (Syntaxerr.Error (Syntaxerr.Invalid_package_type (loc, s)))
+  in
+  let map_cstr = function
     | Pwith_type (lid, ptyp) ->
         let loc = ptyp.ptype_loc in
         if ptyp.ptype_params <> [] then
-          assert false;
+          err loc "parametrized types are not supported";
         if ptyp.ptype_cstrs <> [] then
-          assert false;
+          err loc "constrained types are not supported";
         if ptyp.ptype_private <> Public then
-          assert false;
+          err loc "private types are not supported";
 
         (* restrictions below are checked by the 'with_constraint' rule *)
         assert (ptyp.ptype_kind = Ptype_abstract);
@@ -412,17 +409,16 @@ let package_type_of_module_type pmty =
         in
         (lid, ty)
     | _ ->
-        assert false
+        err pmty.pmty_loc "only 'with type t =' constraints are supported"
   in
-  match pmty.pmty_desc with
-  | Pmty_ident lid -> (lid, [])
-  | Pmty_with(z, cstrs) -> (
-      match z.pmty_desc with
-      | Pmty_ident lid -> (lid, List.map map_cstr cstrs)
-      | _ -> assert false
-  )
+  match pmty with
+  | {pmty_desc = Pmty_ident lid} -> (lid, [])
+  | {pmty_desc = Pmty_with({pmty_desc = Pmty_ident lid}, cstrs)} ->
+      (lid, List.map map_cstr cstrs)
   | _ ->
-      assert false
+      err pmty.pmty_loc
+        "only module type identifier and 'with type' constraints are supported"
+
 
 %}
 
@@ -717,7 +713,7 @@ module_expr:
   | FUNCTOR attributes functor_args MINUSGREATER module_expr
       { let modexp =
           List.fold_left
-            (fun acc nt -> let (n, t) = nt in mkmod(Pmod_functor(n, t, acc)))
+            (fun acc (n, t) -> mkmod(Pmod_functor(n, t, acc)))
             $5 $3
         in wrap_mod_attrs modexp $2 }
   | module_expr paren_module_expr
@@ -862,7 +858,7 @@ module_type:
       %prec below_WITH
       { let mty =
           List.fold_left
-            (fun acc nt -> let (n, t) = nt in mkmty(Pmty_functor(n, t, acc)))
+            (fun acc (n, t) -> mkmty(Pmty_functor(n, t, acc)))
             $5 $3
         in wrap_mty_attrs mty $2 }
   | module_type MINUSGREATER module_type
@@ -1415,23 +1411,23 @@ expr:
   | simple_expr DOT LBRACE expr RBRACE LESSMINUS expr
       { bigarray_set $1 $4 $7 }
   | simple_expr DOTOP LBRACKET expr RBRACKET LESSMINUS expr
-      { let id = mkexp (Pexp_ident( ghloc (Lident ("." ^ $2 ^ "[]<-")))) in
-        mkexp (Pexp_apply(id , [Nolabel, $1; Nolabel, $4; Nolabel, $7])) }
+      { let id = mkexp @@ Pexp_ident( ghloc @@ Lident ("." ^ $2 ^ "[]<-")) in
+        mkexp @@ Pexp_apply(id , [Nolabel, $1; Nolabel, $4; Nolabel, $7]) }
   | simple_expr DOTOP LPAREN expr RPAREN LESSMINUS expr
-      { let id = mkexp (Pexp_ident( ghloc (Lident ("." ^ $2 ^ "()<-")))) in
-        mkexp (Pexp_apply(id , [Nolabel, $1; Nolabel, $4; Nolabel, $7])) }
+      { let id = mkexp @@ Pexp_ident( ghloc @@ Lident ("." ^ $2 ^ "()<-")) in
+        mkexp @@ Pexp_apply(id , [Nolabel, $1; Nolabel, $4; Nolabel, $7]) }
   | simple_expr DOTOP LBRACE expr RBRACE LESSMINUS expr
-      { let id = mkexp (Pexp_ident( ghloc (Lident ("." ^ $2 ^ "{}<-")))) in
-        mkexp (Pexp_apply(id , [Nolabel, $1; Nolabel, $4; Nolabel, $7])) }
+      { let id = mkexp @@ Pexp_ident( ghloc @@ Lident ("." ^ $2 ^ "{}<-")) in
+        mkexp @@ Pexp_apply(id , [Nolabel, $1; Nolabel, $4; Nolabel, $7]) }
   | simple_expr DOT mod_longident DOTOP LBRACKET expr RBRACKET LESSMINUS expr
-      { let id = mkexp (Pexp_ident( ghloc (Ldot($3,"." ^ $4 ^ "[]<-")))) in
-        mkexp (Pexp_apply(id , [Nolabel, $1; Nolabel, $6; Nolabel, $9])) }
+      { let id = mkexp @@ Pexp_ident( ghloc @@ Ldot($3,"." ^ $4 ^ "[]<-")) in
+        mkexp @@ Pexp_apply(id , [Nolabel, $1; Nolabel, $6; Nolabel, $9]) }
   | simple_expr DOT mod_longident DOTOP LPAREN expr RPAREN LESSMINUS expr
-      { let id = mkexp (Pexp_ident( ghloc (Ldot($3, "." ^ $4 ^ "()<-")))) in
-        mkexp (Pexp_apply(id , [Nolabel, $1; Nolabel, $6; Nolabel, $9])) }
+      { let id = mkexp @@ Pexp_ident( ghloc @@ Ldot($3, "." ^ $4 ^ "()<-")) in
+        mkexp @@ Pexp_apply(id , [Nolabel, $1; Nolabel, $6; Nolabel, $9]) }
   | simple_expr DOT mod_longident DOTOP LBRACE expr RBRACE LESSMINUS expr
-      { let id = mkexp (Pexp_ident( ghloc (Ldot($3, "." ^ $4 ^ "{}<-")))) in
-        mkexp (Pexp_apply(id , [Nolabel, $1; Nolabel, $6; Nolabel, $9])) }
+      { let id = mkexp @@ Pexp_ident( ghloc @@ Ldot($3, "." ^ $4 ^ "{}<-")) in
+        mkexp @@ Pexp_apply(id , [Nolabel, $1; Nolabel, $6; Nolabel, $9]) }
   | label LESSMINUS expr
       { mkexp(Pexp_setinstvar(mkrhs $1 1, $3)) }
   | ASSERT ext_attributes simple_expr %prec below_HASH
@@ -1489,33 +1485,33 @@ simple_expr:
   | simple_expr DOT LBRACKET seq_expr error
       { unclosed "[" 3 "]" 5 }
   | simple_expr DOTOP LBRACKET expr RBRACKET
-      { let id = mkexp (Pexp_ident( ghloc (Lident ("." ^ $2 ^ "[]")))) in
-        mkexp (Pexp_apply(id, [Nolabel, $1; Nolabel, $4])) }
+      { let id = mkexp @@ Pexp_ident( ghloc @@ Lident ("." ^ $2 ^ "[]")) in
+        mkexp @@ Pexp_apply(id, [Nolabel, $1; Nolabel, $4]) }
   | simple_expr DOTOP LBRACKET expr error
       { unclosed "[" 3 "]" 5 }
   | simple_expr DOTOP LPAREN expr RPAREN
-      { let id = mkexp (Pexp_ident( ghloc (Lident ("." ^ $2 ^ "()")))) in
-        mkexp (Pexp_apply(id, [Nolabel, $1; Nolabel, $4])) }
+      { let id = mkexp @@ Pexp_ident( ghloc @@ Lident ("." ^ $2 ^ "()")) in
+        mkexp @@ Pexp_apply(id, [Nolabel, $1; Nolabel, $4]) }
   | simple_expr DOTOP LPAREN expr error
       { unclosed "(" 3 ")" 5 }
   | simple_expr DOTOP LBRACE expr RBRACE
-      { let id = mkexp (Pexp_ident( ghloc (Lident ("." ^ $2 ^ "{}")))) in
-        mkexp (Pexp_apply(id, [Nolabel, $1; Nolabel, $4])) }
+      { let id = mkexp @@ Pexp_ident( ghloc @@ Lident ("." ^ $2 ^ "{}")) in
+        mkexp @@ Pexp_apply(id, [Nolabel, $1; Nolabel, $4]) }
   | simple_expr DOTOP LBRACE expr error
       { unclosed "{" 3 "}" 5 }
   | simple_expr DOT mod_longident DOTOP LBRACKET expr RBRACKET
-      { let id = mkexp (Pexp_ident( ghloc (Ldot($3, "." ^ $4 ^ "[]")))) in
-        mkexp (Pexp_apply(id, [Nolabel, $1; Nolabel, $6])) }
+      { let id = mkexp @@ Pexp_ident( ghloc @@ Ldot($3, "." ^ $4 ^ "[]")) in
+        mkexp @@ Pexp_apply(id, [Nolabel, $1; Nolabel, $6]) }
   | simple_expr DOT mod_longident DOTOP LBRACKET expr error
       { unclosed "[" 5 "]" 7 }
   | simple_expr DOT mod_longident DOTOP LPAREN expr RPAREN
-      { let id = mkexp (Pexp_ident( ghloc (Ldot($3, "." ^ $4 ^ "()")))) in
-        mkexp (Pexp_apply(id, [Nolabel, $1; Nolabel, $6])) }
+      { let id = mkexp @@ Pexp_ident( ghloc @@ Ldot($3, "." ^ $4 ^ "()")) in
+        mkexp @@ Pexp_apply(id, [Nolabel, $1; Nolabel, $6]) }
   | simple_expr DOT mod_longident DOTOP LPAREN expr error
       { unclosed "(" 5 ")" 7 }
   | simple_expr DOT mod_longident DOTOP LBRACE expr RBRACE
-      { let id = mkexp (Pexp_ident( ghloc (Ldot($3, "." ^ $4 ^ "{}")))) in
-        mkexp (Pexp_apply(id, [Nolabel, $1; Nolabel, $6])) }
+      { let id = mkexp @@ Pexp_ident( ghloc @@ Ldot($3, "." ^ $4 ^ "{}")) in
+        mkexp @@ Pexp_apply(id, [Nolabel, $1; Nolabel, $6]) }
   | simple_expr DOT mod_longident DOTOP LBRACE expr error
       { unclosed "{" 5 "}" 7 }
   | simple_expr DOT LBRACE expr RBRACE
@@ -1632,8 +1628,10 @@ let_binding_body:
   | val_ident type_constraint EQUAL seq_expr
       { let v = mkpatvar $1 1 in (* PR#7344 *)
         let t =
-          let x, y = $2 in
-          match y with Some t -> t | None -> match x with Some t -> t | None -> assert false
+          match $2 with
+            Some t, None -> t
+          | _, Some t -> t
+          | _ -> assert false
         in
         (ghpat(Ppat_constraint(v, ghtyp(Ptyp_poly([],t)))),
          mkexp_constraint $4 $2) }
@@ -1820,15 +1818,15 @@ simple_pattern_not_ident:
   | simple_delimited_pattern
       { $1 }
   | mod_longident DOT simple_delimited_pattern
-      { mkpat (Ppat_open(mkrhs $1 1, $3)) }
+      { mkpat @@ Ppat_open(mkrhs $1 1, $3) }
   | mod_longident DOT LBRACKET RBRACKET
-    { mkpat (Ppat_open(mkrhs $1 1, mkpat (
-               Ppat_construct ( mkrhs (Lident "[]") 4, None)))) }
+    { mkpat @@ Ppat_open(mkrhs $1 1, mkpat @@
+               Ppat_construct ( mkrhs (Lident "[]") 4, None)) }
   | mod_longident DOT LPAREN RPAREN
-      { mkpat (Ppat_open( mkrhs $1 1, mkpat (
-                 Ppat_construct ( mkrhs (Lident "()") 4, None) ))) }
+      { mkpat @@ Ppat_open( mkrhs $1 1, mkpat @@
+                 Ppat_construct ( mkrhs (Lident "()") 4, None) ) }
   | mod_longident DOT LPAREN pattern RPAREN
-      { mkpat (Ppat_open (mkrhs $1 1, $4))}
+      { mkpat @@ Ppat_open (mkrhs $1 1, $4)}
   | mod_longident DOT LPAREN pattern error
       {unclosed "(" 3 ")" 5  }
   | mod_longident DOT LPAREN error
@@ -2092,10 +2090,9 @@ label_declaration:
 label_declaration_semi:
     mutable_flag label COLON poly_type_no_attr attributes SEMI attributes
       {
-        let info =
-          let ri = rhs_info 5 in
-         match ri with
-         | Some _ -> ri
+       let info =
+         match rhs_info 5 with
+         | Some _ as info_before_semi -> info_before_semi
          | None -> symbol_info ()
        in
        Type.field (mkrhs $2 2) $4 ~mut:$1 ~attrs:($5 @ $7)
@@ -2253,7 +2250,7 @@ simple_core_type:
     simple_core_type2  %prec below_HASH
       { $1 }
   | LPAREN core_type_comma_list RPAREN %prec below_HASH
-      { match $2 with [] -> raise Parse_error | sty :: l -> match l with [] -> sty | _ -> raise Parse_error }
+      { match $2 with [sty] -> sty | _ -> raise Parse_error }
 ;
 
 simple_core_type2:
@@ -2360,9 +2357,8 @@ field:
 field_semi:
   label COLON poly_type_no_attr attributes SEMI attributes
     { let info =
-        let ri = rhs_info 4 in
-        match ri with
-        | Some _ -> ri
+        match rhs_info 4 with
+        | Some _ as info_before_semi -> info_before_semi
         | None -> symbol_info ()
       in
       ( Otag (mkrhs $1 1, add_info_attrs info ($4 @ $6), $3)) }

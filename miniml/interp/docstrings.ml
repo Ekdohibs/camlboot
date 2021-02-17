@@ -130,7 +130,6 @@ let add_info_attrs info attrs =
 type text = docstring list
 
 let empty_text = []
-let empty_text_lazy = lazy []
 
 let text_loc = {txt = "ocaml.text"; loc = Location.none}
 
@@ -281,21 +280,9 @@ let symbol_docs () =
   { docs_pre = get_pre_docs (Parsing.symbol_start_pos ());
     docs_post = get_post_docs (Parsing.symbol_end_pos ()); }
 
-let symbol_docs_lazy () =
-  let p1 = Parsing.symbol_start_pos () in
-  let p2 = Parsing.symbol_end_pos () in
-    lazy { docs_pre = get_pre_docs p1;
-           docs_post = get_post_docs p2; }
-
 let rhs_docs pos1 pos2 =
   { docs_pre = get_pre_docs (Parsing.rhs_start_pos pos1);
     docs_post = get_post_docs (Parsing.rhs_end_pos pos2); }
-
-let rhs_docs_lazy pos1 pos2 =
-  let p1 = Parsing.rhs_start_pos pos1 in
-  let p2 = Parsing.rhs_end_pos pos2 in
-    lazy { docs_pre = get_pre_docs p1;
-           docs_post = get_post_docs p2; }
 
 let mark_symbol_docs () =
   mark_pre_docs (Parsing.symbol_start_pos ());
@@ -314,19 +301,11 @@ let rhs_info pos =
 let symbol_text () =
   get_text (Parsing.symbol_start_pos ())
 
-let symbol_text_lazy () =
-  let pos = Parsing.symbol_start_pos () in
-    lazy (get_text pos)
-
 let rhs_text pos =
   get_text (Parsing.rhs_start_pos pos)
 
 let rhs_post_text pos =
   get_post_text (Parsing.rhs_end_pos pos)
-
-let rhs_text_lazy pos =
-  let pos = Parsing.rhs_start_pos pos in
-    lazy (get_text pos)
 
 let symbol_pre_extra_text () =
   get_pre_extra_text (Parsing.symbol_start_pos ())

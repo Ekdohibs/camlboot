@@ -540,7 +540,7 @@ and class_type_field_desc =
   | Pctf_extension of extension
         (* [%%id] *)
 
-and class_infos =
+and 'a class_infos =
     {
      pci_virt: virtual_flag;
      pci_params: (core_type * variance) list;
@@ -745,7 +745,7 @@ and open_description =
    open  X - popen_override = Fresh
  *)
 
-and include_infos =
+and 'a include_infos =
     {
      pincl_mod: 'a;
      pincl_loc: Location.t;

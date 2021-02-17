@@ -395,6 +395,6 @@ let write_aux sep file args =
   Array.iter (fun s -> fprintf oc "%s%c" s sep) args;
   close_out oc
 
-let write_arg = write_aux '\n'
+let write_arg file args = write_aux '\n' file args
 
-let write_arg0 = write_aux '\x00'
+let write_arg0 file args = write_aux '\x00' file args

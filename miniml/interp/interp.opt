@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+r=$(dirname $0)
+root=$r/../..
+ulimit -s 200000
+OCAMLRUNPARAM=b OCAMLINTERP_STDLIB_PATH=$root/ocaml-src/stdlib/ OCAMLINTERP_SRC_PATH=$root/ocaml-src/ OCAMLINTERP_COMMAND=ocamlopt $r/interpopt.opt "$@"

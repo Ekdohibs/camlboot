@@ -7,7 +7,8 @@ let parse filename =
   let inc = try open_in filename with e -> Format.eprintf "Error opening file: %s@." filename; raise e in
   let lexbuf = Lexing.from_channel inc in
   Location.init lexbuf filename;
-  let parsed = Parser.implementation Lexer.real_token lexbuf in
+(*  let parsed = Parser.implementation Lexer.real_token lexbuf in *)
+  let parsed = Parse.implementation lexbuf in
   close_in inc;
   parsed
 

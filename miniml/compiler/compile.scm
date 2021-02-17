@@ -199,7 +199,8 @@
 
    (letdef
     (LPAREN RPAREN EQ expr) : (mkdef "_" #nil $4)
-    (lident_ext list_labelled_arg EQ expr) : (mkdef $1 $2 $4))
+    (lident_ext list_labelled_arg EQ expr) : (mkdef $1 $2 $4)
+    (lident_ext list_labelled_arg COLON type_ignore EQ expr) : (mkdef $1 $2 $6))
 
    (list_labelled_arg
     ( ) : #nil
@@ -1160,6 +1161,7 @@
   (cons "%lslint" "%118")
   (cons "%lsrint" "%119")
   (cons "%asrint" "%120")
+  (cons "%boolnot" "%88")
 
   (cons "%negfloat" "caml_neg_float")
   (cons "%addfloat" "caml_add_float")
@@ -1200,6 +1202,11 @@
   (cons "%floatarray_safe_set" "caml_floatarray_set")
   (cons "%floatarray_unsafe_get" "caml_floatarray_unsafe_get")
   (cons "%floatarray_unsafe_set" "caml_floatarray_unsafe_set")
+
+  (cons "%obj_size" "%79")
+  (cons "%obj_field" "caml_array_unsafe_get")
+  (cons "%obj_set_field" "caml_array_unsafe_set")
+  (cons "%obj_is_int" "%129")
 
   (cons "%int64_neg" "caml_int64_neg")
   (cons "%int64_add" "caml_int64_add")
