@@ -6,6 +6,7 @@ GENERATED=$(OCAMLSRC)/bytecomp/opcodes.ml
 
 $(OCAMLRUN): $(CONFIG)
 	make -C $(OCAMLSRC)/byterun all
+	make -C $(OCAMLSRC)/asmrun all
 
 .PHONY: configure-ocaml
 configure-ocaml:
@@ -94,6 +95,7 @@ $(BOOT)/stdlib: $(OCAMLSRC)/stdlib $(CONFIG) $(GENERATED) patches/compflags.patc
 	patch $(BOOT)/stdlib/Compflags patches/compflags.patch
 	awk -f $(BOOT)/stdlib/expand_module_aliases.awk < $(BOOT)/stdlib/stdlib.mli > $(BOOT)/stdlib/stdlib.pp.mli
 	awk -f $(BOOT)/stdlib/expand_module_aliases.awk < $(BOOT)/stdlib/stdlib.ml > $(BOOT)/stdlib/stdlib.pp.ml
+	cp $(OCAMLSRC)/asmrun/libasmrun.a $(BOOT)/stdlib/
 
 COPY_TARGETS=\
 	$(BOOT)/bytecomp \

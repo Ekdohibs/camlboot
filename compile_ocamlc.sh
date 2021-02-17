@@ -224,5 +224,5 @@ compile driver/main.mli
 compile driver/main.ml
 #echo $COMPILER  -compat-32 -o ocamlc compilerlibs/ocamlcommon.$AEXT compilerlibs/ocamlbytecomp.$AEXT driver/main.$EXT
 #$COMPILER  -compat-32 -o ocamlc compilerlibs/ocamlcommon.$AEXT compilerlibs/ocamlbytecomp.$AEXT driver/main.$EXT
-echo $COMPILER -o ocamlc compilerlibs/ocamlcommon.$AEXT compilerlibs/ocamlbytecomp.$AEXT driver/main.$EXT -cclib "-lm -ldl -lpthread"
+echo $COMPILER -o ocamlc compilerlibs/ocamlcommon.$AEXT compilerlibs/ocamlbytecomp.$AEXT driver/main.$EXT -cclib '"-lm -ldl -lpthread"'
 $COMPILER -o ocamlc compilerlibs/ocamlcommon.$AEXT compilerlibs/ocamlbytecomp.$AEXT driver/main.$EXT -cclib "-lm -ldl -lpthread"
