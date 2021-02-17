@@ -20,6 +20,7 @@ lex.boot.byte: $(LEXBOOTOBJS)
 	$(MINIML) $(LEXBOOTOBJS) -o $@
 
 lex/lexer.ml: lex.boot.byte ../../ocaml-src/lex/lexer.mll
+	mkdir -p lex/
 	$(OCAMLRUN) lex.boot.byte ../../ocaml-src/lex/lexer.mll -o $@
 
 lex.byte: $(LEXOBJS)
@@ -40,7 +41,7 @@ cvt_emit.byte: $(COMMONOBJS) cvt_emit.ml
 interp.byte: $(INTERPOBJS)
 	$(MINIML) $(INTERPOBJS) -o $@
 
-interpopt.opt: $(INTERPOBJS)
+interpopt.opt: $(INTERPOBJS) interp.byte
 	./genfileopt.sh
 	@echo "Compiling interpopt.opt, this make take a while..."
 	$(TIMED) ./interp -nopervasives -nostdlib -w -20-21 ../../ocaml-src/asmrun/libasmrun.a interpopt.ml -o interpopt.opt -ccopt "-lm -lpthread -ldl"

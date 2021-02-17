@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 r=$(dirname $0)
 root=$r/../..
-OCAMLRUNPARAM='l=100M' OCAMLINTERP_STDLIB_PATH=$root/ocaml-src/stdlib/ OCAMLINTERP_SRC_PATH=$root/ocaml-src/ OCAMLINTERP_COMMAND=ocamlopt $root/_boot/byterun/ocamlrun $r/interp.byte "$@"
+OCAMLRUNPARAM='l=100M' OCAMLINTERP_STDLIB_PATH=$root/ocaml-src/stdlib/ OCAMLINTERP_SRC_PATH=$root/ocaml-src/ OCAMLINTERP_COMMAND=ocamlopt $root/ocaml-src/byterun/ocamlrun $r/interp.byte "$@"
