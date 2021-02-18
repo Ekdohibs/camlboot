@@ -96,6 +96,7 @@ $(BOOT)/stdlib: $(OCAMLSRC)/stdlib $(CONFIG) $(GENERATED) patches/compflags.patc
 	awk -f $(BOOT)/stdlib/expand_module_aliases.awk < $(BOOT)/stdlib/stdlib.mli > $(BOOT)/stdlib/stdlib.pp.mli
 	awk -f $(BOOT)/stdlib/expand_module_aliases.awk < $(BOOT)/stdlib/stdlib.ml > $(BOOT)/stdlib/stdlib.pp.ml
 	cp $(OCAMLSRC)/asmrun/libasmrun.a $(BOOT)/stdlib/
+	cp Makefile.stdlib $(BOOT)/stdlib/Makefile
 
 COPY_TARGETS=\
 	$(BOOT)/bytecomp \
@@ -108,6 +109,7 @@ COPY_TARGETS=\
 
 .PHONY: copy
 copy: $(COPY_TARGETS)
+	cp Makefile.ocamlc $(BOOT)/Makefile
 
 .PHONY: ocamlrun
 ocamlrun: $(OCAMLRUN)
@@ -115,9 +117,11 @@ ocamlrun: $(OCAMLRUN)
 $(BOOT)/ocamlc: $(COPY_TARGETS)
 	make -C $(OCAMLSRC)/yacc all
 	make -C miniml/interp interpopt.opt
-	cd $(BOOT)/stdlib && ../../timed.sh ../../compile_stdlib.sh
+	./timed.sh make -C _boot/stdlib all
+	# cd $(BOOT)/stdlib && ../../timed.sh ../../compile_stdlib.sh
 	mkdir -p $(BOOT)/compilerlibs
-	cd $(BOOT) && ../timed.sh ../compile_ocamlc.sh
+	./timed.sh make -C _boot all
+	# cd $(BOOT) && ../timed.sh ../compile_ocamlc.sh
 
 .PHONY: test-compiler
 test-compiler: $(OCAMLRUN)

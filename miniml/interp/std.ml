@@ -190,9 +190,12 @@ external pos_in : in_channel -> int = "caml_ml_pos_in"
 
 let output_string oc s =
   unsafe_output_string oc s 0 (string_length s)
+let output_bytes oc s =
+  unsafe_output oc s 0 (bytes_length s)
 
 let print_char c = output_char stdout c
 let print_string s = output_string stdout s; flush stdout
+let print_bytes s = output_bytes stdout s; flush stdout
 let print_newline () = print_string "\n"
 let print_endline s = print_string s; print_newline ()
 let print_err s = output_string stderr s; flush stderr
@@ -254,6 +257,7 @@ module Sys = struct
   external getcwd: unit -> string = "caml_sys_getcwd"
   external rename : string -> string -> unit = "caml_sys_rename"
   external remove: string -> unit = "caml_sys_remove"
+  external readdir : string -> string array = "caml_sys_read_directory"
 
   let os_type = ""
   let ocaml_version = "camlboot"

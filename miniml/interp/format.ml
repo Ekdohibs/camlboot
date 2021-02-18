@@ -48,9 +48,11 @@ let mkprintf is_format print_fun ff fmt cont =
   Obj.magic (loop 0)
 
 let getff ff = ff.out_string
-let printf fmt = mkprintf true getff { out_string = print_string } fmt (fun () -> ())
+let std_formatter = { out_string = print_string }
+let err_formatter = { out_string = print_err }
 let fprintf ff fmt = mkprintf true getff ff fmt (fun () -> ())
-let eprintf fmt = mkprintf true getff { out_string = print_err } fmt (fun () -> ())
+let printf fmt = fprintf std_formatter fmt
+let eprintf fmt = fprintf err_formatter fmt
 let kbprintf k b fmt = mkprintf true getff { out_string = Buffer.add_string b } fmt (fun () -> k b)
 let bprintf b fmt = kbprintf (fun _ -> ()) b fmt
 let kprintf k fmt = kbprintf (fun b -> k (Buffer.contents b)) (Buffer.create 16) fmt

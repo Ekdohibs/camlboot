@@ -1,0 +1,120 @@
+#**************************************************************************
+#*                                                                        *
+#*                                 OCaml                                  *
+#*                                                                        *
+#*            Xavier Leroy, projet Cristal, INRIA Rocquencourt            *
+#*                                                                        *
+#*   Copyright 1999 Institut National de Recherche en Informatique et     *
+#*     en Automatique.                                                    *
+#*                                                                        *
+#*   All rights reserved.  This file is distributed under the terms of    *
+#*   the GNU Lesser General Public License version 2.1, with the          *
+#*   special exception on linking described in the file LICENSE.          *
+#*                                                                        *
+#**************************************************************************
+
+COMPILER=../miniml/interp/interp.opt -g -nostdlib -I stdlib
+INCLUDES=-I utils -I parsing -I typing -I bytecomp -I driver
+
+COMPFLAGS=-strict-sequence -principal -absname -w +a-4-9-41-42-44-45-48 \
+	  -warn-error A \
+          -bin-annot -safe-string -strict-formats $(INCLUDES)
+LINKFLAGS=
+
+DEPEND=../miniml/interp/depend.sh
+DEPFLAGS=$(INCLUDES)
+
+UTILS=utils/config.cmx utils/misc.cmx \
+  utils/identifiable.cmx utils/numbers.cmx utils/arg_helper.cmx \
+  utils/clflags.cmx utils/tbl.cmx utils/profile.cmx \
+  utils/terminfo.cmx utils/ccomp.cmx utils/warnings.cmx \
+  utils/consistbl.cmx \
+  utils/strongly_connected_components.cmx \
+  utils/build_path_prefix_map.cmx \
+  utils/targetint.cmx
+
+PARSING=parsing/location.cmx parsing/longident.cmx \
+  parsing/docstrings.cmx parsing/syntaxerr.cmx \
+  parsing/ast_helper.cmx parsing/parser.cmx \
+  parsing/lexer.cmx parsing/parse.cmx parsing/printast.cmx \
+  parsing/pprintast.cmx \
+  parsing/ast_mapper.cmx parsing/ast_iterator.cmx parsing/attr_helper.cmx \
+  parsing/builtin_attributes.cmx parsing/ast_invariants.cmx parsing/depend.cmx
+
+TYPING=typing/ident.cmx typing/path.cmx \
+  typing/primitive.cmx typing/types.cmx \
+  typing/btype.cmx typing/oprint.cmx \
+  typing/subst.cmx typing/predef.cmx \
+  typing/datarepr.cmx typing/cmi_format.cmx typing/env.cmx \
+  typing/typedtree.cmx typing/printtyped.cmx typing/ctype.cmx \
+  typing/printtyp.cmx typing/includeclass.cmx \
+  typing/mtype.cmx typing/envaux.cmx typing/includecore.cmx \
+  typing/typedtreeIter.cmx typing/typedtreeMap.cmx \
+  typing/tast_mapper.cmx \
+  typing/cmt_format.cmx typing/untypeast.cmx \
+  typing/includemod.cmx typing/typetexp.cmx typing/printpat.cmx \
+  typing/parmatch.cmx typing/stypes.cmx typing/typedecl.cmx typing/typeopt.cmx \
+  typing/typecore.cmx typing/typeclass.cmx typing/typemod.cmx
+
+COMP=bytecomp/lambda.cmx bytecomp/printlambda.cmx \
+  bytecomp/semantics_of_primitives.cmx \
+  bytecomp/switch.cmx bytecomp/matching.cmx \
+  bytecomp/translobj.cmx bytecomp/translattribute.cmx \
+  bytecomp/translprim.cmx bytecomp/translcore.cmx \
+  bytecomp/translclass.cmx bytecomp/translmod.cmx \
+  bytecomp/simplif.cmx bytecomp/runtimedef.cmx \
+  bytecomp/meta.cmx bytecomp/opcodes.cmx \
+  bytecomp/bytesections.cmx bytecomp/dll.cmx \
+  bytecomp/symtable.cmx \
+  driver/pparse.cmx driver/main_args.cmx \
+  driver/compenv.cmx driver/compmisc.cmx \
+  driver/compdynlink.cmx driver/compplugin.cmx driver/makedepend.cmx
+
+COMMON=$(UTILS) $(PARSING) $(TYPING) $(COMP)
+
+BYTECOMP=bytecomp/instruct.cmx bytecomp/bytegen.cmx \
+  bytecomp/printinstr.cmx bytecomp/emitcode.cmx \
+  bytecomp/bytelink.cmx bytecomp/bytelibrarian.cmx bytecomp/bytepackager.cmx \
+  driver/errors.cmx driver/compile.cmx
+
+BYTESTART=driver/main.cmx
+
+all: ocamlc
+
+# Shared parts of the system compiled with the native-code compiler
+
+compilerlibs/ocamlcommon.cmxa: $(COMMON)
+	$(COMPILER) -a -linkall -o $@ $^
+
+# The bytecode compiler compiled with the native-code compiler
+
+compilerlibs/ocamlbytecomp.cmxa: $(BYTECOMP)
+	$(COMPILER) -a -o $@ $^
+
+ocamlc: compilerlibs/ocamlcommon.cmxa compilerlibs/ocamlbytecomp.cmxa \
+            $(BYTESTART)
+	$(COMPILER) $(LINKFLAGS) -o $@ $^ -cclib "$(BYTECCLIBS)"
+
+# Compiler Plugins
+
+driver/compdynlink.cmx: driver/compdynlink.mlno driver/compdynlink.cmi
+	$(COMPILER) $(COMPFLAGS) -c -impl $<
+
+# Default rules
+
+.SUFFIXES: .ml .mli .cmi .cmx
+
+.mli.cmi:
+	$(COMPILER) $(COMPFLAGS) -c $<
+
+.ml.cmx:
+	$(COMPILER) $(COMPFLAGS) -c $<
+
+.PHONY: depend
+depend:
+	(for d in utils parsing typing bytecomp driver; \
+	 do $(DEPEND) $(DEPFLAGS) $$d/*.mli $$d/*.ml || exit; \
+	 done) > .depend
+	$(DEPEND) $(DEPFLAGS) -impl driver/compdynlink.mlno >> .depend
+
+include .depend

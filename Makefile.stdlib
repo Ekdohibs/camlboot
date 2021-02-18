@@ -1,0 +1,98 @@
+#**************************************************************************
+#*                                                                        *
+#*                                 OCaml                                  *
+#*                                                                        *
+#*            Xavier Leroy, projet Cristal, INRIA Rocquencourt            *
+#*                                                                        *
+#*   Copyright 1999 Institut National de Recherche en Informatique et     *
+#*     en Automatique.                                                    *
+#*                                                                        *
+#*   All rights reserved.  This file is distributed under the terms of    *
+#*   the GNU Lesser General Public License version 2.1, with the          *
+#*   special exception on linking described in the file LICENSE.          *
+#*                                                                        *
+#**************************************************************************
+
+CAMLRUN = ../../ocaml-src/byterun/ocamlrun
+TARGET_BINDIR ?= $(BINDIR)
+
+COMPFLAGS=-strict-sequence -absname -w +a-4-9-41-42-44-45-48 \
+          -g -warn-error A -bin-annot -nostdlib \
+          -safe-string -strict-formats
+COMPILER=../../miniml/interp/interp.opt
+DEPEND=../../miniml/interp/depend.sh -native
+
+# Object file prefix
+P=stdlib__
+
+OBJS=camlinternalFormatBasics.cmx stdlib.cmx $(OTHERS)
+OTHERS=$(P)seq.cmx $(P)char.cmx $(P)uchar.cmx $(P)sys.cmx $(P)list.cmx \
+  $(P)bytes.cmx $(P)string.cmx \
+  $(P)sort.cmx $(P)marshal.cmx $(P)obj.cmx $(P)float.cmx $(P)array.cmx \
+  $(P)int32.cmx $(P)int64.cmx $(P)nativeint.cmx \
+  $(P)lexing.cmx $(P)parsing.cmx \
+  $(P)set.cmx $(P)map.cmx $(P)stack.cmx $(P)queue.cmx \
+  camlinternalLazy.cmx $(P)lazy.cmx $(P)stream.cmx \
+  $(P)buffer.cmx camlinternalFormat.cmx $(P)printf.cmx \
+  $(P)arg.cmx $(P)printexc.cmx $(P)gc.cmx \
+  $(P)digest.cmx $(P)random.cmx $(P)hashtbl.cmx $(P)weak.cmx \
+  $(P)format.cmx $(P)scanf.cmx $(P)callback.cmx \
+  camlinternalOO.cmx $(P)oo.cmx camlinternalMod.cmx \
+  $(P)genlex.cmx $(P)ephemeron.cmx \
+  $(P)filename.cmx $(P)complex.cmx \
+  $(P)arrayLabels.cmx $(P)listLabels.cmx $(P)bytesLabels.cmx \
+  $(P)stringLabels.cmx $(P)moreLabels.cmx $(P)stdLabels.cmx \
+  $(P)spacetime.cmx $(P)bigarray.cmx
+
+PREFIXED_OBJS=$(filter stdlib__%.cmx,$(OBJS))
+
+all: stdlib.cmxa std_exit.cmx
+
+stdlib.cmxa: $(OBJS)
+	$(COMPILER) -a -o $@ $^
+
+.SUFFIXES: .mli .ml .cmi .cmx
+
+stdlib.cmi: stdlib.pp.mli
+	$(COMPILER) $(COMPFLAGS) $(shell ./Compflags $@) -o $@ -c $<
+
+stdlib.cmx: stdlib.pp.ml
+	$(COMPILER) $(COMPFLAGS) $(shell ./Compflags $@) -o $@ -c $<
+
+%.cmi: %.mli
+	$(COMPILER) $(COMPFLAGS) $(shell ./Compflags $@) -c $<
+
+stdlib__%.cmi: %.mli
+	$(COMPILER) $(COMPFLAGS) $(shell ./Compflags $@) -o $@ -c $<
+
+%.cmx: %.ml
+	$(COMPILER) $(COMPFLAGS) $(shell ./Compflags $@) -c $<
+
+stdlib__%.cmx: %.ml
+	$(COMPILER) $(COMPFLAGS) $(shell ./Compflags $@) -o $@ -c $<
+
+
+# Dependencies on Stdlib (not tracked by ocamldep)
+$(OTHERS:.cmx=.cmi) std_exit.cmi: stdlib.cmi
+$(OBJS) std_exit.cmx: stdlib.cmi
+$(OTHERS) std_exit.cmx: stdlib.cmx
+
+clean::
+	rm -f *.cm* *.o *.a
+	rm -f *~
+
+include .depend
+
+EMPTY :=
+SPACE := $(EMPTY) $(EMPTY)
+
+.PHONY: depend
+depend:
+	$(DEPEND) $(filter-out stdlib.%,$(wildcard *.mli *.ml)) \
+	  > .depend.tmp
+	echo "stdlib.cmi : camlinternalFormatBasics.cmi" >> .depend.tmp
+	echo "stdlib.cmx : camlinternalFormatBasics.cmx" >> .depend.tmp
+	sed -Ee \
+	  's#(^| )(${subst ${SPACE},|,${PREFIXED_OBJS:stdlib__%.cmx=%}})[.]#\1stdlib__\2.#g' \
+	  .depend.tmp > .depend
+	rm -f .depend.tmp

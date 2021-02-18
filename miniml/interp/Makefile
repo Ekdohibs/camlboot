@@ -7,9 +7,11 @@ OCAMLLEX=../../ocaml-src/byterun/ocamlrun ../../ocaml-src/boot/ocamllex
 OCAMLYACC=../../ocaml-src/yacc/ocamlyacc
 
 COMMONOBJS=int32.ml int64.ml nativeint.ml seq.ml char.ml bytes.ml string.ml digest.ml marshal.ml array.ml list.ml stack.ml hashtbl.ml map.ml set.ml buffer.ml format.ml printf.ml arg.ml gc.ml filename.ml lexing.ml parsing.ml
-INTERPOBJS=$(COMMONOBJS) misc.ml clflags.ml location.ml asttypes.mli warnings.ml syntaxerr.ml longident.ml parsetree.mli docstrings.ml ast_helper.ml parser.ml lexer.ml parse.ml ../../interpreter/conf.ml ../../interpreter/data.ml ../../interpreter/envir.ml ../../interpreter/runtime_lib.ml ../../interpreter/runtime_base.ml ../../interpreter/eval.ml ../../interpreter/runtime_stdlib.ml ../../interpreter/runtime_compiler.ml ../../interpreter/primitives.ml ../../interpreter/interp.ml
+PARSEOBJS=misc.ml clflags.ml location.ml asttypes.mli warnings.ml syntaxerr.ml longident.ml parsetree.mli docstrings.ml ast_helper.ml parser.ml lexer.ml parse.ml
+INTERPOBJS=$(COMMONOBJS) $(PARSEOBJS) ../../interpreter/conf.ml ../../interpreter/data.ml ../../interpreter/envir.ml ../../interpreter/runtime_lib.ml ../../interpreter/runtime_base.ml ../../interpreter/eval.ml ../../interpreter/runtime_stdlib.ml ../../interpreter/runtime_compiler.ml ../../interpreter/primitives.ml ../../interpreter/interp.ml
 LEXOBJS1=../../ocaml-src/lex/cset.ml ../../ocaml-src/lex/syntax.ml ../../ocaml-src/lex/parser.ml
 LEXOBJS2=../../ocaml-src/lex/table.ml ../../ocaml-src/lex/lexgen.ml ../../ocaml-src/lex/compact.ml ../../ocaml-src/lex/common.ml ../../ocaml-src/lex/output.ml ../../ocaml-src/lex/outputbis.ml ../../ocaml-src/lex/main.ml
+DEPENDOBJS=$(COMMONOBJS) $(PARSEOBJS) depend.ml makedepend.ml
 
 LEXBOOTOBJS=$(COMMONOBJS) $(LEXOBJS1) ../../lex/lexer.ml $(LEXOBJS2)
 LEXOBJS=$(COMMONOBJS) $(LEXOBJS1) lex/lexer.ml $(LEXOBJS2)
@@ -40,6 +42,9 @@ cvt_emit.byte: $(COMMONOBJS) cvt_emit.ml
 
 interp.byte: $(INTERPOBJS)
 	$(MINIML) $(INTERPOBJS) -o $@
+
+makedepend.byte: $(DEPENDOBJS)
+	$(MINIML) $(DEPENDOBJS) -o $@
 
 interpopt.opt: $(INTERPOBJS) interp.byte
 	./genfileopt.sh
