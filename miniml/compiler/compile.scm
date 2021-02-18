@@ -1261,19 +1261,29 @@
 ))
 (define prims #nil)
 (define nprims 0)
-(define (raw-prim name)
+(define (cprim name arity)
+  (set! prims (cons name prims))
+  (set! nprims (+ 1 nprims))
+  (let ((primnum (- nprims 1)))
+    (cond ((= arity 1) (list C_CALL1 primnum))
+          ((= arity 2) (list C_CALL2 primnum))
+          ((= arity 3) (list C_CALL3 primnum))
+          ((= arity 4) (list C_CALL4 primnum))
+          ((= arity 5) (list C_CALL5 primnum))
+          (else (list C_CALLN arity primnum)))))
+
+(define (raw-prim name arity)
   (if (equal? (string-ref name 0) #\%)
       (let* ((l (map string->number (if (string=? name "%") #nil (string-split (substring name 1) #\,)))))
         (if (member #f l) (errorp "Unknown primitive: " name))
-        (cons 'Internal l))
-      (begin
-        (set! prims (cons name prims))
-        (set! nprims (+ 1 nprims))
-        (cons 'C (- nprims 1)))))
-(define (prim name)
+        l)
+      (cprim name arity)))
+
+(define (prim name arity)
   (let ((p (assoc name known-prims)))
-    (raw-prim (if (pair? p) (cdr p) name))
+    (raw-prim (if (pair? p) (cdr p) name) arity)
 ))
+
 (define (bytecode-write-prims)
   (for-each (lambda (name) (begin (bytecode-put-string name) (bytecode-put-u8 0))) (reverse prims)))
 
@@ -1379,8 +1389,8 @@
 (define BNEQ 132)
 (define STOP 143)
 (define RERAISE 146)
-(define obj_tag (cdr (prim "caml_obj_tag")))
-(define string_equal (cdr (prim "caml_string_equal")))
+(define obj_tag (prim "caml_obj_tag" 1))
+(define string_equal (prim "caml_string_equal" 2))
 
 ; bindings store for each name a definition, but also some visibility
 ; information, which indicate if this name was defined as "exported"
@@ -1482,10 +1492,11 @@
     (bindings-get-err (env-get-fields env) v)))
 
 (define-immutable-record-type <var>
-  (mkvar location funshape)
+  (mkvar location funshape prim)
   var?
   (location var-get-location)
   (funshape var-get-funshape)
+  (prim var-get-prim)
 )
 
 (define-immutable-record-type <constr>
@@ -2143,14 +2154,20 @@
        (list 'LLet var e (list 'LBlock 0 es))))
     (('EApply f args)
       (match-let* (
-         ((f-shape . f-expr) (match f
-             (('EVar ld) (cons (var-get-funshape (env-get-var env ld)) (lower-var env ld #f)))
-             (_ (cons #nil (lower-notail f)))))
+         ((f-shape f-expr f-prim) (match f
+             (('EVar ld)
+              (list (var-get-funshape (env-get-var env ld))
+                    (lower-var env ld #f)
+                    (var-get-prim (env-get-var env ld))))
+             (_ (list #nil (lower-notail f) #nil))))
          (args (align-args f-shape args))
          (args (map lower-notail args)))
-       (if istail
-           (list 'LTailApply f-expr args)
-           (list 'LApply f-expr args))))
+       ; (display f-expr)(display f-prim)
+       (if (and (pair? f-prim) (= (car f-prim) (length args)))
+           (list 'LPrim (cdr f-prim) args)
+           (if istail
+               (list 'LTailApply f-expr args)
+               (list 'LApply f-expr args)))))
     (('EMatch e clauses)
      (match-let* (
          (e (lower-notail e))
@@ -2211,7 +2228,7 @@
 )))
 
 (define (local-var-with-shape env v shape)
-  (env-replace-var env v (mkvar (list 'VarLocal v) shape)))
+  (env-replace-var env v (mkvar (list 'VarLocal v) shape #nil)))
 (define (local-var env v)
   (local-var-with-shape env v #nil))
 (define (local-vars env vars)
@@ -2404,7 +2421,7 @@
     #t)
    (((or 'LBlock
         'LGetfield 'LSetfield
-        'LApply 'LTailApply
+        'LPrim 'LApply 'LTailApply
         'LIf 'LChain 'LSwitch
         'LReraise 'LCatch
         'LLet 'LLetfun 'LLetrecfun
@@ -2464,6 +2481,9 @@
        (bytecode-put-u32-le APPLY)
        (bytecode-put-u32-le nargs)
        (bytecode-emit-label lab)))
+    (('LPrim prim-code args)
+     (compile-args env stacksize args)
+     (for-each bytecode-put-u32-le prim-code))
     (('LIf e1 e2 e3)
       (let* ((lab1 (newlabel))
              (lab2 (newlabel)))
@@ -2670,9 +2690,7 @@
         (begin
           (bytecode-put-u32-le GETFIELD)
           (bytecode-put-u32-le 0))
-        (begin
-          (bytecode-put-u32-le C_CALL1)
-          (bytecode-put-u32-le obj_tag)))
+        (for-each bytecode-put-u32-le obj_tag))
     (for-each (match-lambda (($ <switch-block> i _ l e)
                 (let* ((lab (newlabel))
                        (l (if exntype (cons #nil l) l)))
@@ -2702,8 +2720,7 @@
                   (bytecode-put-u32-le (newglob (list 'String str) "<constant string switch>"))
                   (bytecode-put-u32-le PUSH)
                   (bytecode-ACC 1)
-                  (bytecode-put-u32-le C_CALL2)
-                  (bytecode-put-u32-le string_equal)
+                  (for-each bytecode-put-u32-le string_equal)
                   (bytecode-put-u32-le BRANCHIFNOT)
                   (bytecode-emit-labref lab)
                   (bytecode-POP 1)
@@ -2875,6 +2892,8 @@
      (fv-expr e bv))
     (('LSetfield e1 i e2)
      (vset-union (fv-expr e1 bv) (fv-expr e2 bv)))
+    (('LPrim c es)
+     (fv-expr-list es bv))
     ((or ('LApply e es) ('LTailApply e es))
      (vset-union
       (fv-expr e bv)
@@ -3041,7 +3060,7 @@
                 (compile-fundef-body env args body nfv lab names pos))
               argss bodies labs (range 0 numfuns))
     (bytecode-emit-label endlab)
-    (bytecode-put-u32-le CLOSUREREC)
+    (bytecode-put-u32-le CLOSUREREC)8
     (bytecode-put-u32-le numfuns)
     (bytecode-put-u32-le (length fv))
     (let* ((basepos (bytecode-get-pos)))
@@ -3148,7 +3167,7 @@
                              (let ((shape (map arg-get-label args)))
                                (if (equal? name "_") e
                                    (bindings-replace
-                                      name (mkvar (list 'VarGlobal loc) shape)
+                                      name (mkvar (list 'VarGlobal loc) shape #nil)
                                       e))))
                          ) (env-get-vars env) bindings locations))
            (nenv (env-with-vars env nenv-vars))
@@ -3173,7 +3192,7 @@
     env)
    (('MExternal name arity primname)
     (match-let* ((shape (make-list arity (list 'Nolabel)))
-           ((prim-kind . prim-num) (prim primname))
+           (prim-code (prim primname arity))
            (lab1 (newlabel))
            (lab2 (newlabel))
            (pos (slot-for-global name)))
@@ -3188,19 +3207,7 @@
           (bytecode-ACC (- arity 1))
           (bytecode-put-u32-le PUSH)))
       (bytecode-ACC (- arity 1))
-      (match prim-kind
-        ('Internal
-          (for-each bytecode-put-u32-le prim-num))
-        ('C
-          (cond ((= arity 1) (bytecode-put-u32-le C_CALL1))
-                ((= arity 2) (bytecode-put-u32-le C_CALL2))
-                ((= arity 3) (bytecode-put-u32-le C_CALL3))
-                ((= arity 4) (bytecode-put-u32-le C_CALL4))
-                ((= arity 5) (bytecode-put-u32-le C_CALL5))
-                (else (begin
-                        (bytecode-put-u32-le C_CALLN)
-                        (bytecode-put-u32-le arity))))
-          (bytecode-put-u32-le prim-num)))
+      (for-each bytecode-put-u32-le prim-code)
       (bytecode-put-u32-le RETURN)
       (bytecode-put-u32-le arity)
       (bytecode-emit-label lab1)
@@ -3209,7 +3216,7 @@
       (bytecode-emit-labref lab2)
       (bytecode-put-u32-le SETGLOBAL)
       (bytecode-put-u32-le pos)
-      (env-replace-var env name (mkvar (list 'VarGlobal pos) shape))
+      (env-replace-var env name (mkvar (list 'VarGlobal pos) shape (cons arity prim-code)))
       ))
    ))
 
