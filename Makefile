@@ -5,38 +5,38 @@ OCAMLRUN=$(OCAMLSRC)/byterun/ocamlrun
 GENERATED=$(OCAMLSRC)/bytecomp/opcodes.ml
 
 $(OCAMLRUN): $(CONFIG)
-	make -C $(OCAMLSRC)/byterun all
-	make -C $(OCAMLSRC)/asmrun all
+	$(MAKE) -C $(OCAMLSRC)/byterun all
+	$(MAKE) -C $(OCAMLSRC)/asmrun all
 
 .PHONY: configure-ocaml
 configure-ocaml:
 	rm -f $(OCAMLSRC)/boot/ocamlc $(OCAMLSRC)/boot/ocamllex
 	cd $(OCAMLSRC) && bash configure
-	make -C $(OCAMLSRC) ocamlyacc && cp $(OCAMLSRC)/yacc/ocamlyacc $(OCAMLSRC)/boot
-	make -C $(OCAMLSRC)/lex parser.ml
+	$(MAKE) -C $(OCAMLSRC) ocamlyacc && cp $(OCAMLSRC)/yacc/ocamlyacc $(OCAMLSRC)/boot
+	$(MAKE) -C $(OCAMLSRC)/lex parser.ml
 
 .PHONY: ocaml-generated-files
 ocaml-generated-files: $(OCAMLRUN) lex make_opcodes cvt_emit
-	make -C $(OCAMLSRC)/stdlib sys.ml
-	make -C $(OCAMLSRC) utils/config.ml
-	make -C $(OCAMLSRC) parsing/parser.ml
+	$(MAKE) -C $(OCAMLSRC)/stdlib sys.ml
+	$(MAKE) -C $(OCAMLSRC) utils/config.ml
+	$(MAKE) -C $(OCAMLSRC) parsing/parser.ml
 	miniml/interp/lex.sh $(OCAMLSRC)/parsing/lexer.mll -o $(OCAMLSRC)/parsing/lexer.ml
-	make -C $(OCAMLSRC) bytecomp/runtimedef.ml
+	$(MAKE) -C $(OCAMLSRC) bytecomp/runtimedef.ml
 	miniml/interp/make_opcodes.sh -opcodes < $(OCAMLSRC)/byterun/caml/instruct.h > $(OCAMLSRC)/bytecomp/opcodes.ml
-	make -C $(OCAMLSRC) asmcomp/arch.ml asmcomp/proc.ml asmcomp/selection.ml asmcomp/CSE.ml asmcomp/reload.ml asmcomp/scheduling.ml
+	$(MAKE) -C $(OCAMLSRC) asmcomp/arch.ml asmcomp/proc.ml asmcomp/selection.ml asmcomp/CSE.ml asmcomp/reload.ml asmcomp/scheduling.ml
 	miniml/interp/cvt_emit.sh < $(OCAMLSRC)/asmcomp/amd64/emit.mlp > $(OCAMLSRC)/asmcomp/emit.ml
 
 .PHONY: lex
 lex: $(OCAMLRUN)
-	make -C miniml/interp lex.byte
+	$(MAKE) -C miniml/interp lex.byte
 
 .PHONY: make_opcodes
-make_opcodes: $(OCAMLRUN)
-	make -C miniml/interp make_opcodes.byte
+make_opcodes: $(OCAMLRUN) lex
+	$(MAKE) -C miniml/interp make_opcodes.byte
 
 .PHONY: cvt_emit
-cvt_emit: $(OCAMLRUN)
-	make -C miniml/interp cvt_emit.byte
+cvt_emit: $(OCAMLRUN) lex
+	$(MAKE) -C miniml/interp cvt_emit.byte
 
 
 .PHONY: clean-ocaml-config
@@ -47,10 +47,10 @@ clean-ocaml-config:
 # use clean-ocaml-config if make a small change to $(OCAMLSRC)
 # that you believe does require re-configuring.
 $(CONFIG): $(OCAMLSRC)/VERSION
-	make configure-ocaml
+	$(MAKE) configure-ocaml
 
 $(GENERATED): $(OCAMLRUN) lex make_opcodes
-	make ocaml-generated-files
+	$(MAKE) ocaml-generated-files
 
 $(BOOT)/driver: $(OCAMLSRC)/driver $(OCAMLSRC)/otherlibs/dynlink $(CONFIG) $(GENERATED)
 	mkdir -p $(BOOT)
@@ -115,20 +115,20 @@ copy: $(COPY_TARGETS)
 ocamlrun: $(OCAMLRUN)
 
 $(BOOT)/ocamlc: $(COPY_TARGETS)
-	make -C $(OCAMLSRC)/yacc all
-	make -C miniml/interp interpopt.opt
-	touch _boot/stdlib/.depend && make -C _boot/stdlib depend
-	touch _boot/.depend && make -C _boot depend
-	./timed.sh make -C _boot/stdlib -j$(nproc) all
+	$(MAKE) -C $(OCAMLSRC)/yacc all
+	$(MAKE) -C miniml/interp interpopt.opt
+	touch _boot/stdlib/.depend && $(MAKE) -C _boot/stdlib depend
+	touch _boot/.depend && $(MAKE) -C _boot depend
+	./timed.sh $(MAKE) -C _boot/stdlib all
 	# cd $(BOOT)/stdlib && ../../timed.sh ../../compile_stdlib.sh
 	mkdir -p $(BOOT)/compilerlibs
-	./timed.sh make -C _boot -j$(nproc) all
+	./timed.sh $(MAKE) -C _boot all
 	# cd $(BOOT) && ../timed.sh ../compile_ocamlc.sh
 
 .PHONY: test-compiler
 test-compiler: $(OCAMLRUN)
-	make -C miniml/compiler/test all OCAMLRUN=../../../$(OCAMLRUN)
+	$(MAKE) -C miniml/compiler/test all OCAMLRUN=../../../$(OCAMLRUN)
 
 .PHONY: test-compiler-promote
 test-compiler-promote: $(OCAMLRUN)
-	make -C miniml/compiler/test promote OCAMLRUN=../../../$(OCAMLRUN)
+	$(MAKE) -C miniml/compiler/test promote OCAMLRUN=../../../$(OCAMLRUN)
