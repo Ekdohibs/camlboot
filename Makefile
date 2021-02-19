@@ -117,10 +117,12 @@ ocamlrun: $(OCAMLRUN)
 $(BOOT)/ocamlc: $(COPY_TARGETS)
 	make -C $(OCAMLSRC)/yacc all
 	make -C miniml/interp interpopt.opt
-	./timed.sh make -C _boot/stdlib all
+	touch _boot/stdlib/.depend && make -C _boot/stdlib depend
+	touch _boot/.depend && make -C _boot depend
+	./timed.sh make -C _boot/stdlib -j$(nproc) all
 	# cd $(BOOT)/stdlib && ../../timed.sh ../../compile_stdlib.sh
 	mkdir -p $(BOOT)/compilerlibs
-	./timed.sh make -C _boot all
+	./timed.sh make -C _boot -j$(nproc) all
 	# cd $(BOOT) && ../timed.sh ../compile_ocamlc.sh
 
 .PHONY: test-compiler

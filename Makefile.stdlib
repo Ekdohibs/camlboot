@@ -13,14 +13,15 @@
 #*                                                                        *
 #**************************************************************************
 
-CAMLRUN = ../../ocaml-src/byterun/ocamlrun
-TARGET_BINDIR ?= $(BINDIR)
-
 COMPFLAGS=-strict-sequence -absname -w +a-4-9-41-42-44-45-48 \
           -g -warn-error A -bin-annot -nostdlib \
           -safe-string -strict-formats
-COMPILER=../../miniml/interp/interp.opt
-DEPEND=../../miniml/interp/depend.sh -native
+
+# Set -opaque for faster compilation
+OPAQUE=-opaque
+
+COMPILER=../../miniml/interp/interp.opt $(OPAQUE)
+DEPEND=../../miniml/interp/depend.sh $(OPAQUE) -native
 
 # Object file prefix
 P=stdlib__
@@ -72,10 +73,17 @@ stdlib__%.cmx: %.ml
 	$(COMPILER) $(COMPFLAGS) $(shell ./Compflags $@) -o $@ -c $<
 
 
+
 # Dependencies on Stdlib (not tracked by ocamldep)
+
 $(OTHERS:.cmx=.cmi) std_exit.cmi: stdlib.cmi
 $(OBJS) std_exit.cmx: stdlib.cmi
+ifeq "$(OPAQUE)" ""
+CMIX=cmx
 $(OTHERS) std_exit.cmx: stdlib.cmx
+else
+CMIX=cmi
+endif 
 
 clean::
 	rm -f *.cm* *.o *.a
@@ -86,12 +94,13 @@ include .depend
 EMPTY :=
 SPACE := $(EMPTY) $(EMPTY)
 
+
 .PHONY: depend
 depend:
 	$(DEPEND) $(filter-out stdlib.%,$(wildcard *.mli *.ml)) \
 	  > .depend.tmp
 	echo "stdlib.cmi : camlinternalFormatBasics.cmi" >> .depend.tmp
-	echo "stdlib.cmx : camlinternalFormatBasics.cmx" >> .depend.tmp
+	echo "stdlib.cmx : camlinternalFormatBasics.$(CMIX)" >> .depend.tmp
 	sed -Ee \
 	  's#(^| )(${subst ${SPACE},|,${PREFIXED_OBJS:stdlib__%.cmx=%}})[.]#\1stdlib__\2.#g' \
 	  .depend.tmp > .depend

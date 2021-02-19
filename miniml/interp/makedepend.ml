@@ -29,6 +29,7 @@ let load_path = ref ([] : (string * string array) list)
 let ml_synonyms = ref [".ml"]
 let mli_synonyms = ref [".mli"]
 let shared = ref false
+let opaque = ref false
 let native_only = ref false
 let bytecode_only = ref false
 let error_occurred = ref false
@@ -117,7 +118,7 @@ let find_dependency target_kind modname (byt_deps, opt_deps) =
     let basename = Filename.chop_extension filename in
     let cmi_file = basename ^ ".cmi" in
     let cmx_file = basename ^ ".cmx" in
-    let ml_exists =
+    let ml_exists = not !opaque &&
       List.exists (fun ext -> Sys.file_exists (basename ^ ext)) !ml_synonyms in
     let new_opt_dep =
       if !all_dependencies then
@@ -401,6 +402,8 @@ let main () =
         " Generate dependencies for native-code only (no .cmo files)";
      "-bytecode", Arg.Set bytecode_only,
         " Generate dependencies for bytecode-code only (no .cmx files)";
+     "-opaque", Arg.Set opaque,
+        " Generate dependencies for compilation with -opaque";
      (* "-pp", Arg.String(fun s -> Clflags.preprocessor := Some s),
          "<cmd>  Pipe sources through preprocessor <cmd>"; *)
   ] in

@@ -13,7 +13,9 @@
 #*                                                                        *
 #**************************************************************************
 
-COMPILER=../miniml/interp/interp.opt -g -nostdlib -I stdlib
+OPAQUE=-opaque
+
+COMPILER=../miniml/interp/interp.opt $(OPAQUE) -nostdlib -I stdlib
 INCLUDES=-I utils -I parsing -I typing -I bytecomp -I driver
 
 COMPFLAGS=-strict-sequence -principal -absname -w +a-4-9-41-42-44-45-48 \
@@ -21,7 +23,7 @@ COMPFLAGS=-strict-sequence -principal -absname -w +a-4-9-41-42-44-45-48 \
           -bin-annot -safe-string -strict-formats $(INCLUDES)
 LINKFLAGS=
 
-DEPEND=../miniml/interp/depend.sh
+DEPEND=../miniml/interp/depend.sh $(OPAQUE)
 DEPFLAGS=$(INCLUDES)
 
 UTILS=utils/config.cmx utils/misc.cmx \
@@ -78,8 +80,6 @@ BYTECOMP=bytecomp/instruct.cmx bytecomp/bytegen.cmx \
   driver/errors.cmx driver/compile.cmx
 
 BYTESTART=driver/main.cmx
-
-all: ocamlc
 
 # Shared parts of the system compiled with the native-code compiler
 
