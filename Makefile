@@ -38,6 +38,9 @@ make_opcodes: $(OCAMLRUN) lex
 cvt_emit: $(OCAMLRUN) lex
 	$(MAKE) -C miniml/interp cvt_emit.byte
 
+.PHONY: makedepend
+makedepend: $(OCAMLRUN) lex
+	$(MAKE) -C miniml/interp makedepend.byte
 
 .PHONY: clean-ocaml-config
 clean-ocaml-config:
@@ -114,15 +117,15 @@ copy: $(COPY_TARGETS)
 .PHONY: ocamlrun
 ocamlrun: $(OCAMLRUN)
 
-$(BOOT)/ocamlc: $(COPY_TARGETS)
+$(BOOT)/ocamlc: copy makedepend
 	$(MAKE) -C $(OCAMLSRC)/yacc all
 	$(MAKE) -C miniml/interp interpopt.opt
 	touch _boot/stdlib/.depend && $(MAKE) -C _boot/stdlib depend
 	touch _boot/.depend && $(MAKE) -C _boot depend
-	./timed.sh $(MAKE) -C _boot/stdlib all
+	./timed.sh $(MAKE) $(MAKEFLAGS) -C _boot/stdlib all
 	# cd $(BOOT)/stdlib && ../../timed.sh ../../compile_stdlib.sh
 	mkdir -p $(BOOT)/compilerlibs
-	./timed.sh $(MAKE) -C _boot all
+	./timed.sh $(MAKE) $(MAKEFLAGS) -C _boot ocamlc
 	# cd $(BOOT) && ../timed.sh ../compile_ocamlc.sh
 
 .PHONY: test-compiler

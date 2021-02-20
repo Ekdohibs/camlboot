@@ -94,7 +94,6 @@ include .depend
 EMPTY :=
 SPACE := $(EMPTY) $(EMPTY)
 
-
 .PHONY: depend
 depend:
 	$(DEPEND) $(filter-out stdlib.%,$(wildcard *.mli *.ml)) \
