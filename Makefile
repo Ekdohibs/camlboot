@@ -11,6 +11,8 @@ $(OCAMLRUN): $(CONFIG)
 .PHONY: configure-ocaml
 configure-ocaml:
 	rm -f $(OCAMLSRC)/boot/ocamlc $(OCAMLSRC)/boot/ocamllex
+	find $(OCAMLSRC) -iname .depend | xargs rm -f
+	touch $(OCAMLSRC)/.depend $(OCAMLSRC)/stdlib/.depend
 	cd $(OCAMLSRC) && bash configure
 	$(MAKE) -C $(OCAMLSRC) ocamlyacc && cp $(OCAMLSRC)/yacc/ocamlyacc $(OCAMLSRC)/boot
 	$(MAKE) -C $(OCAMLSRC)/lex parser.ml
@@ -20,7 +22,7 @@ ocaml-generated-files: $(OCAMLRUN) lex make_opcodes cvt_emit
 	$(MAKE) -C $(OCAMLSRC)/stdlib sys.ml
 	$(MAKE) -C $(OCAMLSRC) utils/config.ml
 	$(MAKE) -C $(OCAMLSRC) parsing/parser.ml
-	miniml/interp/lex.sh $(OCAMLSRC)/parsing/lexer.mll -o $(OCAMLSRC)/parsing/lexer.ml
+	cd $(OCAMLSRC); ../miniml/interp/lex.sh parsing/lexer.mll
 	$(MAKE) -C $(OCAMLSRC) bytecomp/runtimedef.ml
 	miniml/interp/make_opcodes.sh -opcodes < $(OCAMLSRC)/byterun/caml/instruct.h > $(OCAMLSRC)/bytecomp/opcodes.ml
 	$(MAKE) -C $(OCAMLSRC) asmcomp/arch.ml asmcomp/proc.ml asmcomp/selection.ml asmcomp/CSE.ml asmcomp/reload.ml asmcomp/scheduling.ml
@@ -127,6 +129,19 @@ $(BOOT)/ocamlc: copy makedepend
 	mkdir -p $(BOOT)/compilerlibs
 	./timed.sh $(MAKE) $(MAKEFLAGS) -C _boot ocamlc
 	# cd $(BOOT) && ../timed.sh ../compile_ocamlc.sh
+
+fullboot: $(BOOT)/ocamlc
+	cp $(BOOT)/ocamlc $(OCAMLSRC)/boot/
+	cp miniml/interp/lex.byte $(OCAMLSRC)/boot/ocamllex
+	cp $(OCAMLSRC)/byterun/ocamlrun $(OCAMLSRC)/boot/ocamlrun$(EXE)
+	./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC)/stdlib CAMLDEP="../boot/ocamlc -depend" depend
+	./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC) CAMLDEP="boot/ocamlc -depend" depend
+	./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC)/lex CAMLDEP="../boot/ocamlc -depend" depend
+	./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC)/stdlib CAMLC="../boot/ocamlc -use-prims ../byterun/primitives" all
+	cd $(OCAMLSRC)/stdlib; cp stdlib.cma std_exit.cmo *.cmi camlheader ../boot
+	cd $(OCAMLSRC)/boot; ln -sf ../byterun/libcamlrun.a .
+	./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC) CAMLC="boot/ocamlc -nostdlib -I boot -use-prims byterun/primitives" ocamlc
+	./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC)/lex CAMLC="../boot/ocamlc -strict-sequence -nostdlib -I ../boot -use-prims ../byterun/primitives" all
 
 .PHONY: test-compiler
 test-compiler: $(OCAMLRUN)
