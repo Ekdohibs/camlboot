@@ -5,14 +5,16 @@ OCAMLRUN=$(OCAMLSRC)/byterun/ocamlrun
 GENERATED=$(OCAMLSRC)/bytecomp/opcodes.ml
 
 $(OCAMLRUN): $(CONFIG)
+	touch $(OCAMLSRC)/byterun/.depend && $(MAKE) -C $(OCAMLSRC)/byterun depend
 	$(MAKE) -C $(OCAMLSRC)/byterun all
+	touch $(OCAMLSRC)/asmrun/.depend && $(MAKE) -C $(OCAMLSRC)/asmrun depend
 	$(MAKE) -C $(OCAMLSRC)/asmrun all
 
 .PHONY: configure-ocaml
 configure-ocaml:
 	rm -f $(OCAMLSRC)/boot/ocamlc $(OCAMLSRC)/boot/ocamllex
 	find $(OCAMLSRC) -iname .depend | xargs rm -f
-	touch $(OCAMLSRC)/.depend $(OCAMLSRC)/stdlib/.depend
+	touch $(OCAMLSRC)/.depend $(OCAMLSRC)/stdlib/.depend $(OCAMLSRC)/lex/.depend
 	cd $(OCAMLSRC) && bash configure
 	$(MAKE) -C $(OCAMLSRC) ocamlyacc && cp $(OCAMLSRC)/yacc/ocamlyacc $(OCAMLSRC)/boot
 	$(MAKE) -C $(OCAMLSRC)/lex parser.ml
