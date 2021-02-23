@@ -16,6 +16,8 @@ DEPENDOBJS=$(COMMONOBJS) $(PARSEOBJS) depend.ml makedepend.ml
 LEXBOOTOBJS=$(COMMONOBJS) $(LEXOBJS1) ../../lex/lexer.ml $(LEXOBJS2)
 LEXOBJS=$(COMMONOBJS) $(LEXOBJS1) lex/lexer.ml $(LEXOBJS2)
 
+OPTCOMPILE=./interp -nopervasives -nostdlib -w -20-21 -I ../../interpreter
+
 %.byte: std.ml
 
 lex.boot.byte: $(LEXBOOTOBJS)
@@ -46,13 +48,52 @@ interp.byte: $(INTERPOBJS)
 makedepend.byte: $(DEPENDOBJS)
 	$(MINIML) $(DEPENDOBJS) -o $@
 
-interpopt.opt: $(INTERPOBJS) interp.byte
-	./genfileopt.sh
-	@echo "Compiling interpopt.opt, this make take a while..."
-	$(TIMED) ./interp -nopervasives -nostdlib -w -20-21 ../../ocaml-src/asmrun/libasmrun.a interpopt.ml -o interpopt.opt -ccopt "-lm -lpthread -ldl"
+#interpopt.opt: $(INTERPOBJS) interp.byte
+#	./genfileopt.sh
+#	@echo "Compiling interpopt.opt, this make take a while..."
+#	$(TIMED) ./interp -nopervasives -nostdlib -w -20-21 ../../ocaml-src/asmrun/libasmrun.a interpopt.ml -o interpopt.opt -ccopt "-lm -lpthread -ldl"
+
+INTERPCMX=$(filter %.cmx,$(INTERPOBJS:.ml=.cmx))
+interpopt.opt: interp.byte stdopt.cmx $(INTERPCMX) stdopt_exit.cmx
+	$(OPTCOMPILE) ../../ocaml-src/asmrun/libasmrun.a $(filter %.cmx, $^) -o $@ -ccopt "-lm -lpthread -ldl"
 
 lexer.ml: lex.byte lexer.mll
 	$(OCAMLRUN) lex.byte lexer.mll
 
 parser.ml: parser.mly
 	$(OCAMLYACC) $<
+
+
+
+stdopt.cmi: stdopt.mli
+	$(OPTCOMPILE) -c $<
+
+stdopt.cmx: stdopt.ml stdopt.cmi
+	$(OPTCOMPILE) -c $<
+
+%.cmi: %.mli stdopt.cmi
+	$(OPTCOMPILE) -open Stdopt -c $<
+
+%.cmx: %.ml stdopt.cmx
+	$(OPTCOMPILE) -open Stdopt -c $<
+
+stdopt.ml: std_opt_prefix.ml std.ml
+	cat $^ > $@
+
+stdopt.mli: std_opt_prefix.mli std.mli
+	cat $^ > $@
+
+stdopt_exit.mli:
+	echo > $@
+
+stdopt_exit.ml:
+	echo "let () = __atexit ()" > $@
+
+
+
+include .depend
+
+
+.PHONY: depend
+depend: makedepend.byte stdopt.ml stdopt.mli stdopt_exit.ml stdopt_exit.mli lexer.ml parser.ml
+	./depend.sh -native -I ../../interpreter $(INTERPOBJS) $(INTERPOBJS:.ml=.mli) stdopt.ml stdopt.mli stdopt_exit.ml stdopt_exit.mli > .depend

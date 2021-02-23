@@ -1,5 +1,5 @@
 
-type formatter_functions = {
+type formatter = {
   out_string : string -> unit
 }
 
