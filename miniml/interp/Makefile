@@ -63,19 +63,16 @@ lexer.ml: lex.byte lexer.mll
 parser.ml: parser.mly
 	$(OCAMLYACC) $<
 
-%.cmi: interp.byte
-%.cmx: interp.byte
-
-stdopt.cmi: stdopt.mli
+stdopt.cmi: stdopt.mli interp.byte
 	$(OPTCOMPILE) -c $<
 
-stdopt.cmx: stdopt.ml stdopt.cmi
+stdopt.cmx: stdopt.ml stdopt.cmi interp.byte
 	$(OPTCOMPILE) -c $<
 
-%.cmi: %.mli stdopt.cmi
+%.cmi: %.mli stdopt.cmi interp.byte
 	$(OPTCOMPILE) -open Stdopt -c $<
 
-%.cmx: %.ml stdopt.cmx
+%.cmx: %.ml stdopt.cmx interp.byte
 	$(OPTCOMPILE) -open Stdopt -c $<
 
 stdopt.ml: std_opt_prefix.ml std.ml
