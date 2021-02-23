@@ -30,6 +30,7 @@ ocaml-generated-files: $(OCAMLRUN) lex make_opcodes cvt_emit
 
 .PHONY: lex
 lex: $(OCAMLRUN)
+	touch miniml/interp/.depend
 	$(MAKE) -C miniml/interp lex.byte
 
 .PHONY: make_opcodes
@@ -121,7 +122,8 @@ ocamlrun: $(OCAMLRUN)
 
 $(BOOT)/ocamlc: copy makedepend
 	$(MAKE) -C $(OCAMLSRC)/yacc all
-	$(MAKE) -C miniml/interp interpopt.opt
+	$(MAKE) -C miniml/interp depend
+	./timed.sh $(MAKE) $(MAKEFLAGS) -C miniml/interp interpopt.opt
 	touch _boot/stdlib/.depend && $(MAKE) -C _boot/stdlib depend
 	touch _boot/.depend && $(MAKE) -C _boot depend
 	./timed.sh $(MAKE) $(MAKEFLAGS) -C _boot/stdlib all
