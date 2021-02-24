@@ -134,16 +134,18 @@ $(BOOT)/ocamlc: copy makedepend
 	./timed.sh $(MAKE) $(MAKEFLAGS) -C _boot ocamlc
 	# cd $(BOOT) && ../timed.sh ../compile_ocamlc.sh
 
-fullboot: $(BOOT)/ocamlc
+# Remove dependency on $(BOOT)/ocamlc, because it seems to cause ocamlc to be rebuilt even if it was just built
+fullboot:
 	cp $(BOOT)/ocamlc $(OCAMLSRC)/boot/
 	cp miniml/interp/lex.byte $(OCAMLSRC)/boot/ocamllex
 	cp $(OCAMLSRC)/byterun/ocamlrun $(OCAMLSRC)/boot/ocamlrun$(EXE)
-	./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC)/stdlib CAMLDEP="../boot/ocamlc -depend" depend
-	./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC) CAMLDEP="boot/ocamlc -depend" depend
-	./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC)/lex CAMLDEP="../boot/ocamlc -depend" depend
-	./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC)/stdlib CAMLC="../boot/ocamlc -use-prims ../byterun/primitives" all
+	touch $(OCAMLSRC)/stdlib/.depend && ./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC)/stdlib CAMLDEP="../boot/ocamlc -depend" depend
+	./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC)/stdlib COMPILER="" CAMLC="../boot/ocamlc -use-prims ../byterun/primitives" all
 	cd $(OCAMLSRC)/stdlib; cp stdlib.cma std_exit.cmo *.cmi camlheader ../boot
 	cd $(OCAMLSRC)/boot; ln -sf ../byterun/libcamlrun.a .
+	touch $(OCAMLSRC)/tools/.depend &&  ./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC)/tools CAMLC="../boot/ocamlc -nostdlib -I ../boot -use-prims ../byterun/primitives -I .." make_opcodes cvt_emit
+	touch $(OCAMLSRC)/lex/.depend && ./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC)/lex CAMLDEP="../boot/ocamlc -depend" depend
+	./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC) CAMLDEP="boot/ocamlc -depend" depend
 	./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC) CAMLC="boot/ocamlc -nostdlib -I boot -use-prims byterun/primitives" ocamlc
 	./timed.sh $(MAKE) $(MAKEFLAGS) -C $(OCAMLSRC)/lex CAMLC="../boot/ocamlc -strict-sequence -nostdlib -I ../boot -use-prims ../byterun/primitives" all
 
