@@ -1052,68 +1052,133 @@
     ))
 
 (define (bytecode-marshal value)
-  (begin
-    (bytecode-put-u32 #x8495A6BF) ; Intext_magic_number_big
-    (bytecode-put-u32 0)          ; Unused
-    (letrec*
-        ((len 0)
-         (size64 0)
-         (lenpos (bytecode-reserve 8))
-         (objcountpos (bytecode-reserve 8))
-         (size64pos (bytecode-reserve 8))
-         (loop
-          (match-lambda
+  ; the OCaml runtime first serializes the values into a temporary buffer,
+  ; collecting length/count information, then writes a header with this
+  ; length information and copies the temporary buffer.
+  ;
+  ; Because our byte-production interface allows a single writing pass, we
+  ; first silently traverse the data to compute the header metadata, then
+  ; write the header and traverse the data again to output it.
+  ;
+  ; for the definition of all the constants occurring in the code below,
+  ; see runtime/extern.c and runtime/caml/intext.h
+  (letrec*
+    ((len 0)
+     (size32 0)
+     (size64 0)
+     (objcount 0)
+     (fits-small-int (lambda (n) (and (>= n 0) (< n #x40))))
+     (fits-small-block (lambda (tag sz) (and (< tag 16) (< sz 8))))
+     (fits-unsigned (lambda (nbits n)
+       (< n (ash 1 nbits))))
+     (fits (lambda (nbits n)
+       (and (>= n (-(ash 1 (- nbits 1))))
+            (< n (ash 1 (- nbits 1))))))
+     (count
+      (match-lambda
            (('Integer n)
-              (bytecode-put-u8 #x3)
-              (bytecode-put-u64 n)
-              (set! len (+ len 9)))
+              (set! len (+ len 1 (if (fits-small-int n) 0 (if (fits 31 n) 4 8)))))
+           ; note: to follow the size computations and serialization code (in emit)
+           ; for boxed integer types, see runtime/custom.c and runtime/ints.c
+           (('Int64 n)
+              (set! len (+ len 1 2 1 8))
+              (set! size32 (+ size32 4))
+              (set! size64 (+ size64 3)))
+           (('Int32 n)
+              (set! len (+ len 1 2 1 4))
+              (set! size32 (+ size32 3))
+              (set! size64 (+ size64 3)))
+           (('Intnat n)
+              (set! len (+ len 1 2 1 1 (if (fits 32 n) 4 8)))
+              (set! size32 (+ size32 3))
+              (set! size64 (+ size64 3)))
+           (('String s)
+            (let ((slen (string-length s)))
+              (set! len (+ len 1 (if (fits-unsigned 32 slen) 4 8) slen))
+              (set! size32 (+ size32 (+ 1 (ash (+ (string-length s) 4) -2))))
+              (set! size64 (+ size64 (+ 1 (ash (+ (string-length s) 8) -3))))))
+           (('Block tag values)
+              (let* ((sz (length values))
+                     (hd (+ tag (ash sz 10))))
+                (set! len (+ len 1 (if (fits-small-block tag sz) 0 (if (fits-unsigned 32 hd) 4 8))))
+                (if (> sz 0)
+                    (begin
+                    (set! size32 (+ size32 (+ 1 sz)))
+                    (set! size64 (+ size64 (+ 1 sz)))))
+                (for-each count values)
+              ))
+       ))
+     (emit
+      (match-lambda
+           (('Integer n)
+              (cond
+               ((fits-small-int n)
+                  (bytecode-put-u8 (+ #x40 n)))
+               ((fits 31 n)
+                  (bytecode-put-u8 #x2)
+                  (bytecode-put-u32 n))
+               (else
+                  (bytecode-put-u8 #x3)
+                  (bytecode-put-u64 n))))
            (('Int64 n)
               (bytecode-put-u8 (if has-custom-fixed #x19 #x12))
               (bytecode-put-string "_j")
               (bytecode-put-u8 0)
-              (bytecode-put-u64 n)
-              (set! len (+ len 12))
-              (set! size64 (+ size64 3)))
+              (bytecode-put-u64 n))
            (('Int32 n)
               (bytecode-put-u8 (if has-custom-fixed #x19 #x12))
               (bytecode-put-string "_i")
               (bytecode-put-u8 0)
-              (bytecode-put-u32 n)
-              (set! len (+ len 8))
-              (set! size64 (+ size64 3)))
+              (bytecode-put-u32 n))
            (('Intnat n)
               (bytecode-put-u8 (if has-custom-fixed #x19 #x12))
               (bytecode-put-string "_n")
               (bytecode-put-u8 0)
-              (bytecode-put-u8 2)
-              (bytecode-put-u64 n)
-              (set! len (+ len 13))
-              (set! size64 (+ size64 3)))
+              (cond
+               ((fits 32 n)
+                  (bytecode-put-u8 1)
+                  (bytecode-put-u32 n))
+               (else
+                  (bytecode-put-u8 2)
+                  (bytecode-put-u64 n))))
            (('String s)
-              (bytecode-put-u8 #x15)
-              (bytecode-put-u64 (string-length s))
-              (bytecode-put-string s)
-              (set! len (+ len (+ 9 (string-length s))))
-              (set! size64 (+ size64 (+ 1 (ash (+ (string-length s) 8) -3)))))
+            (let ((slen (string-length s)))
+              (cond
+               ((fits-unsigned 32 slen)
+                  (bytecode-put-u8 #xA)
+                  (bytecode-put-u32 slen))
+               (else
+                  (bytecode-put-u8 #x15)
+                  (bytecode-put-u64 slen)))
+              (bytecode-put-string s)))
            (('Block tag values)
-              (let ((sz (length values)))
-                (if (= sz 0)
-                    (begin
-                      (bytecode-put-u8 #x8)
-                      (bytecode-put-u32 tag)
-                      (set! len (+ len 5)))
-                    (begin
-                      (bytecode-put-u8 #x13)
-                      (bytecode-put-u64 (+ tag (ash sz 10)))
-                      (set! len (+ len 9))
-                      (set! size64 (+ size64 (+ 1 sz)))
-                      (for-each loop values)))))
-              )))
-      (loop value)
-      (bytecode-backpatch-u64 lenpos len)
-      (bytecode-backpatch-u64 objcountpos 0)
-      (bytecode-backpatch-u64 size64pos size64)
-      )))
+              (let* ((sz (length values))
+                     (hd (+ tag (ash sz 10))))
+                (cond
+                 ((fits-small-block tag sz)
+                    (bytecode-put-u8 (+ #x80 tag (ash sz 4))))
+                 ((fits-unsigned 32 hd)
+                    (bytecode-put-u8 #x8)
+                    (bytecode-put-u32 hd))
+                 (else
+                    (bytecode-put-u8 #x13)
+                    (bytecode-put-u64 hd)))
+                (for-each emit values)))
+       ))
+     (emit-header (lambda ()
+       ; we assume that 'count' ran first to initialize len, objcount, size32, size64
+       (bytecode-put-u32 #x8495A6BF) ; Intext_magic_number_big
+       (bytecode-put-u32 0)          ; Unused
+       (bytecode-put-u64 len)
+       (bytecode-put-u64 objcount)   ; note: always 0, as objects are not used in the bytecode-object format
+       (bytecode-put-u64 size64)
+       ))
+     )
+  (begin
+    (count value)
+    (emit-header)
+    (emit value)
+  )))
 
 (define globs #nil)
 (define globnames #nil)
