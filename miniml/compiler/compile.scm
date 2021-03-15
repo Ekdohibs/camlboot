@@ -1167,13 +1167,27 @@
        ))
      (emit-header (lambda ()
        ; we assume that 'count' ran first to initialize len, objcount, size32, size64
-       (bytecode-put-u32 #x8495A6BF) ; Intext_magic_number_big
-       (bytecode-put-u32 0)          ; Unused
-       (bytecode-put-u64 len)
-       (bytecode-put-u64 objcount)   ; note: always 0, as objects are not used in the bytecode-object format
-       (bytecode-put-u64 size64)
+       (cond
+        ((and
+          (fits-unsigned 32 len)
+          (fits-unsigned 32 size32)
+          (fits-unsigned 32 size64)
+         )
+           (bytecode-put-u32 #x8495A6BE) ; Intext_magic_number_small
+           (bytecode-put-u32 len)
+           (bytecode-put-u32 objcount)   ; note: always 0, as objects are not used in the bytecode-object format
+           (bytecode-put-u32 size32)
+           (bytecode-put-u32 size64)
+        )
+        (else
+           (bytecode-put-u32 #x8495A6BF) ; Intext_magic_number_big
+           (bytecode-put-u32 0)          ; Unused
+           (bytecode-put-u64 len)
+           (bytecode-put-u64 objcount)
+           (bytecode-put-u64 size64)
        ))
-     )
+     ))
+  )
   (begin
     (count value)
     (emit-header)
