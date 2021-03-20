@@ -1,6 +1,6 @@
 open Data
 
-val type_error : 'a -> 'b -> 'c
+val type_error : string -> Data.value_ -> 'a
 val wrap_int : int -> value
 val unwrap_int : value -> int
 val wrap_int32 : int32 -> value
