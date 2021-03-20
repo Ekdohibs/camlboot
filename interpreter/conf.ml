@@ -1,7 +1,7 @@
 let trace = false
 let traceend = false
-let tracearg_from = 75000_000000
-let tracecur = ref 0
+let tracearg_from = 75000_000000L
+let tracecur = ref 0L
 let tracedepth = ref 0
 
 let debug =
