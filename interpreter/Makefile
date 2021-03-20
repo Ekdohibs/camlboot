@@ -27,6 +27,9 @@ format:
 .ml.cmo:
 	$(OCAML) $(FLAGS) -c $<
 
+.mli.cmi:
+	$(OCAML) $(FLAGS) -c $<
+
 .depend: $(SRCS)
 	ocamldep $(SRCS) > .depend
 
