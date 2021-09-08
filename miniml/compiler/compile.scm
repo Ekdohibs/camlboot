@@ -152,7 +152,8 @@
 
    (module_type
     (longident_uident) : '()
-    (SIG signature END) : '())
+    (SIG signature END) : '()
+    (FUNCTOR functor_args MINUSGT module_type) : '())
 
    (functor_args
     ( ) : #nil
