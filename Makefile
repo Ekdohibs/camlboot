@@ -19,6 +19,8 @@ configure-ocaml:
 	$(MAKE) -C $(OCAMLSRC) ocamlyacc && cp $(OCAMLSRC)/yacc/ocamlyacc $(OCAMLSRC)/boot
 	$(MAKE) -C $(OCAMLSRC)/lex parser.ml
 
+# Here, including $(CONFIG) would provide $(ARCH), but it leads to a recursive
+# dependency because its rule has a dependency that reloads this Makefile.
 .PHONY: ocaml-generated-files
 ocaml-generated-files: $(OCAMLRUN) lex make_opcodes cvt_emit
 	$(MAKE) -C $(OCAMLSRC)/stdlib sys.ml
@@ -28,7 +30,7 @@ ocaml-generated-files: $(OCAMLRUN) lex make_opcodes cvt_emit
 	$(MAKE) -C $(OCAMLSRC) bytecomp/runtimedef.ml
 	miniml/interp/make_opcodes.sh -opcodes < $(OCAMLSRC)/byterun/caml/instruct.h > $(OCAMLSRC)/bytecomp/opcodes.ml
 	$(MAKE) -C $(OCAMLSRC) asmcomp/arch.ml asmcomp/proc.ml asmcomp/selection.ml asmcomp/CSE.ml asmcomp/reload.ml asmcomp/scheduling.ml
-	miniml/interp/cvt_emit.sh < $(OCAMLSRC)/asmcomp/amd64/emit.mlp > $(OCAMLSRC)/asmcomp/emit.ml
+	miniml/interp/cvt_emit.sh < $(OCAMLSRC)/asmcomp/$(shell cat $(CONFIG) | grep '^ARCH=' | cut -f2 -d=)/emit.mlp > $(OCAMLSRC)/asmcomp/emit.ml
 
 .PHONY: lex
 lex: $(OCAMLRUN)
