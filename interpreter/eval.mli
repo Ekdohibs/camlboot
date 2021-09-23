@@ -8,8 +8,8 @@ val expr_label_shape :
 val fun_label_shape :
   value_ ->
   (Asttypes.arg_label * Parsetree.expression option) list
-val mismatch : 'a -> 'b
-val unsupported : 'a -> 'b
+val mismatch : Location.t -> unit
+val unsupported : Location.t -> unit
 val take : int -> 'a list -> 'a list
 val apply :
   value SMap.t ->

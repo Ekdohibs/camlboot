@@ -101,7 +101,7 @@ exception InternalException of value
 val unit : value_ Ptr.t
 val is_true : value_ Ptr.t -> bool
 val pp_print_value : Format.formatter -> value_ Ptr.t -> unit
-val pp_print_unit_id : Format.formatter -> module_unit_id -> 'a
+val pp_print_unit_id : Format.formatter -> module_unit_id -> unit
 val read_caml_int : string -> int64
 val value_of_constant : Parsetree.constant -> value_ Ptr.t
 val value_compare : value_ Ptr.t -> value_ Ptr.t -> int
@@ -112,5 +112,5 @@ val value_gt : value_ Ptr.t -> value_ Ptr.t -> bool
 val value_ge : value_ Ptr.t -> value_ Ptr.t -> bool
 val next_exn_id : unit -> int
 exception No_module_data
-val get_module_data : 'a -> mdl -> mdl_val
+val get_module_data : Location.t -> mdl -> mdl_val
 val module_name_of_unit_path : string -> string

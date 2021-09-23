@@ -19,7 +19,7 @@ val decompose :
   env -> Longident.t Asttypes.loc -> string * env * string
 val lookup :
   string ->
-  env_name:'a -> ('b * 'c) SMap.t -> SMap.key Asttypes.loc -> 'c
+  env_name:string -> ('a * 'b) SMap.t -> SMap.key Asttypes.loc -> 'b
 val env_get_module : env -> Longident.t Asttypes.loc -> mdl
 val env_get_value_or_lvar :
   env -> Longident.t Asttypes.loc -> value_or_lvar
