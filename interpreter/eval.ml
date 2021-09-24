@@ -197,7 +197,7 @@ and eval_expr prims env expr =
           Format.eprintf
             "apply %s"
             (String.concat "." (Longident.flatten lident.txt));
-          incr tracecur;
+          tracecur := Int64.succ !tracecur;
           if !tracecur > tracearg_from
           then
             Format.eprintf
