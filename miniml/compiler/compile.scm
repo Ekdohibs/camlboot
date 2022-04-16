@@ -1,6 +1,6 @@
 (use-modules (system base lalr)
              (srfi srfi-1) (srfi srfi-9 gnu)
-             (rnrs base)
+             ((rnrs base) #:select (assert))
              (ice-9 q)
              (ice-9 binary-ports) (ice-9 vlist) (ice-9 match))
 
